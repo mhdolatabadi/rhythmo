@@ -218,7 +218,7 @@ func (p *PublicPages) renderStoreList(w http.ResponseWriter, r *http.Request, qu
 		}
 		recordings = append(recordings, map[string]any{"@type": "ListItem", "position": query.Offset + i + 1, "item": recording})
 	}
-	data.Prev, data.Next = pageLinks(r.URL.Path, keep, page, more)
+	data.Prev, data.Next = pageLinks(r.URL.EscapedPath(), keep, page, more)
 	canonical := site + canonicalPath
 	if page > 1 {
 		canonical += map[bool]string{true: "&", false: "?"}[strings.Contains(canonicalPath, "?")] + "page=" + strconv.Itoa(page)
