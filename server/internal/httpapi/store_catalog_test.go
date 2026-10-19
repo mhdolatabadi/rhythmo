@@ -16,6 +16,10 @@ import (
 const storeEntryID = "11111111-1111-1111-1111-111111111111"
 
 type fakeCatalog struct {
+	artistAlbums []store.StoreAlbum
+	artistCountsErr error
+	albumArtist string
+	albumOffset int
 	entry    store.StoreEntry
 	hidden   bool
 	owners   map[string]bool
@@ -58,7 +62,19 @@ func (c *fakeCatalog) StoreArtists(_ context.Context, search string, limit, offs
 	return []store.StoreArtist{{Name: "Kayhan", TrackCount: 2}}, false, nil
 }
 
+func (c *fakeCatalog) StoreArtistCounts(_ context.Context, artist string) (int, int, error) {
+	if c.artistAlbums != nil { return 1, len(c.artistAlbums), c.artistCountsErr }
+	return 1, 1, c.artistCountsErr
+}
+
 func (c *fakeCatalog) StoreAlbums(_ context.Context, search, artist string, limit, offset int) ([]store.StoreAlbum, bool, error) {
+	c.albumArtist, c.albumOffset = artist, offset
+	if c.artistAlbums != nil {
+		if offset >= len(c.artistAlbums) { return nil, false, nil }
+		end := offset + limit
+		if end > len(c.artistAlbums) { end = len(c.artistAlbums) }
+		return c.artistAlbums[offset:end], end < len(c.artistAlbums), nil
+	}
 	return []store.StoreAlbum{{Name: "Seasons", Artist: c.entry.Track.Artist, TrackCount: 1}}, false, nil
 }
 

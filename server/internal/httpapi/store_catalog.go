@@ -20,6 +20,7 @@ import (
 
 // CatalogStore is the public store's catalog; *store.Catalog implements it.
 type CatalogStore interface {
+	StoreArtistCounts(ctx context.Context, artist string) (tracks, albums int, err error)
 	StoreEntries(ctx context.Context, query store.StoreQuery) ([]store.StoreEntry, bool, error)
 	StoreEntryByID(ctx context.Context, entryID string, includeHidden bool) (store.StoreEntry, error)
 	StoreArtists(ctx context.Context, search string, limit, offset int) ([]store.StoreArtist, bool, error)

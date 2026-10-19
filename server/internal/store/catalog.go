@@ -530,3 +530,19 @@ func (c *Catalog) EachMatchable(ctx context.Context, _ string, fn func(Matchable
 	}
 	return rows.Err()
 }
+
+// StoreArtistCounts uses the same live, deduplicated public entries and
+// folded names as the song and album lists. Private/hidden copies never count.
+func (c *Catalog) StoreArtistCounts(ctx context.Context, artist string) (tracks, albums int, err error) {
+	err = c.pool.QueryRow(ctx, `
+		WITH `+liveEntries+`
+		SELECT
+		  count(*) FILTER (WHERE store_fold(COALESCE(live.artist, '')) = store_fold($2)
+		    OR store_fold(COALESCE(live.album_artist, '')) = store_fold($2))::int,
+		  count(DISTINCT store_fold(live.album)) FILTER (
+		    WHERE live.album IS NOT NULL AND btrim(live.album) <> ''
+		    AND store_fold(COALESCE(live.album_artist, live.artist, '')) = store_fold($2))::int
+		FROM live
+	`, false, artist).Scan(&tracks, &albums)
+	return
+}

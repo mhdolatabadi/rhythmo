@@ -23,6 +23,7 @@ func TestPublicDesignPreview(t *testing.T) {
 		"home": "/", "playlist": "/p/" + strings.Repeat("A", 22),
 		"store": "/store", "artists": "/store/artists",
 		"song":    "/store/t/" + storeEntryID,
+		"artist": "/store/artists/AC%2FDC",
 		"privacy": "/privacy", "delete": "/delete-account",
 	} {
 		response := get(site, path)

@@ -184,6 +184,9 @@ func storeQueryText(raw string) string {
 }
 
 type storeListData struct {
+	ArtistName string
+	Albums []storeIndexItem
+	AlbumPrev, AlbumNext string
 	pageMeta
 	Heading    string
 	Intro      string
@@ -222,6 +225,16 @@ func (p *PublicPages) renderStoreList(w http.ResponseWriter, r *http.Request, qu
 	}
 	data.Canonical, data.Image, data.OGType = canonical, site+"/social.png", "website"
 	data.JSONLD = map[string]any{"@context": "https://schema.org", "@type": "ItemList", "name": data.Heading, "itemListElement": recordings}
+	if data.ArtistName != "" {
+		albums := make([]map[string]any, 0, len(data.Albums))
+		for _, album := range data.Albums {
+			albums = append(albums, map[string]any{"@type": "MusicAlbum", "name": album.Name, "url": site + album.Link, "numTracks": album.TrackCount})
+		}
+		data.JSONLD = map[string]any{"@context": "https://schema.org", "@graph": []any{
+			map[string]any{"@type": "MusicGroup", "name": data.ArtistName, "url": site + artistLink(data.ArtistName), "album": albums},
+			data.JSONLD,
+		}}
+	}
 	if len(entries) == 0 && page > 1 {
 		data.NoIndex = true
 	}
@@ -270,7 +283,41 @@ func (p *PublicPages) handleStoreArtist(w http.ResponseWriter, r *http.Request) 
 	}
 	data.Title = name + " — آهنگ‌ها در استور ریتمو"
 	data.Description = "آهنگ‌های " + name + " را در ریتمو بدون ثبت‌نام بشنو."
-	p.renderStoreList(w, r, store.StoreQuery{Artist: name}, data, artistLink(name), url.Values{})
+	tracks, albumCount, err := p.catalog.StoreArtistCounts(r.Context(), name)
+	if err != nil {
+		internalError(w, "count artist catalog", err)
+		return
+	}
+	albumPage := 1
+	if n, err := strconv.Atoi(r.URL.Query().Get("albumPage")); err == nil && n > 0 && n <= storeMaxPage {
+		albumPage = n
+	}
+	albums, more, err := p.catalog.StoreAlbums(r.Context(), "", name, storePageSize, (albumPage-1)*storePageSize)
+	if err != nil {
+		internalError(w, "list artist albums", err)
+		return
+	}
+	data.ArtistName = name
+	data.Intro = fmt.Sprintf("%s با %s آهنگ و %s آلبوم در استور ریتمو؛ بدون ثبت‌نام گوش بده.", name, display.PersianDigits(strconv.Itoa(tracks)), display.PersianDigits(strconv.Itoa(albumCount)))
+	for _, album := range albums {
+		data.Albums = append(data.Albums, storeIndexItem{Name: album.Name, Link: albumLink(album.Name, optional(album.Artist)), TrackCount: album.TrackCount})
+	}
+	albumURL := func(n int) string {
+		q := url.Values{}
+		if n > 1 { q.Set("albumPage", strconv.Itoa(n)) }
+		if page := storePage(r); page > 1 { q.Set("page", strconv.Itoa(page)) }
+		if len(q) > 0 { return artistLink(name) + "?" + q.Encode() }
+		return artistLink(name)
+	}
+	if albumPage > 1 { data.AlbumPrev = albumURL(albumPage - 1) }
+	if more && albumPage < storeMaxPage { data.AlbumNext = albumURL(albumPage + 1) }
+	keep := url.Values{}
+	canonicalPath := artistLink(name)
+	if albumPage > 1 {
+		keep.Set("albumPage", strconv.Itoa(albumPage))
+		canonicalPath += "?" + keep.Encode()
+	}
+	p.renderStoreList(w, r, store.StoreQuery{Artist: name}, data, canonicalPath, keep)
 }
 
 func (p *PublicPages) handleStoreAlbum(w http.ResponseWriter, r *http.Request) {
