@@ -184,8 +184,8 @@ func storeQueryText(raw string) string {
 }
 
 type storeListData struct {
-	ArtistName string
-	Albums []storeIndexItem
+	ArtistName           string
+	Albums               []storeIndexItem
 	AlbumPrev, AlbumNext string
 	pageMeta
 	Heading    string
@@ -304,13 +304,23 @@ func (p *PublicPages) handleStoreArtist(w http.ResponseWriter, r *http.Request) 
 	}
 	albumURL := func(n int) string {
 		q := url.Values{}
-		if n > 1 { q.Set("albumPage", strconv.Itoa(n)) }
-		if page := storePage(r); page > 1 { q.Set("page", strconv.Itoa(page)) }
-		if len(q) > 0 { return artistLink(name) + "?" + q.Encode() }
+		if n > 1 {
+			q.Set("albumPage", strconv.Itoa(n))
+		}
+		if page := storePage(r); page > 1 {
+			q.Set("page", strconv.Itoa(page))
+		}
+		if len(q) > 0 {
+			return artistLink(name) + "?" + q.Encode()
+		}
 		return artistLink(name)
 	}
-	if albumPage > 1 { data.AlbumPrev = albumURL(albumPage - 1) }
-	if more && albumPage < storeMaxPage { data.AlbumNext = albumURL(albumPage + 1) }
+	if albumPage > 1 {
+		data.AlbumPrev = albumURL(albumPage - 1)
+	}
+	if more && albumPage < storeMaxPage {
+		data.AlbumNext = albumURL(albumPage + 1)
+	}
 	keep := url.Values{}
 	canonicalPath := artistLink(name)
 	if albumPage > 1 {

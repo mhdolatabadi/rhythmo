@@ -187,7 +187,9 @@ func TestArtistOverviewWithAndWithoutAlbums(t *testing.T) {
 			t.Fatal("artist totals or album filter missing")
 		}
 		artist := graphNode(t, jsonLD(t, page), "MusicGroup")
-		if artist["name"] != "AC/DC" { t.Fatalf("artist = %v", artist) }
+		if artist["name"] != "AC/DC" {
+			t.Fatalf("artist = %v", artist)
+		}
 		if withAlbums {
 			if !strings.Contains(page, "۱ آلبوم") || !strings.Contains(page, "باران &lt;آرام&gt;") {
 				t.Fatal("album summary missing or unescaped")
@@ -201,9 +203,15 @@ func TestArtistOverviewWithAndWithoutAlbums(t *testing.T) {
 func TestArtistAlbumPagingKeepsSongPage(t *testing.T) {
 	site, catalog := storeSite(t, AnonymousLimits{})
 	catalog.artistAlbums = make([]store.StoreAlbum, storePageSize+1)
-	for i := range catalog.artistAlbums { catalog.artistAlbums[i] = store.StoreAlbum{Name: "Album", Artist: str("AC/DC"), TrackCount: 1} }
+	for i := range catalog.artistAlbums {
+		catalog.artistAlbums[i] = store.StoreAlbum{Name: "Album", Artist: str("AC/DC"), TrackCount: 1}
+	}
 	page := get(site, "/store/artists/AC%2FDC?page=2").Body.String()
-	if !strings.Contains(page, `href="/store/artists/AC%2FDC?albumPage=2&amp;page=2"`) { t.Fatal("album pager lost song page") }
+	if !strings.Contains(page, `href="/store/artists/AC%2FDC?albumPage=2&amp;page=2"`) {
+		t.Fatal("album pager lost song page")
+	}
 	page = get(site, "/store/artists/AC%2FDC?albumPage=2&page=2").Body.String()
-	if catalog.albumOffset != storePageSize || !strings.Contains(page, `href="/store/artists/AC%2FDC?albumPage=2&amp;page=3"`) { t.Fatal("song pager lost album page") }
+	if catalog.albumOffset != storePageSize || !strings.Contains(page, `href="/store/artists/AC%2FDC?albumPage=2&amp;page=3"`) {
+		t.Fatal("song pager lost album page")
+	}
 }

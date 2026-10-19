@@ -438,10 +438,16 @@ func TestArtistCountsOnlyIncludeLivePublicCatalog(t *testing.T) {
 	f.playlist(u.ID, false, private.ID)
 	f.indexAll()
 	tracks, albums, err := f.catalog.StoreArtistCounts(f.ctx, "علي")
-	if err != nil || tracks != 2 || albums != 1 { t.Fatalf("counts = %d, %d, %v", tracks, albums, err) }
+	if err != nil || tracks != 2 || albums != 1 {
+		t.Fatalf("counts = %d, %d, %v", tracks, albums, err)
+	}
 	for _, entry := range f.listed(StoreQuery{Artist: artist}) {
-		if err := f.catalog.SetHidden(f.ctx, entry.ID, u.ID, true); err != nil { t.Fatal(err) }
+		if err := f.catalog.SetHidden(f.ctx, entry.ID, u.ID, true); err != nil {
+			t.Fatal(err)
+		}
 	}
 	tracks, albums, err = f.catalog.StoreArtistCounts(f.ctx, artist)
-	if err != nil || tracks != 0 || albums != 0 { t.Fatalf("hidden counts = %d, %d, %v", tracks, albums, err) }
+	if err != nil || tracks != 0 || albums != 0 {
+		t.Fatalf("hidden counts = %d, %d, %v", tracks, albums, err)
+	}
 }
