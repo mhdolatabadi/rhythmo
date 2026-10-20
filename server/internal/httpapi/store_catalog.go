@@ -122,6 +122,7 @@ func (h *CatalogHandlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/store/tracks", h.handleTracks)
 	mux.HandleFunc("GET /api/v1/store/tracks/{id}", h.handleTrack)
 	mux.HandleFunc("GET /api/v1/store/tracks/{id}/stream", h.handleStream)
+	mux.HandleFunc("GET /api/v1/store/tracks/{id}/artwork", h.handleStreamArtwork)
 	mux.HandleFunc("GET /api/v1/store/artists", h.handleArtists)
 	mux.HandleFunc("GET /api/v1/store/albums", h.handleAlbums)
 	mux.HandleFunc("GET /api/v1/store/popular", h.handleRanked(store.RankPopular))
@@ -547,4 +548,16 @@ func (h *CatalogHandlers) handleHide(hidden bool) http.HandlerFunc {
 			w.WriteHeader(http.StatusNoContent)
 		}
 	}
+}
+
+func (h *CatalogHandlers) handleStreamArtwork(w http.ResponseWriter, r *http.Request) {
+	_, ok := h.viewer(w, r, h.anonymous.Stream)
+	if !ok {
+		return
+	}
+	entry, ok := h.entry(w, r)
+	if !ok {
+		return
+	}
+	serveTrackArtwork(w, r, h.streams, entry.Track)
 }

@@ -331,3 +331,20 @@ func principalIsEveryone(raw json.RawMessage) bool {
 	}
 	return false
 }
+
+// ReadRange reads metadata without downloading intervening audio samples.
+func (s *Storage) ReadRange(ctx context.Context, key string, offset, size int64) ([]byte, error) {
+	if offset < 0 || size <= 0 || size > 16<<20 {
+		return nil, errors.New("invalid metadata range")
+	}
+	options := minio.GetObjectOptions{}
+	if err := options.SetRange(offset, offset+size-1); err != nil {
+		return nil, err
+	}
+	object, err := s.internal.GetObject(ctx, s.bucket, key, options)
+	if err != nil {
+		return nil, err
+	}
+	defer object.Close()
+	return io.ReadAll(io.LimitReader(object, size))
+}

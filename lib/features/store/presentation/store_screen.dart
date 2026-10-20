@@ -642,7 +642,8 @@ class _SongList extends StatelessWidget {
         builder: (context, _) {
           final songs = listing.items;
           return RhythmoTrackRow(
-            seed: song.id,
+            track: song,
+seed: song.id,
             title: song.title,
             subtitle: song.artist ?? 'خواننده‌ی نامشخص',
             active: player.track?.id == song.id && player.track!.fromStore,

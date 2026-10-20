@@ -1,3 +1,4 @@
+import 'package:rhythmo/features/library/data/track_artwork.dart';
 import 'package:rhythmo/core/persian_digits.dart';
 import 'dart:math';
 
@@ -476,11 +477,11 @@ class NowPlayingArtwork extends StatelessWidget {
             ),
           ],
         ),
-        child: Icon(
+        child: TrackCover(track: track, radius: size * 0.08, child: Icon(
           icon,
           size: size * 0.32,
           color: colors.onSurface.withValues(alpha: 0.72),
-        ),
+        )),
       ),
     );
   }
@@ -839,7 +840,8 @@ class QueueSheet extends StatelessWidget {
               children: [
                 if (current != null)
                   RhythmoTrackRow(
-                    seed: current.id,
+                    track: current,
+seed: current.id,
                     title: current.title,
                     subtitle: 'در حال پخش · ${trackSubtitle(current)}',
                     active: true,
@@ -873,7 +875,8 @@ class QueueSheet extends StatelessWidget {
                           itemBuilder: (context, index) {
                             final track = upcoming[index];
                             return RhythmoTrackRow(
-                              seed: track.id,
+                              track: track,
+seed: track.id,
                               title: track.title,
                               subtitle: trackSubtitle(track),
                               onTap: () => player.skipTo(index),

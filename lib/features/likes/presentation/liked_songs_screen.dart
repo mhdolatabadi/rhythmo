@@ -166,7 +166,8 @@ class LikedSongsScreen extends StatelessWidget {
                     }
                     final song = songs[index - 1];
                     return RhythmoTrackRow(
-                      seed: song.id,
+                      track: song,
+seed: song.id,
                       title: song.title,
                       subtitle: song.artist ?? 'خواننده‌ی نامشخص',
                       active: player.track?.id == song.id,

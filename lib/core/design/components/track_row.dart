@@ -1,3 +1,5 @@
+import 'package:rhythmo/features/library/data/track_artwork.dart';
+import 'package:rhythmo/features/library/data/track.dart';
 import 'package:flutter/material.dart';
 import 'package:rhythmo/core/design/tokens.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
@@ -11,6 +13,7 @@ class RhythmoArtworkTile extends StatelessWidget {
     this.size = 44,
     this.icon = RhythmoIcons.musicNote,
     this.active = false,
+    this.track,
   });
 
   final String seed;
@@ -19,6 +22,7 @@ class RhythmoArtworkTile extends StatelessWidget {
 
   /// The track playing now: drawn in the primary container colour.
   final bool active;
+  final Track? track;
 
   @override
   Widget build(BuildContext context) {
@@ -30,11 +34,21 @@ class RhythmoArtworkTile extends StatelessWidget {
         color: active ? colors.primaryContainer : artworkTint(seed),
         borderRadius: BorderRadius.circular(size * 0.27),
       ),
-      child: Icon(
-        active ? RhythmoIcons.waveformFill : icon,
-        size: size * 0.45,
-        color: active ? colors.onPrimaryContainer : colors.onSurfaceVariant,
-      ),
+      child: track == null
+          ? Icon(
+              active ? RhythmoIcons.waveformFill : icon,
+              size: size * 0.45,
+              color: active ? colors.onPrimaryContainer : colors.onSurfaceVariant,
+            )
+          : TrackCover(
+              track: track!,
+              radius: size * 0.27,
+              child: Icon(
+                active ? RhythmoIcons.waveformFill : icon,
+                size: size * 0.45,
+                color: active ? colors.onPrimaryContainer : colors.onSurfaceVariant,
+              ),
+            ),
     );
   }
 }
@@ -49,6 +63,7 @@ class RhythmoTrackRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.detail,
+    this.track,
     this.active = false,
     this.leadingIcon = RhythmoIcons.musicNote,
     this.onTap,
@@ -63,6 +78,7 @@ class RhythmoTrackRow extends StatelessWidget {
   /// Supporting information after the subtitle, such as «۳٫۲ مگابایت».
   final String? detail;
   final bool active;
+  final Track? track;
   final IconData leadingIcon;
   final VoidCallback? onTap;
   final Widget? trailing;
@@ -77,7 +93,7 @@ class RhythmoTrackRow extends StatelessWidget {
       onTap: onTap,
       selected: active,
       leading:
-          RhythmoArtworkTile(seed: seed, icon: leadingIcon, active: active),
+          RhythmoArtworkTile(seed: seed, icon: leadingIcon, active: active, track: track),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(line, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: trailing,

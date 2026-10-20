@@ -1,3 +1,4 @@
+import 'package:rhythmo/features/library/data/track_artwork.dart';
 import 'package:flutter/material.dart';
 import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
@@ -334,11 +335,11 @@ class _MiniArtwork extends StatelessWidget {
           ),
         ],
       ),
-      child: Icon(
+      child: TrackCover(track: track, radius: size >= 44 ? 14 : 12, child: Icon(
         icon,
         size: size * 0.36,
         color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
+      )),
     );
   }
 }

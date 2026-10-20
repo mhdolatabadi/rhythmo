@@ -1,3 +1,4 @@
+import 'package:rhythmo/features/library/data/track_artwork.dart';
 import 'package:rhythmo/features/journey/presentation/journey_widgets.dart';
 import 'package:rhythmo/core/persian_digits.dart';
 import 'dart:async';
@@ -2197,11 +2198,11 @@ class _TrackArtwork extends StatelessWidget {
                   : colors.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(RhythmoRadii.sm),
             ),
-            child: Icon(
+            child: TrackCover(track: track, radius: RhythmoRadii.sm, child: Icon(
               RhythmoIcons.musicNote,
               color:
                   current ? colors.onPrimaryContainer : colors.onSurfaceVariant,
-            ),
+            )),
           ),
           PositionedDirectional(
             end: -4,

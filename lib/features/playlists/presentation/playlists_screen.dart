@@ -1117,7 +1117,7 @@ class _PlaylistTrackRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: RhythmoSpace.sm),
-                  RhythmoArtworkTile(seed: track.id, active: playing),
+                  RhythmoArtworkTile(seed: track.id, active: playing, track: track),
                   const SizedBox(width: RhythmoSpace.md),
                   Expanded(
                     child: Column(
