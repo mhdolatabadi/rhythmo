@@ -323,14 +323,17 @@ void main() {
       expect(api.calls, contains('unlike:store:entry-0'));
       expect(find.text('۱۹ آهنگ'), findsOneWidget);
 
-      await tester.scrollUntilVisible(find.textContaining('طولانی 19'), 300,
+      // The playing title is also in the mini player. Target the list row
+      // itself so that a shuffle to the last song cannot skip scrolling.
+      await player.play(favorites.songs.last);
+      await tester.pumpAndSettle();
+      final lastRowFinder = find.ancestor(
+          of: find.textContaining('طولانی 19'),
+          matching: find.byType(ListTile));
+      await tester.scrollUntilVisible(lastRowFinder, 300,
           scrollable: find.byType(Scrollable).last);
       await tester.pumpAndSettle();
-      final lastRow = tester.getRect(find
-          .ancestor(
-              of: find.textContaining('طولانی 19'),
-              matching: find.byType(ListTile))
-          .first);
+      final lastRow = tester.getRect(lastRowFinder.first);
       expect(lastRow.bottom,
           lessThanOrEqualTo(tester.getRect(find.byType(MiniPlayer)).top));
     });

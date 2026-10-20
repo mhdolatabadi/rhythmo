@@ -129,7 +129,7 @@ class _Card extends StatelessWidget {
               children: [
                 RhythmoArtworkTile(
                   track: song,
-seed: song.id,
+                  seed: song.id,
                   size: storeCarouselCardWidth - RhythmoSpace.xs * 2,
                   active: playing,
                 ),

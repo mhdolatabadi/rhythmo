@@ -9,6 +9,7 @@ Future<Uri?> trackNotificationArtwork(Uint8List bytes) async {
     final directory = Directory('${root.path}/rhythmo-covers');
     await directory.create(recursive: true);
     final files = await directory.list().where((e) => e is File).toList();
+    files.sort((a, b) => a.path.compareTo(b.path));
     // Only derived pictures live here, never original audio.
     while (files.length >= 32) {
       await files.removeAt(0).delete();

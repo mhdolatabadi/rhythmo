@@ -198,8 +198,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
 
   late final _artwork = TrackArtworkController((track) {
     if (track.isLocal) return TrackArtworkController.local(track);
-    return _apiClient?.trackArtwork(_auth?.token, track) ??
-        Future.value(null);
+    return _apiClient?.trackArtwork(_auth?.token, track) ?? Future.value(null);
   });
 
   final ListeningJourney _journey = ListeningJourney();

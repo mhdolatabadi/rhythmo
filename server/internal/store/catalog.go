@@ -320,6 +320,39 @@ func (c *Catalog) StoreEntryByID(ctx context.Context, entryID string, includeHid
 	return entries[0], nil
 }
 
+// StoreEntriesForTracks maps each of trackIDs that is grouped into a
+// listed entry to that entry as the store shows it, so a public playlist
+// can link its songs to their store pages. Hidden entries and copies that
+// are no longer eligible are left out.
+func (c *Catalog) StoreEntriesForTracks(ctx context.Context, trackIDs []string) (map[string]StoreEntry, error) {
+	found := map[string]StoreEntry{}
+	if len(trackIDs) == 0 {
+		return found, nil
+	}
+	rows, err := c.pool.Query(ctx, `
+		WITH `+liveEntries+`
+		SELECT et.track_id::text, live.entry_id, live.copies, live.hidden_at IS NOT NULL, `+liveTrackColumns+`
+		FROM store_entry_tracks et
+		JOIN tracks ON tracks.id = et.track_id AND `+storeEligible("tracks")+`
+		JOIN live ON live.entry_id = et.entry_id::text
+		WHERE et.track_id::text = ANY($2::text[])
+	`, false, trackIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var trackID string
+		var entry StoreEntry
+		dest := append([]any{&trackID, &entry.ID, &entry.Copies, &entry.Hidden}, trackDestinations(&entry.Track)...)
+		if err := rows.Scan(dest...); err != nil {
+			return nil, err
+		}
+		found[trackID] = entry
+	}
+	return found, rows.Err()
+}
+
 // OwnsCopy reports whether userID owns any copy grouped into the entry,
 // listed or not: saving it would only duplicate their own track.
 func (c *Catalog) OwnsCopy(ctx context.Context, entryID, userID string) (bool, error) {
@@ -529,4 +562,20 @@ func (c *Catalog) EachMatchable(ctx context.Context, _ string, fn func(Matchable
 		}
 	}
 	return rows.Err()
+}
+
+// StoreArtistCounts uses the same live, deduplicated public entries and
+// folded names as the song and album lists. Private/hidden copies never count.
+func (c *Catalog) StoreArtistCounts(ctx context.Context, artist string) (tracks, albums int, err error) {
+	err = c.pool.QueryRow(ctx, `
+		WITH `+liveEntries+`
+		SELECT
+		  count(*) FILTER (WHERE store_fold(COALESCE(live.artist, '')) = store_fold($2)
+		    OR store_fold(COALESCE(live.album_artist, '')) = store_fold($2))::int,
+		  count(DISTINCT store_fold(live.album)) FILTER (
+		    WHERE live.album IS NOT NULL AND btrim(live.album) <> ''
+		    AND store_fold(COALESCE(live.album_artist, live.artist, '')) = store_fold($2))::int
+		FROM live
+	`, false, artist).Scan(&tracks, &albums)
+	return
 }

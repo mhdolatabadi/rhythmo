@@ -160,12 +160,13 @@ move like that:
 
 ## Search engines
 
-The public pages (`/`, `/p/{token}`, `/privacy`, `/delete-account`) are server-rendered for crawlers. Every canonical, Open Graph and sitemap URL uses `WEB_ORIGIN` (`https://${NAFIR_DOMAIN}`), so the site is indexed under one host only.
+The public pages (`/`, `/p/{token}`, `/store/…`, `/privacy`, `/delete-account`) are server-rendered for crawlers. Every canonical, Open Graph and sitemap URL uses `WEB_ORIGIN` (`https://${NAFIR_DOMAIN}`), so the site is indexed under one host only.
 
 - `https://<domain>/robots.txt` points crawlers at `sitemap.xml`. It keeps them out of `/app/` and `/api/`.
 - **Google Search Console:** add the domain as a URL-prefix property and choose the *HTML tag* method. Put only the `content` value in `GOOGLE_SITE_VERIFICATION`.
 - **Bing Webmaster Tools:** do the same with `BING_SITE_VERIFICATION`.
-- After `docker compose up -d`, verify the site in each console, then submit `https://<domain>/sitemap.xml`.
+- After `docker compose up -d`, verify the site in each console, then submit `https://<domain>/sitemap.xml`. It is a sitemap index: `/sitemaps/pages.xml`, `/sitemaps/playlists.xml`, and paged `/sitemaps/songs-N.xml`, `artists-N.xml` and `albums-N.xml` files of up to 5,000 URLs each.
+- **IndexNow (optional):** set `INDEXNOW_KEY` to a random string such as `openssl rand -hex 16`. The API serves it at `/<key>.txt` and, every 15 minutes, announces public pages that appeared or went away since the last check. The first check after a restart only records the pages. It needs `WEB_ORIGIN`; with either unset, nothing is sent.
 - Unknown paths answer with a 404 page that is never indexed.
 
 ## Email verification

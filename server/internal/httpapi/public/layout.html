@@ -8,6 +8,7 @@
 {{if .NoIndex}}<meta name="robots" content="noindex">{{else}}<link rel="canonical" href="{{.Canonical}}">{{end}}
 <meta name="theme-color" content="#070810">
 <link rel="icon" type="image/png" href="/rhythmo.png">
+<link rel="preload" href="/fonts/vazirmatn-regular.woff2" as="font" type="font/woff2" crossorigin>
 <meta property="og:site_name" content="ریتمو">
 <meta property="og:locale" content="fa_IR">
 <meta property="og:type" content="{{.OGType}}">
@@ -17,14 +18,17 @@
 <meta property="og:image" content="{{.Image}}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="ریتمو — کتابخانه‌ی موسیقی ابری">
+<meta property="og:image:alt" content="{{if .ImageAlt}}{{.ImageAlt}}{{else}}ریتمو — کتابخانه‌ی موسیقی ابری{{end}}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{.Title}}">
 <meta name="twitter:description" content="{{.Description}}">
 <meta name="twitter:image" content="{{.Image}}">
 {{block "head" .}}{{end}}
 {{if .JSONLD}}<script type="application/ld+json">{{.JSONLD}}</script>{{end}}
+{{if .CrumbsLD}}<script type="application/ld+json">{{.CrumbsLD}}</script>{{end}}
 <style>
+@font-face{font-family:Vazirmatn;font-weight:400;font-display:swap;src:url(/fonts/vazirmatn-regular.woff2) format("woff2")}
+@font-face{font-family:Vazirmatn;font-weight:700 900;font-display:swap;src:url(/fonts/vazirmatn-bold.woff2) format("woff2")}
 /* Shared with DESIGN.md: night canvas, ember controls, violet accents. */
 :root{--bg:#070810;--surface:#121522;--strong:#191D2D;--raised:#23283A;--text:#F5F1F7;--muted:#D0C8D4;--primary:#FF626A;--on-primary:#250005;--violet:#8D7CFF;--violet-container:#2A2454;--border:#FFFFFF1F;--outline:#8B8290;--divider:#3C3743;--control:14px;--card:18px;--panel:24px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-12:48px;--page:960px}
 *{box-sizing:border-box}
@@ -92,6 +96,13 @@ footer a{display:inline-flex;align-items:center;min-height:48px;padding:var(--sp
 .player{display:block;width:100%;max-width:none;margin-top:var(--space-5)}
 .hero .meta a{color:var(--text)}
 .hero .note{margin-top:var(--space-5)}
+a.title,.sub a{text-decoration:none}
+a.title:hover,.sub a:hover{text-decoration:underline}
+.crumbs ol{display:flex;flex-wrap:wrap;align-items:center;list-style:none;margin:var(--space-4) 0 0;padding:0;color:var(--muted);font-size:14px}
+.crumbs li{display:flex;align-items:center;min-width:0;max-width:100%}
+.crumbs li+li::before{content:"‹";margin:0 var(--space-2)}
+.crumbs a,.crumbs span{display:inline-block;max-width:16em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:var(--space-3) 0;text-decoration:none}
+.crumbs a:hover{color:var(--text);text-decoration:underline}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media(max-width:420px){header.site .wrap{gap:var(--space-2)}header.site .button{padding-inline:var(--space-3)}.hero,.prose{padding:var(--space-5)}.brand{font-size:18px}.brand svg{width:32px;height:32px}}
 </style>
@@ -103,7 +114,7 @@ footer a{display:inline-flex;align-items:center;min-height:48px;padding:var(--sp
 <a class="button" href="/store">استور</a>
 <a class="button primary" href="/app/">ورود / ثبت‌نام</a>
 </div></header>
-<main class="wrap">{{template "content" .}}</main>
+<main class="wrap">{{with .Crumbs}}<nav class="crumbs" aria-label="مسیر صفحه"><ol>{{range $i, $c := .}}<li>{{if $c.Link}}<a href="{{$c.Link}}"><bdi>{{$c.Name}}</bdi></a>{{else}}<span aria-current="page"><bdi>{{$c.Name}}</bdi></span>{{end}}</li>{{end}}</ol></nav>{{end}}{{template "content" .}}</main>
 <footer class="wrap"><span class="footer-mark">{{template "icon"}}</span>ریتمو — پخش‌کننده‌ی موسیقی ابری · <a href="/store">استور</a> · <a href="/privacy">حریم خصوصی</a> · <a href="/delete-account">حذف حساب</a></footer>
 </body>
 </html>{{end}}

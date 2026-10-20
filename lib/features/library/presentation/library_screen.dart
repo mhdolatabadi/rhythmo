@@ -2198,11 +2198,15 @@ class _TrackArtwork extends StatelessWidget {
                   : colors.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(RhythmoRadii.sm),
             ),
-            child: TrackCover(track: track, radius: RhythmoRadii.sm, child: Icon(
-              RhythmoIcons.musicNote,
-              color:
-                  current ? colors.onPrimaryContainer : colors.onSurfaceVariant,
-            )),
+            child: TrackCover(
+                track: track,
+                radius: RhythmoRadii.sm,
+                child: Icon(
+                  RhythmoIcons.musicNote,
+                  color: current
+                      ? colors.onPrimaryContainer
+                      : colors.onSurfaceVariant,
+                )),
           ),
           PositionedDirectional(
             end: -4,

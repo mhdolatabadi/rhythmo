@@ -38,7 +38,8 @@ class RhythmoArtworkTile extends StatelessWidget {
           ? Icon(
               active ? RhythmoIcons.waveformFill : icon,
               size: size * 0.45,
-              color: active ? colors.onPrimaryContainer : colors.onSurfaceVariant,
+              color:
+                  active ? colors.onPrimaryContainer : colors.onSurfaceVariant,
             )
           : TrackCover(
               track: track!,
@@ -46,7 +47,9 @@ class RhythmoArtworkTile extends StatelessWidget {
               child: Icon(
                 active ? RhythmoIcons.waveformFill : icon,
                 size: size * 0.45,
-                color: active ? colors.onPrimaryContainer : colors.onSurfaceVariant,
+                color: active
+                    ? colors.onPrimaryContainer
+                    : colors.onSurfaceVariant,
               ),
             ),
     );
@@ -92,8 +95,8 @@ class RhythmoTrackRow extends StatelessWidget {
           RhythmoSpace.lg, 0, RhythmoSpace.xs, 0),
       onTap: onTap,
       selected: active,
-      leading:
-          RhythmoArtworkTile(seed: seed, icon: leadingIcon, active: active, track: track),
+      leading: RhythmoArtworkTile(
+          seed: seed, icon: leadingIcon, active: active, track: track),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(line, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: trailing,

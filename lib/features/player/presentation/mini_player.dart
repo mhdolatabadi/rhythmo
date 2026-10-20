@@ -335,11 +335,14 @@ class _MiniArtwork extends StatelessWidget {
           ),
         ],
       ),
-      child: TrackCover(track: track, radius: size >= 44 ? 14 : 12, child: Icon(
-        icon,
-        size: size * 0.36,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      )),
+      child: TrackCover(
+          track: track,
+          radius: size >= 44 ? 14 : 12,
+          child: Icon(
+            icon,
+            size: size * 0.36,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          )),
     );
   }
 }

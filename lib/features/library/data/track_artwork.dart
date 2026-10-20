@@ -71,9 +71,8 @@ class TrackArtworkScope extends InheritedNotifier<TrackArtworkController> {
     required super.child,
   }) : super(notifier: controller);
 
-  static TrackArtworkController? maybeOf(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<TrackArtworkScope>()
-      ?.notifier;
+  static TrackArtworkController? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<TrackArtworkScope>()?.notifier;
 }
 
 /// Preserves the existing dimensions, decoration and accessibility fallback.

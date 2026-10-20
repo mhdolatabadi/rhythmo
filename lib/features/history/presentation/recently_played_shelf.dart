@@ -149,15 +149,18 @@ class _RecentCard extends StatelessWidget {
                               ],
                       ),
                     ),
-                    child: TrackCover(track: track, radius: 16, child: Icon(
-                      current
-                          ? RhythmoIcons.waveformFill
-                          : RhythmoIcons.musicNote,
-                      size: 36,
-                      color: current
-                          ? colors.onPrimaryContainer
-                          : colors.onSurfaceVariant,
-                    )),
+                    child: TrackCover(
+                        track: track,
+                        radius: 16,
+                        child: Icon(
+                          current
+                              ? RhythmoIcons.waveformFill
+                              : RhythmoIcons.musicNote,
+                          size: 36,
+                          color: current
+                              ? colors.onPrimaryContainer
+                              : colors.onSurfaceVariant,
+                        )),
                   ),
                 ),
                 const SizedBox(height: 8),
