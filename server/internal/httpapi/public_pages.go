@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
-	"encoding/xml"
 	"errors"
 	"fmt"
 	"html/template"
@@ -36,8 +35,6 @@ const (
 	publicListSize = 100
 	// homeStoreSize is how many store songs the front page shows.
 	homeStoreSize = 8
-	// sitemapSize caps the playlists listed in sitemap.xml.
-	sitemapSize = 5000
 	// publicPageMaxAge lets browsers and proxies reuse a page briefly.
 	publicPageMaxAge = "public, max-age=60"
 )
@@ -68,6 +65,9 @@ type PublicPages struct {
 	catalog CatalogStore
 	// images keeps the drawn link preview cards.
 	images shareImages
+	// indexNowKey, when set, is served at /{key}.txt to prove the site
+	// owns the key its IndexNow notices carry.
+	indexNowKey string
 }
 
 // siteVerification is the content of the search engines' ownership <meta>
@@ -147,7 +147,11 @@ func (p *PublicPages) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /p/{token}", p.handlePlaylist)
 	mux.HandleFunc("GET /p/{token}/t/{trackId}", p.handleTrack)
 	mux.HandleFunc("GET /p/{token}/og.jpg", p.handlePlaylistImage)
-	mux.HandleFunc("GET /sitemap.xml", p.handleSitemap)
+	mux.HandleFunc("GET /sitemap.xml", p.handleSitemapIndex)
+	mux.HandleFunc("GET /sitemaps/{file}", p.handleSitemap)
+	if p.indexNowKey != "" {
+		mux.HandleFunc("GET /"+p.indexNowKey+".txt", p.handleIndexNowKey)
+	}
 	mux.HandleFunc("GET /robots.txt", p.handleRobots)
 	mux.HandleFunc("GET /rhythmo.png", p.handleIcon)
 	// The icon's URL before the rename, still in old shares and caches.
@@ -580,53 +584,12 @@ func (p *PublicPages) handleTrack(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
-type sitemapURL struct {
-	Loc     string `xml:"loc"`
-	LastMod string `xml:"lastmod,omitempty"`
-}
-
 // lastMod is a sitemap date, or empty for an unknown time.
 func lastMod(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
 	return t.UTC().Format(time.DateOnly)
-}
-
-type sitemap struct {
-	XMLName xml.Name     `xml:"urlset"`
-	XMLNS   string       `xml:"xmlns,attr"`
-	URLs    []sitemapURL `xml:"url"`
-}
-
-func (p *PublicPages) handleSitemap(w http.ResponseWriter, r *http.Request) {
-	listed, err := p.playlists.Popular(r.Context(), "", sitemapSize)
-	if err != nil {
-		internalError(w, "list sitemap playlists", err)
-		return
-	}
-	site := p.origin(r)
-	urls := []sitemapURL{{Loc: site + "/"}, {Loc: site + "/privacy"}, {Loc: site + "/delete-account"}}
-	for _, pl := range listed {
-		urls = append(urls, sitemapURL{
-			Loc: site + "/p/" + pl.ShareToken, LastMod: lastMod(pl.UpdatedAt),
-		})
-	}
-	storeURLs, err := p.storeSitemapURLs(r, site)
-	if err != nil {
-		internalError(w, "list sitemap store pages", err)
-		return
-	}
-	urls = append(urls, storeURLs...)
-	body, err := xml.MarshalIndent(sitemap{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9", URLs: urls}, "", "  ")
-	if err != nil {
-		internalError(w, "encode sitemap", err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_, _ = w.Write([]byte(xml.Header))
-	_, _ = w.Write(body)
 }
 
 func (p *PublicPages) handleRobots(w http.ResponseWriter, r *http.Request) {

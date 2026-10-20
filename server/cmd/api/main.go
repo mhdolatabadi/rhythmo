@@ -355,6 +355,15 @@ func run() error {
 		}
 		ops = httpapi.NewOpsHandlers(opsToken, reporter)
 	}
+	publicPages := httpapi.NewPublicPages(playlists, objects,
+		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
+		WithContact(os.Getenv("PRIVACY_CONTACT_EMAIL")).
+		WithQuota(ownerQuotaBytes).
+		WithAndroidApp(os.Getenv("ANDROID_APP_URL")).
+		WithSite(os.Getenv("WEB_ORIGIN")).
+		WithVerification(os.Getenv("GOOGLE_SITE_VERIFICATION"), os.Getenv("BING_SITE_VERIFICATION")).
+		WithIndexNow(os.Getenv("INDEXNOW_KEY")).
+		WithStore(storeCatalog)
 	server := &http.Server{
 		Addr: ":" + port,
 		Handler: httpapi.NewHandler(httpapi.Config{
@@ -373,15 +382,8 @@ func run() error {
 			}).WithAnonymous(httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 				WithEmailGate(emailGate).WithPublishGate(publishGate),
 			History: httpapi.NewHistoryHandlers(store.NewHistory(pool), tokens, historyRate),
-			Public: httpapi.NewPublicPages(playlists, objects,
-				httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
-				WithContact(os.Getenv("PRIVACY_CONTACT_EMAIL")).
-				WithQuota(ownerQuotaBytes).
-				WithAndroidApp(os.Getenv("ANDROID_APP_URL")).
-				WithSite(os.Getenv("WEB_ORIGIN")).
-				WithVerification(os.Getenv("GOOGLE_SITE_VERIFICATION"), os.Getenv("BING_SITE_VERIFICATION")).
-				WithStore(storeCatalog),
-			Bots: botHandlers.WithEmailGate(emailGate),
+			Public:  publicPages,
+			Bots:    botHandlers.WithEmailGate(emailGate),
 			LinkImports: httpapi.NewLinkImportHandlers(linkImports, tokens, linkImportRate).WithEmailGate(emailGate).WithSpotify(
 				linkimport.NewSpotifyImporter(linkimport.NewSpotifyReader(linkFetcher), tracks, playlists)),
 			Lyrics:   lyricsHandlers,
@@ -398,6 +400,9 @@ func run() error {
 	}
 
 	go retags.Run(ctx)
+	if indexNow := httpapi.NewIndexNow(publicPages); indexNow != nil {
+		go indexNow.Run(ctx)
+	}
 	if fingerprints != nil {
 		go fingerprints.Run(ctx)
 	}

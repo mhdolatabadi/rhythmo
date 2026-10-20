@@ -30,11 +30,6 @@ const (
 	storePageSize = 50
 	// storeMaxPage keeps paging within the catalog's offset limit.
 	storeMaxPage = maxStoreOffset / storePageSize
-	// sitemapStoreTracks, sitemapStoreArtists and sitemapStoreAlbums cap the store's share of
-	// sitemap.xml.
-	sitemapStoreTracks  = 5000
-	sitemapStoreArtists = 1000
-	sitemapStoreAlbums  = 1000
 )
 
 // WithStore serves the public store as plain HTML (#243): /store lists and
@@ -554,34 +549,4 @@ func (p *PublicPages) handleStoreStream(w http.ResponseWriter, r *http.Request) 
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	http.Redirect(w, r, url, http.StatusFound)
-}
-
-// storeSitemapURLs are the store's pages for sitemap.xml.
-func (p *PublicPages) storeSitemapURLs(r *http.Request, site string) ([]sitemapURL, error) {
-	if p.catalog == nil {
-		return nil, nil
-	}
-	urls := []sitemapURL{{Loc: site + "/store"}, {Loc: site + "/store/artists"}, {Loc: site + "/store/albums"}}
-	artists, _, err := p.catalog.StoreArtists(r.Context(), "", sitemapStoreArtists, 0)
-	if err != nil {
-		return nil, err
-	}
-	for _, a := range artists {
-		urls = append(urls, sitemapURL{Loc: site + artistLink(a.Name)})
-	}
-	albums, _, err := p.catalog.StoreAlbums(r.Context(), "", "", sitemapStoreAlbums, 0)
-	if err != nil {
-		return nil, err
-	}
-	for _, a := range albums {
-		urls = append(urls, sitemapURL{Loc: site + albumLink(a.Name, optional(a.Artist))})
-	}
-	entries, _, err := p.catalog.StoreEntries(r.Context(), store.StoreQuery{Limit: sitemapStoreTracks})
-	if err != nil {
-		return nil, err
-	}
-	for _, entry := range entries {
-		urls = append(urls, sitemapURL{Loc: site + storeTrackLink(entry), LastMod: lastMod(entry.Track.CreatedAt)})
-	}
-	return urls, nil
 }

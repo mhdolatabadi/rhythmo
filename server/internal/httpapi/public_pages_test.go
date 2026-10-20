@@ -40,6 +40,22 @@ func jsonLD(t *testing.T, page string) map[string]any {
 	return data
 }
 
+// fullSitemap reads sitemap.xml and every sitemap file it lists, one after
+// another, failing if any of them is missing.
+func fullSitemap(t *testing.T, site http.Handler) string {
+	t.Helper()
+	index := get(site, "/sitemap.xml").Body.String()
+	var all strings.Builder
+	for _, match := range regexp.MustCompile(`<loc>https://[^/]+(/sitemaps/[^<]+)</loc>`).FindAllStringSubmatch(index, -1) {
+		response := get(site, match[1])
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s = %d", match[1], response.Code)
+		}
+		all.WriteString(response.Body.String())
+	}
+	return all.String()
+}
+
 // graphNode returns the @graph entry of the given type, failing if absent.
 func graphNode(t *testing.T, data map[string]any, kind string) map[string]any {
 	t.Helper()
@@ -170,7 +186,7 @@ func TestSitemapAndRobots(t *testing.T) {
 	data := &sharingStore{token: &token, public: true}
 	site := publicSite(data, AnonymousLimits{})
 
-	sitemap := get(site, "/sitemap.xml").Body.String()
+	sitemap := fullSitemap(t, site)
 	for _, want := range []string{
 		`<?xml version="1.0" encoding="UTF-8"?>`,
 		`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`,
@@ -268,12 +284,13 @@ func TestPublicPagesUseTheConfiguredSiteOrigin(t *testing.T) {
 
 	// The request arrives under another host, as through an IP or an old domain.
 	for path, want := range map[string]string{
-		"/":               `<link rel="canonical" href="https://rhythmo.ir/">`,
-		"/p/" + token:     `<link rel="canonical" href="https://rhythmo.ir/p/` + token + `">`,
-		"/privacy":        `<meta property="og:image" content="https://rhythmo.ir/social.png">`,
-		"/sitemap.xml":    `<loc>https://rhythmo.ir/p/` + token + `</loc>`,
-		"/robots.txt":     `Sitemap: https://rhythmo.ir/sitemap.xml`,
-		"/delete-account": `<link rel="canonical" href="https://rhythmo.ir/delete-account">`,
+		"/":                       `<link rel="canonical" href="https://rhythmo.ir/">`,
+		"/p/" + token:             `<link rel="canonical" href="https://rhythmo.ir/p/` + token + `">`,
+		"/privacy":                `<meta property="og:image" content="https://rhythmo.ir/social.png">`,
+		"/sitemap.xml":            `<loc>https://rhythmo.ir/sitemaps/playlists.xml</loc>`,
+		"/sitemaps/playlists.xml": `<loc>https://rhythmo.ir/p/` + token + `</loc>`,
+		"/robots.txt":             `Sitemap: https://rhythmo.ir/sitemap.xml`,
+		"/delete-account":         `<link rel="canonical" href="https://rhythmo.ir/delete-account">`,
 	} {
 		body := get(site, path).Body.String()
 		if !strings.Contains(body, want) || strings.Contains(body, "rhythmo.example.com") {
@@ -294,7 +311,7 @@ func TestWithSiteIgnoresAnythingButAnOrigin(t *testing.T) {
 }
 
 func TestSitemapListsTheStaticPages(t *testing.T) {
-	body := get(publicSite(&sharingStore{}, AnonymousLimits{}), "/sitemap.xml").Body.String()
+	body := fullSitemap(t, publicSite(&sharingStore{}, AnonymousLimits{}))
 	for _, want := range []string{
 		"<loc>https://rhythmo.example.com/</loc>",
 		"<loc>https://rhythmo.example.com/privacy</loc>",
@@ -499,5 +516,44 @@ func TestPublicPagesShareCurrentBrandInHeaderAndFooter(t *testing.T) {
 		if strings.Contains(page, `rotate(-35`) {
 			t.Errorf("%s still contains the old logo", path)
 		}
+	}
+}
+
+func TestSitemapIndexPagesTheStore(t *testing.T) {
+	site, catalog := storeSite(t, AnonymousLimits{})
+	index := get(site, "/sitemap.xml")
+	body := index.Body.String()
+	if index.Header().Get("Content-Type") != "application/xml; charset=utf-8" ||
+		!strings.Contains(body, `<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`) {
+		t.Fatalf("sitemap index = %s", body)
+	}
+	for _, file := range []string{"pages.xml", "playlists.xml", "songs-1.xml", "artists-1.xml", "albums-1.xml"} {
+		if !strings.Contains(body, "<loc>https://rhythmo.example.com/sitemaps/"+file+"</loc>") {
+			t.Errorf("index lacks %s", file)
+		}
+	}
+	// The fake catalog has one item at every offset, so every kind has the
+	// most pages and the next one is never listed.
+	if !strings.Contains(body, "songs-10.xml") || strings.Contains(body, "songs-11.xml") {
+		t.Errorf("songs are not paged up to the cap:\n%s", body)
+	}
+	get(site, "/sitemaps/songs-3.xml")
+	if catalog.query.Offset != 2*sitemapPageSize || catalog.query.Limit != sitemapPageSize {
+		t.Errorf("songs-3 asked for %+v", catalog.query)
+	}
+	for _, path := range []string{"/sitemaps/songs-11.xml", "/sitemaps/songs-0.xml", "/sitemaps/other.xml", "/sitemaps/pages-2.xml"} {
+		if response := get(site, path); response.Code != http.StatusNotFound {
+			t.Errorf("%s = %d", path, response.Code)
+		}
+	}
+	// An empty later page is not a sitemap.
+	catalog.hidden = true
+	if response := get(site, "/sitemaps/songs-2.xml"); response.Code != http.StatusNotFound {
+		t.Errorf("an empty songs page = %d", response.Code)
+	}
+	// Without a store, only the site's own sitemaps exist.
+	plain := get(publicSite(&sharingStore{}, AnonymousLimits{}), "/sitemap.xml").Body.String()
+	if strings.Contains(plain, "songs-") || get(publicSite(&sharingStore{}, AnonymousLimits{}), "/sitemaps/songs-1.xml").Code != http.StatusNotFound {
+		t.Errorf("a site without a store lists store sitemaps:\n%s", plain)
 	}
 }

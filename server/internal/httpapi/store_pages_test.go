@@ -129,7 +129,7 @@ func TestStorePagesUseTheVisitorLimits(t *testing.T) {
 
 func TestSitemapListsTheStore(t *testing.T) {
 	site, _ := storeSite(t, AnonymousLimits{})
-	sitemap := get(site, "/sitemap.xml").Body.String()
+	sitemap := fullSitemap(t, site)
 	for _, want := range []string{"https://rhythmo.example.com/store</loc>", "/store/artists</loc>", "/store/albums</loc>",
 		"/store/artists/Kayhan</loc>", storeSongPath + "</loc>"} {
 		if !strings.Contains(sitemap, want) {
@@ -273,7 +273,7 @@ func TestFrontPageLinksToStoreSongs(t *testing.T) {
 func TestSitemapListsStoreAlbumsAndSongDates(t *testing.T) {
 	site, catalog := storeSite(t, AnonymousLimits{})
 	catalog.entry.Track.CreatedAt = time.Date(2026, 3, 4, 23, 0, 0, 0, time.UTC)
-	sitemap := get(site, "/sitemap.xml").Body.String()
+	sitemap := fullSitemap(t, site)
 	for _, want := range []string{"/store/albums/Seasons?artist=AC%2FDC</loc>",
 		storeSongPath + "</loc>\n    <lastmod>2026-03-04</lastmod>"} {
 		if !strings.Contains(sitemap, want) {

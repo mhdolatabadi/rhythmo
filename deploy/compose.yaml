@@ -106,6 +106,7 @@ services:
       # Search console ownership tokens for the front page (optional).
       GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
       BING_SITE_VERIFICATION: ${BING_SITE_VERIFICATION:-}
+      INDEXNOW_KEY: ${INDEXNOW_KEY:-}
       BOT_PUBLIC_URL: https://${NAFIR_DOMAIN}
     depends_on:
       postgres:
