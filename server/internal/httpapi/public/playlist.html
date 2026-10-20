@@ -8,11 +8,11 @@
 <ol class="list">
 {{range .Playlist.Tracks}}<li><div class="row track">
 <span class="art">{{template "note"}}</span>
-<span class="grow"><span class="title">{{.Title}}</span><span class="sub"><bdi>{{.Artist}}</bdi></span></span>
+<span class="grow">{{if .Link}}<a class="title" href="{{.Link}}" dir="auto">{{.Title}}</a>{{else}}<span class="title" dir="auto">{{.Title}}</span>{{end}}<span class="sub">{{if .ArtistLink}}<a href="{{.ArtistLink}}"><bdi>{{.Artist}}</bdi></a>{{else}}<bdi>{{.Artist}}</bdi>{{end}}</span></span>
 <audio controls preload="none" src="{{.Stream}}" aria-label="پخش {{.Title}}"></audio>
 </div></li>
 {{end}}</ol>
 {{else}}
-<p class="empty">این Playlist فعلاً آهنگی ندارد.</p>
+<p class="empty">این فهرست پخش فعلاً آهنگی ندارد.</p>
 {{end}}
 {{end}}

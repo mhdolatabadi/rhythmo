@@ -13,7 +13,7 @@ const apiContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'; ba
 // scripts (the JSON-LD block is data, not script), the inline styles the
 // templates use, the site's own images and the track previews, which play
 // from presigned storage URLs that may be on another https origin.
-const pageContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; " +
+const pageContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; " +
 	"media-src 'self' https:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 
 // securityHeaders sets the browser hardening headers on every response, so

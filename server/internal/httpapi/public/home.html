@@ -10,7 +10,7 @@
 {{range .Features}}<li><h3>{{.Title}}</h3><p>{{.Text}}</p></li>
 {{end}}</ul>
 </section>
-<h2 class="section">فهرست‌های پخش محبوب</h2>
+<h2 class="section" id="playlists">فهرست‌های پخش محبوب</h2>
 {{if .Playlists}}
 <ol class="list">
 {{range .Playlists}}<li><a class="row" href="/p/{{.ShareToken}}">
@@ -21,6 +21,18 @@
 {{end}}</ol>
 {{else}}
 <p class="empty">هنوز فهرست پخش عمومی‌ای نیست. در اپ ریتمو یک فهرست پخش بساز و هنگام اشتراک‌گذاری «عمومی» را انتخاب کن.</p>
+{{end}}
+{{if .Songs}}
+<section aria-labelledby="store-songs">
+<h2 class="section" id="store-songs">آهنگ‌های محبوب استور</h2>
+<ol class="list">
+{{range .Songs}}<li><a class="row" href="{{.Link}}">
+<span class="art">{{template "note"}}</span>
+<span class="grow"><span class="title" dir="auto">{{.Title}}</span><span class="sub"><bdi>{{.Artist}}</bdi></span></span>
+</a></li>
+{{end}}</ol>
+<nav class="chips" aria-label="مرور استور"><a class="button" href="/store">همه‌ی آهنگ‌ها</a><a class="button" href="/store/artists">خواننده‌ها</a><a class="button" href="/store/albums">آلبوم‌ها</a></nav>
+</section>
 {{end}}
 <section class="faq" aria-labelledby="faq">
 <h2 class="section" id="faq">پرسش‌های رایج</h2>

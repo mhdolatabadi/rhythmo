@@ -2,11 +2,13 @@ package httpapi
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
-	"encoding/xml"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -17,7 +19,7 @@ import (
 	"github.com/mhdolatabadi/rhythmo/server/internal/store"
 )
 
-//go:embed public/*.html public/rhythmo.png public/social.png
+//go:embed public/*.html public/rhythmo.png public/social.png public/fonts/*.woff2
 var publicFiles embed.FS
 
 var publicTemplates = map[string]*template.Template{
@@ -31,8 +33,8 @@ var publicTemplates = map[string]*template.Template{
 const (
 	// publicListSize is how many popular playlists the front page shows.
 	publicListSize = 100
-	// sitemapSize caps the playlists listed in sitemap.xml.
-	sitemapSize = 5000
+	// homeStoreSize is how many store songs the front page shows.
+	homeStoreSize = 8
 	// publicPageMaxAge lets browsers and proxies reuse a page briefly.
 	publicPageMaxAge = "public, max-age=60"
 )
@@ -61,6 +63,11 @@ type PublicPages struct {
 	verify siteVerification
 	// catalog, when set, serves the public store's pages.
 	catalog CatalogStore
+	// images keeps the drawn link preview cards.
+	images shareImages
+	// indexNowKey, when set, is served at /{key}.txt to prove the site
+	// owns the key its IndexNow notices carry.
+	indexNowKey string
 }
 
 // siteVerification is the content of the search engines' ownership <meta>
@@ -139,12 +146,18 @@ func (p *PublicPages) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /{$}", p.handleHome)
 	mux.HandleFunc("GET /p/{token}", p.handlePlaylist)
 	mux.HandleFunc("GET /p/{token}/t/{trackId}", p.handleTrack)
-	mux.HandleFunc("GET /sitemap.xml", p.handleSitemap)
+	mux.HandleFunc("GET /p/{token}/og.jpg", p.handlePlaylistImage)
+	mux.HandleFunc("GET /sitemap.xml", p.handleSitemapIndex)
+	mux.HandleFunc("GET /sitemaps/{file}", p.handleSitemap)
+	if p.indexNowKey != "" {
+		mux.HandleFunc("GET /"+p.indexNowKey+".txt", p.handleIndexNowKey)
+	}
 	mux.HandleFunc("GET /robots.txt", p.handleRobots)
 	mux.HandleFunc("GET /rhythmo.png", p.handleIcon)
 	// The icon's URL before the rename, still in old shares and caches.
 	mux.HandleFunc("GET /nafir.png", p.handleIcon)
 	mux.HandleFunc("GET /social.png", p.handleSocialImage)
+	mux.HandleFunc("GET /fonts/{name}", p.handleFont)
 	mux.HandleFunc("GET /privacy", p.handlePrivacy)
 	mux.HandleFunc("GET /delete-account", p.handleDeleteAccount)
 	p.registerStore(mux)
@@ -156,11 +169,38 @@ type pageMeta struct {
 	Description string
 	Canonical   string
 	Image       string
-	OGType      string
-	NoIndex     bool
+	// ImageAlt describes Image; empty is the site's own card.
+	ImageAlt string
+	OGType   string
+	NoIndex  bool
 	// JSONLD is structured data for search engines; it is JSON-encoded
 	// safely by html/template inside its script tag.
 	JSONLD any
+	// Crumbs is the page's place in the site, shown above its content and
+	// given to search engines as a BreadcrumbList.
+	Crumbs   []crumb
+	CrumbsLD any
+}
+
+// crumb is one step of a breadcrumb trail; the last one, the page itself,
+// has no link.
+type crumb struct {
+	Name string
+	Link string
+}
+
+// setCrumbs gives the page a breadcrumb trail that starts at the front page.
+func (m *pageMeta) setCrumbs(site string, trail ...crumb) {
+	m.Crumbs = append([]crumb{{Name: "ریتمو", Link: "/"}}, trail...)
+	items := make([]map[string]any, 0, len(m.Crumbs))
+	for i, c := range m.Crumbs {
+		item := map[string]any{"@type": "ListItem", "position": i + 1, "name": c.Name}
+		if c.Link != "" {
+			item["item"] = site + c.Link
+		}
+		items = append(items, item)
+	}
+	m.CrumbsLD = map[string]any{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": items}
 }
 
 type publicListItem struct {
@@ -175,6 +215,10 @@ type publicTrack struct {
 	Title  string
 	Artist string
 	Stream string
+	// Link and ArtistLink are the song's and its artist's store pages,
+	// when the song is in the store.
+	Link       string
+	ArtistLink string
 }
 
 type publicPlaylist struct {
@@ -225,15 +269,37 @@ func origin(r *http.Request) string {
 	return scheme + "://" + r.Host
 }
 
-func (p *PublicPages) render(w http.ResponseWriter, status int, name string, data any) {
+func (p *PublicPages) render(w http.ResponseWriter, r *http.Request, status int, name string, data any) {
 	var page bytes.Buffer
 	if err := publicTemplates[name].ExecuteTemplate(&page, "layout", data); err != nil {
 		internalError(w, "render public page", err)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if status == http.StatusOK {
+		// Crawlers and browsers revalidating an unchanged page get a bodiless
+		// 304 instead of the whole page again.
+		sum := sha256.Sum256(page.Bytes())
+		etag := `"` + hex.EncodeToString(sum[:12]) + `"`
+		w.Header().Set("ETag", etag)
+		if etagMatches(r.Header.Get("If-None-Match"), etag) {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
 	w.WriteHeader(status)
 	_, _ = page.WriteTo(w)
+}
+
+// etagMatches reports whether an If-None-Match header names etag.
+func etagMatches(header, etag string) bool {
+	for _, candidate := range strings.Split(header, ",") {
+		candidate = strings.TrimPrefix(strings.TrimSpace(candidate), "W/")
+		if candidate == etag || candidate == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *PublicPages) handleHome(w http.ResponseWriter, r *http.Request) {
@@ -257,6 +323,7 @@ func (p *PublicPages) handleHome(w http.ResponseWriter, r *http.Request) {
 			"@type": "ListItem", "position": i + 1, "url": site + "/p/" + pl.ShareToken, "name": pl.Name,
 		})
 	}
+	songs := p.homeStoreSongs(r)
 	questions := p.questions()
 	faqJSON := make([]map[string]any, 0, len(questions))
 	for _, q := range questions {
@@ -266,17 +333,18 @@ func (p *PublicPages) handleHome(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	w.Header().Set("Cache-Control", publicPageMaxAge)
-	p.render(w, http.StatusOK, "home", struct {
+	p.render(w, r, http.StatusOK, "home", struct {
 		pageMeta
 		Verify     siteVerification
 		Features   []publicFeature
 		Questions  []publicQuestion
 		AndroidApp string
 		Playlists  []publicListItem
+		Songs      []storePageTrack
 	}{
 		Verify: p.verify,
 		pageMeta: pageMeta{
-			Title: "ریتمو — پخش‌کننده و فضای ابری موسیقی",
+			Title: "ریتمو | پخش آنلاین موسیقی و فضای ابری برای آهنگ‌هایت",
 			Description: "ریتمو کتابخانه‌ی موسیقی ابری توست: آهنگ‌هایت را با کیفیت اصلی آپلود کن، " +
 				"فهرست پخش بساز و روی وب و اندروید گوش بده. فهرست‌های پخش محبوب را بدون ثبت‌نام بشنو.",
 			Canonical: site + "/", Image: site + "/social.png", OGType: "website",
@@ -293,15 +361,39 @@ func (p *PublicPages) handleHome(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 		Features: publicFeatures, Questions: questions, AndroidApp: p.androidApp,
-		Playlists: items,
+		Playlists: items, Songs: songs,
 	})
+}
+
+// homeStoreSongs are the store's most popular songs, or its first ones
+// while nothing has been played yet. The store only adds to the front page,
+// so a failure leaves the section out rather than failing the page.
+func (p *PublicPages) homeStoreSongs(r *http.Request) []storePageTrack {
+	if p.catalog == nil {
+		return nil
+	}
+	entries, _, err := p.catalog.StoreRanked(r.Context(), store.RankPopular, homeStoreSize, 0)
+	if err == nil && len(entries) == 0 {
+		entries, _, err = p.catalog.StoreEntries(r.Context(), store.StoreQuery{Limit: homeStoreSize})
+	}
+	if err != nil {
+		slog.Error("request failed", "action", "list front page store songs", "error", err)
+		return nil
+	}
+	songs := make([]storePageTrack, 0, len(entries))
+	for _, entry := range entries {
+		songs = append(songs, storePageTrack{
+			ID: entry.ID, Link: storeTrackLink(entry), Title: entry.Track.Title, Artist: optional(entry.Track.Artist),
+		})
+	}
+	return songs
 }
 
 // renderMissing writes the branded not-found page, which search engines
 // are told not to index.
 func (p *PublicPages) renderMissing(w http.ResponseWriter, r *http.Request, heading, body, description string) {
 	site := p.origin(r)
-	p.render(w, http.StatusNotFound, "missing", struct {
+	p.render(w, r, http.StatusNotFound, "missing", struct {
 		pageMeta
 		Heading string
 		Body    string
@@ -370,49 +462,97 @@ func (p *PublicPages) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 		ShareToken: token, Name: shared.Name, Owner: bot.MaskEmail(shared.OwnerEmail),
 		TrackCount: len(shared.Tracks), LikeCount: likes.Count,
 	}
+	inStore := p.storeEntriesFor(r, shared.Tracks)
 	recordings := make([]map[string]any, 0, len(shared.Tracks))
-	var artists []string
-	seen := map[string]bool{}
 	for _, t := range shared.Tracks {
 		artist := ""
 		if t.Artist != nil {
 			artist = strings.TrimSpace(*t.Artist)
 		}
-		page.Tracks = append(page.Tracks, publicTrack{
-			Title: t.Title, Artist: artist, Stream: "/p/" + token + "/t/" + t.ID,
-		})
+		track := publicTrack{Title: t.Title, Artist: artist, Stream: "/p/" + token + "/t/" + t.ID}
 		recording := map[string]any{"@type": "MusicRecording", "name": t.Title}
+		if entry, ok := inStore[t.ID]; ok {
+			track.Link = storeTrackLink(entry)
+			recording["url"] = site + track.Link
+			if artist != "" {
+				track.ArtistLink = artistLink(artist)
+			}
+		}
+		page.Tracks = append(page.Tracks, track)
 		if artist != "" {
 			recording["byArtist"] = map[string]any{"@type": "MusicGroup", "name": artist}
-			if !seen[strings.ToLower(artist)] && len(artists) < 5 {
-				seen[strings.ToLower(artist)] = true
-				artists = append(artists, artist)
-			}
 		}
 		recordings = append(recordings, recording)
 	}
+	artists := playlistArtists(shared.Tracks)
 	description := fmt.Sprintf("فهرست پخش «%s» با %s آهنگ در ریتمو", shared.Name, display.PersianDigits(len(shared.Tracks)))
 	if len(artists) > 0 {
 		description += "، از " + strings.Join(artists, "، ")
 	}
-	description += ". بدون ثبت‌نام بشنو."
+	description += ". آنلاین و بدون ثبت‌نام بشنو."
 	canonical := site + "/p/" + token
+	meta := pageMeta{
+		Title:       shared.Name + " | فهرست پخش آنلاین در ریتمو",
+		Description: description,
+		Canonical:   canonical, OGType: "music.playlist",
+		Image:    shareImageURL(site, "/p/"+token+"/og.jpg", playlistCard(site, shared.Name, len(shared.Tracks), artists)),
+		ImageAlt: "فهرست پخش «" + shared.Name + "» در ریتمو",
+		JSONLD: map[string]any{
+			"@context": "https://schema.org", "@type": "MusicPlaylist",
+			"name": shared.Name, "url": canonical, "numTracks": len(shared.Tracks), "track": recordings,
+		},
+	}
+	meta.setCrumbs(site, crumb{Name: "فهرست‌های پخش", Link: "/#playlists"}, crumb{Name: shared.Name})
 	w.Header().Set("Cache-Control", publicPageMaxAge)
-	p.render(w, http.StatusOK, "playlist", struct {
+	p.render(w, r, http.StatusOK, "playlist", struct {
 		pageMeta
 		Playlist publicPlaylist
-	}{
-		pageMeta: pageMeta{
-			Title:       shared.Name + " — فهرست پخش در ریتمو",
-			Description: description,
-			Canonical:   canonical, Image: site + "/social.png", OGType: "music.playlist",
-			JSONLD: map[string]any{
-				"@context": "https://schema.org", "@type": "MusicPlaylist",
-				"name": shared.Name, "url": canonical, "numTracks": len(shared.Tracks), "track": recordings,
-			},
-		},
-		Playlist: page,
-	})
+	}{pageMeta: meta, Playlist: page})
+}
+
+// playlistArtists are the first five different artists of a playlist.
+func playlistArtists(tracks []store.Track) []string {
+	var artists []string
+	seen := map[string]bool{}
+	for _, t := range tracks {
+		artist := optional(t.Artist)
+		if artist != "" && !seen[strings.ToLower(artist)] && len(artists) < 5 {
+			seen[strings.ToLower(artist)] = true
+			artists = append(artists, artist)
+		}
+	}
+	return artists
+}
+
+// handlePlaylistImage draws a public playlist's link preview.
+func (p *PublicPages) handlePlaylistImage(w http.ResponseWriter, r *http.Request) {
+	if !enforceRateLimit(w, p.limits.View, clientIP(r)) {
+		return
+	}
+	shared, ok := p.publicPlaylistFor(w, r)
+	if !ok {
+		return
+	}
+	p.serveShareImage(w, playlistCard(p.origin(r), shared.Name, len(shared.Tracks), playlistArtists(shared.Tracks)))
+}
+
+// storeEntriesFor maps the tracks that are in the store to their entries.
+// The store only adds links, so a failure leaves them out rather than
+// failing the page.
+func (p *PublicPages) storeEntriesFor(r *http.Request, tracks []store.Track) map[string]store.StoreEntry {
+	if p.catalog == nil || len(tracks) == 0 {
+		return nil
+	}
+	ids := make([]string, len(tracks))
+	for i, t := range tracks {
+		ids[i] = t.ID
+	}
+	found, err := p.catalog.StoreEntriesForTracks(r.Context(), ids)
+	if err != nil {
+		slog.Error("request failed", "action", "find playlist songs in the store", "error", err)
+		return nil
+	}
+	return found
 }
 
 // handleTrack sends a player to a short-lived URL for one track of a public
@@ -444,45 +584,12 @@ func (p *PublicPages) handleTrack(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
-type sitemapURL struct {
-	Loc     string `xml:"loc"`
-	LastMod string `xml:"lastmod,omitempty"`
-}
-
-type sitemap struct {
-	XMLName xml.Name     `xml:"urlset"`
-	XMLNS   string       `xml:"xmlns,attr"`
-	URLs    []sitemapURL `xml:"url"`
-}
-
-func (p *PublicPages) handleSitemap(w http.ResponseWriter, r *http.Request) {
-	listed, err := p.playlists.Popular(r.Context(), "", sitemapSize)
-	if err != nil {
-		internalError(w, "list sitemap playlists", err)
-		return
+// lastMod is a sitemap date, or empty for an unknown time.
+func lastMod(t time.Time) string {
+	if t.IsZero() {
+		return ""
 	}
-	site := p.origin(r)
-	urls := []sitemapURL{{Loc: site + "/"}, {Loc: site + "/privacy"}, {Loc: site + "/delete-account"}}
-	for _, pl := range listed {
-		urls = append(urls, sitemapURL{
-			Loc: site + "/p/" + pl.ShareToken, LastMod: pl.UpdatedAt.UTC().Format(time.DateOnly),
-		})
-	}
-	storeURLs, err := p.storeSitemapURLs(r, site)
-	if err != nil {
-		internalError(w, "list sitemap store pages", err)
-		return
-	}
-	urls = append(urls, storeURLs...)
-	body, err := xml.MarshalIndent(sitemap{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9", URLs: urls}, "", "  ")
-	if err != nil {
-		internalError(w, "encode sitemap", err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_, _ = w.Write([]byte(xml.Header))
-	_, _ = w.Write(body)
+	return t.UTC().Format(time.DateOnly)
 }
 
 func (p *PublicPages) handleRobots(w http.ResponseWriter, r *http.Request) {
@@ -505,7 +612,7 @@ const privacyUpdated = "۲۳ مهر ۱۴۰۵"
 func (p *PublicPages) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 	site := p.origin(r)
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	p.render(w, http.StatusOK, "privacy", struct {
+	p.render(w, r, http.StatusOK, "privacy", struct {
 		pageMeta
 		Updated string
 		Contact string
@@ -528,7 +635,7 @@ const deleteAccountUpdated = "۱۰ مهر ۱۴۰۵"
 func (p *PublicPages) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	site := p.origin(r)
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	p.render(w, http.StatusOK, "delete", struct {
+	p.render(w, r, http.StatusOK, "delete", struct {
 		pageMeta
 		Updated string
 		Contact string
@@ -547,6 +654,21 @@ func (p *PublicPages) handleDeleteAccount(w http.ResponseWriter, r *http.Request
 func (p *PublicPages) handleSocialImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=604800")
 	http.ServeFileFS(w, r, publicFiles, "public/social.png")
+}
+
+// publicFonts are the Vazirmatn faces the public pages use, cut down to
+// the Persian, Arabic and Latin letters they need.
+var publicFonts = map[string]bool{"vazirmatn-regular.woff2": true, "vazirmatn-bold.woff2": true}
+
+func (p *PublicPages) handleFont(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !publicFonts[name] {
+		p.handleNotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "public, max-age=2592000")
+	w.Header().Set("Content-Type", "font/woff2")
+	http.ServeFileFS(w, r, publicFiles, "public/fonts/"+name)
 }
 
 func (p *PublicPages) handleIcon(w http.ResponseWriter, r *http.Request) {
