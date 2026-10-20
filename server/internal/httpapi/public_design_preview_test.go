@@ -23,9 +23,14 @@ func TestPublicDesignPreview(t *testing.T) {
 		"home": "/", "playlist": "/p/" + strings.Repeat("A", 22),
 		"store": "/store", "artists": "/store/artists",
 		"song":    "/store/t/" + storeEntryID,
+		"artist":  "/store/artists/AC%2FDC",
 		"privacy": "/privacy", "delete": "/delete-account",
 	} {
 		response := get(site, path)
+		if response.Code == 301 {
+			// Song pages move to their slugged URL.
+			response = get(site, response.Header().Get("Location"))
+		}
 		if response.Code != 200 {
 			t.Fatalf("%s returned %d", path, response.Code)
 		}
