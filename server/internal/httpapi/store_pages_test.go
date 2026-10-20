@@ -422,3 +422,43 @@ func TestStoreRowsShowArtistWithoutFileSize(t *testing.T) {
 		t.Fatal("song details must retain file size")
 	}
 }
+
+func TestArtistPagesSayWhatTheStoreHas(t *testing.T) {
+	site, catalog := storeSite(t, AnonymousLimits{})
+	page := get(site, "/store/artists/kayhan").Body.String()
+	if catalog.albumArtist != "kayhan" {
+		t.Errorf("albums were asked for %q", catalog.albumArtist)
+	}
+	for _, want := range []string{
+		"<p>۲ آهنگ و ۱ آلبوم از kayhan در استور ریتمو؛ آنلاین، با کیفیت اصلی و بدون ثبت‌نام بشنو.</p>",
+		`<a class="button" href="/store/albums/Seasons?artist=kayhan"><bdi>آلبوم Seasons</bdi></a>`,
+		`<meta name="description" content="۲ آهنگ و ۱ آلبوم از kayhan`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("artist page lacks %q", want)
+		}
+	}
+	group := graphNode(t, jsonLD(t, page), "MusicGroup")
+	albums, _ := group["album"].([]any)
+	if group["url"] != "https://rhythmo.example.com/store/artists/kayhan" || len(albums) != 1 {
+		t.Errorf("artist structured data = %v", group)
+	}
+	graphNode(t, jsonLD(t, page), "ItemList")
+
+	// An artist without albums, or unknown to the artist list, still gets
+	// a plain page.
+	catalog.noAlbums = true
+	page = get(site, "/store/artists/Someone%20Else").Body.String()
+	if !strings.Contains(page, "<p>آهنگ‌های Someone Else در استور ریتمو؛ آنلاین") || strings.Contains(page, "آلبوم‌های Someone Else") {
+		t.Error("an artist without counts or albums is not a plain page")
+	}
+	if group := graphNode(t, jsonLD(t, page), "MusicGroup"); group["album"] != nil {
+		t.Errorf("albums listed for an artist without any: %v", group)
+	}
+}
+
+func TestSameNameFoldsCaseAndArabicLetters(t *testing.T) {
+	if !sameName("علي", "علی") || !sameName(" Kayhan ", "kayhan") || sameName("Kayhan", "Kayhan Kalhor") {
+		t.Error("sameName does not match the store's grouping")
+	}
+}

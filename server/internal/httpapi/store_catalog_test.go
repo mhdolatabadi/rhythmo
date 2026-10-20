@@ -26,6 +26,9 @@ type fakeCatalog struct {
 	ranked   store.StoreRanking
 	// inStore are other track IDs grouped into the entry.
 	inStore map[string]bool
+	// noAlbums empties the album lists; albumArtist is the last one asked for.
+	noAlbums    bool
+	albumArtist string
 }
 
 func (c *fakeCatalog) RecordStorePlay(_ context.Context, entryID, listener string) error {
@@ -74,6 +77,10 @@ func (c *fakeCatalog) StoreArtists(_ context.Context, search string, limit, offs
 }
 
 func (c *fakeCatalog) StoreAlbums(_ context.Context, search, artist string, limit, offset int) ([]store.StoreAlbum, bool, error) {
+	c.albumArtist = artist
+	if c.noAlbums {
+		return nil, false, nil
+	}
 	return []store.StoreAlbum{{Name: "Seasons", Artist: c.entry.Track.Artist, TrackCount: 1}}, false, nil
 }
 

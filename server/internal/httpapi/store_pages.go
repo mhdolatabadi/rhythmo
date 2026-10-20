@@ -242,13 +242,18 @@ func storeQueryText(raw string) string {
 type storeListData struct {
 	pageMeta
 	// Trail is the breadcrumb trail below the store.
-	Trail      []crumb
-	Heading    string
-	Intro      string
-	Query      string
-	Empty      string
-	Tracks     []storePageTrack
+	Trail   []crumb
+	Heading string
+	Intro   string
+	Query   string
+	Empty   string
+	Tracks  []storePageTrack
+	// Albums are an artist's albums, linked above the songs.
+	Albums     []storeIndexItem
 	Prev, Next string
+	// about is structured data for what the list is of, such as an
+	// artist, given to search engines with the list.
+	about map[string]any
 }
 
 // renderStoreList lists one page of songs matching query under heading.
@@ -279,7 +284,13 @@ func (p *PublicPages) renderStoreList(w http.ResponseWriter, r *http.Request, qu
 		canonical += map[bool]string{true: "&", false: "?"}[strings.Contains(canonicalPath, "?")] + "page=" + strconv.Itoa(page)
 	}
 	data.Canonical, data.Image, data.OGType = canonical, site+"/social.png", "website"
-	data.JSONLD = map[string]any{"@context": "https://schema.org", "@type": "ItemList", "name": data.Heading, "itemListElement": recordings}
+	list := map[string]any{"@type": "ItemList", "name": data.Heading, "itemListElement": recordings}
+	if data.about != nil {
+		data.JSONLD = map[string]any{"@context": "https://schema.org", "@graph": []map[string]any{data.about, list}}
+	} else {
+		list["@context"] = "https://schema.org"
+		data.JSONLD = list
+	}
 	if len(data.Trail) == 0 {
 		data.setCrumbs(site, crumb{Name: "استور"})
 	} else {
@@ -327,14 +338,64 @@ func (p *PublicPages) handleStoreArtist(w http.ResponseWriter, r *http.Request) 
 		p.renderStoreMissing(w, r)
 		return
 	}
-	data := storeListData{
-		Heading: name, Intro: "آهنگ‌های " + name + " در استور ریتمو.",
-		Empty: "آهنگی از این خواننده در استور نیست.",
+	songs, err := p.artistSongCount(r, name)
+	if err != nil {
+		internalError(w, "count store artist songs", err)
+		return
 	}
+	albums, _, err := p.catalog.StoreAlbums(r.Context(), "", name, storePageSize, 0)
+	if err != nil {
+		internalError(w, "list store artist albums", err)
+		return
+	}
+	data := storeListData{Heading: name, Empty: "آهنگی از این خواننده در استور نیست."}
+	site := p.origin(r)
+	group := map[string]any{"@type": "MusicGroup", "name": name, "url": site + artistLink(name)}
+	var albumLD []map[string]any
+	for _, a := range albums {
+		item := storeIndexItem{Name: a.Name, Link: albumLink(a.Name, name), TrackCount: a.TrackCount}
+		data.Albums = append(data.Albums, item)
+		albumLD = append(albumLD, map[string]any{"@type": "MusicAlbum", "name": a.Name, "url": site + item.Link})
+	}
+	if len(albumLD) > 0 {
+		group["album"] = albumLD
+	}
+	data.about = group
+	data.Intro = "آهنگ‌های " + name + " در استور ریتمو"
+	if songs > 0 {
+		data.Intro = display.PersianDigits(songs) + " آهنگ"
+		if len(albums) > 0 {
+			data.Intro += " و " + display.PersianDigits(len(albums)) + " آلبوم"
+		}
+		data.Intro += " از " + name + " در استور ریتمو"
+	}
+	data.Intro += "؛ آنلاین، با کیفیت اصلی و بدون ثبت‌نام بشنو."
 	data.Trail = []crumb{{Name: "خواننده‌ها", Link: "/store/artists"}, {Name: name}}
 	data.Title = "آهنگ‌های " + name + " | پخش آنلاین در ریتمو"
-	data.Description = "آهنگ‌های " + name + " را آنلاین، با کیفیت اصلی و بدون ثبت‌نام در ریتمو بشنو."
+	data.Description = data.Intro
 	p.renderStoreList(w, r, store.StoreQuery{Artist: name}, data, artistLink(name), url.Values{})
+}
+
+// artistSongCount is how many store songs name has, or 0 when the store
+// lists no artist by that name.
+func (p *PublicPages) artistSongCount(r *http.Request, name string) (int, error) {
+	artists, _, err := p.catalog.StoreArtists(r.Context(), name, 20, 0)
+	if err != nil {
+		return 0, err
+	}
+	for _, a := range artists {
+		if sameName(a.Name, name) {
+			return a.TrackCount, nil
+		}
+	}
+	return 0, nil
+}
+
+// sameName compares names as the store groups them: ignoring case and
+// Arabic letter variants.
+func sameName(a, b string) bool {
+	fold := strings.NewReplacer("ي", "ی", "ى", "ی", "ك", "ک")
+	return strings.EqualFold(fold.Replace(strings.TrimSpace(a)), fold.Replace(strings.TrimSpace(b)))
 }
 
 func (p *PublicPages) handleStoreAlbum(w http.ResponseWriter, r *http.Request) {
