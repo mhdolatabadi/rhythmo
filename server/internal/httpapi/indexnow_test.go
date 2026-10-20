@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-const testIndexNowKey = "0123456789abcdef"
+const testIndexNowKey = "rhythmo-indexnow-test"
 
 func TestIndexNowKeyIsServedOnlyWhenValid(t *testing.T) {
 	pages := NewPublicPages(&sharingStore{}, fixedPresigner{}, AnonymousLimits{}).WithIndexNow(testIndexNowKey)

@@ -3,3 +3,5 @@
 53ecf527351531004bc5e6a7a73dd6f6112710d0:deploy/.env.example:generic-api-key:5
 # auth_test.go: a deliberately unsigned alg=none JWT the verifier must reject.
 38803e9e3cef176f90c42315a6f718d576a2c042:server/internal/auth/auth_test.go:jwt:70
+# indexnow_test.go: a sample IndexNow key in a test, since renamed to a plain word.
+e5751272358008e3af1755353403f01d5fe68d92:server/internal/httpapi/indexnow_test.go:generic-api-key:13
