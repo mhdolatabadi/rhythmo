@@ -553,7 +553,7 @@ func (h *CatalogHandlers) handleHide(hidden bool) http.HandlerFunc {
 }
 
 func (h *CatalogHandlers) handleStreamArtwork(w http.ResponseWriter, r *http.Request) {
-	_, ok := h.viewer(w, r, h.anonymous.Stream)
+	_, ok := h.viewer(w, r, h.anonymous.View)
 	if !ok {
 		return
 	}

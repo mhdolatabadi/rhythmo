@@ -39,8 +39,7 @@ void main() {
     final first = Completer<Uri?>();
     final second = Uri.parse('https://example.com/second.jpg');
     handler.attach(player,
-        artworkFor: (track) async =>
-            track.id == 'a' ? first.future : second);
+        artworkFor: (track) async => track.id == 'a' ? first.future : second);
     await player.playFrom(_tracks, 0);
     await player.playFrom(_tracks, 1);
     await pumpEventQueue();

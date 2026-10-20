@@ -154,6 +154,7 @@ func artworkThumbnail(data []byte) []byte {
 // Authorization is checked by every caller before cache access.
 func serveTrackArtwork(w http.ResponseWriter, r *http.Request, objects any, track store.Track) {
 	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Add("Vary", "Authorization")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	source, ok := objects.(artworkObjects)
 	if !ok {

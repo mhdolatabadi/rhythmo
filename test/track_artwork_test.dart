@@ -54,11 +54,23 @@ void main() {
     );
     for (final track in [
       song,
-      const Track(id: 'two', title: '', contentType: '', sizeBytes: 1,
+      const Track(
+          id: 'two',
+          title: '',
+          contentType: '',
+          sizeBytes: 1,
           sharedVia: 'shared'),
-      const Track(id: 'three', title: '', contentType: '', sizeBytes: 1,
+      const Track(
+          id: 'three',
+          title: '',
+          contentType: '',
+          sizeBytes: 1,
           viaPlaylist: 'collab'),
-      const Track(id: 'four', title: '', contentType: '', sizeBytes: 1,
+      const Track(
+          id: 'four',
+          title: '',
+          contentType: '',
+          sizeBytes: 1,
           fromStore: true),
     ]) {
       await api.trackArtwork('token', track);

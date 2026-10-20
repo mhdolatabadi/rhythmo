@@ -385,7 +385,7 @@ func validShareToken(token string) bool {
 }
 
 func (h *PlaylistHandlers) handleSharedStreamArtwork(w http.ResponseWriter, r *http.Request) {
-	userID, ok := h.viewer(w, r, func(l AnonymousLimits) *RateLimiter { return l.Stream })
+	userID, ok := h.viewer(w, r, func(l AnonymousLimits) *RateLimiter { return l.View })
 	if !ok {
 		return
 	}
