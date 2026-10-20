@@ -431,3 +431,59 @@ func TestSocialImageIsALargeCachedPNG(t *testing.T) {
 		t.Fatalf("social.png is %dx%d (%v), want 1200x630", config.Width, config.Height, err)
 	}
 }
+
+func TestPublicPagesLoadTheirOwnFont(t *testing.T) {
+	site := publicSite(&sharingStore{}, AnonymousLimits{})
+	page := get(site, "/")
+	body := page.Body.String()
+	for _, want := range []string{`<link rel="preload" href="/fonts/vazirmatn-regular.woff2" as="font" type="font/woff2" crossorigin>`,
+		`src:url(/fonts/vazirmatn-bold.woff2) format("woff2")`, "font-display:swap"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("front page lacks %q", want)
+		}
+	}
+	if !strings.Contains(page.Header().Get("Content-Security-Policy"), "font-src 'self'") {
+		t.Error("the page's policy blocks its own font")
+	}
+	for _, name := range []string{"vazirmatn-regular.woff2", "vazirmatn-bold.woff2"} {
+		font := get(site, "/fonts/"+name)
+		if font.Code != http.StatusOK || font.Header().Get("Content-Type") != "font/woff2" ||
+			!strings.HasPrefix(font.Body.String(), "wOF2") {
+			t.Errorf("%s = %d %s", name, font.Code, font.Header().Get("Content-Type"))
+		}
+	}
+	if get(site, "/fonts/other.woff2").Code != http.StatusNotFound {
+		t.Error("an unknown font was served")
+	}
+}
+
+func TestUnchangedPublicPagesRevalidateCheaply(t *testing.T) {
+	token := strings.Repeat("A", 22)
+	data := &sharingStore{token: &token, public: true, name: "Road trip"}
+	site := publicSite(data, AnonymousLimits{})
+	first := get(site, "/p/"+token)
+	etag := first.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("no ETag on a public page")
+	}
+	revalidate := func(header string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "/p/"+token, nil)
+		request.Host = "rhythmo.example.com"
+		request.Header.Set("X-Forwarded-Proto", "https")
+		request.Header.Set("If-None-Match", header)
+		response := httptest.NewRecorder()
+		site.ServeHTTP(response, request)
+		return response
+	}
+	if response := revalidate(`"other", W/` + etag); response.Code != http.StatusNotModified || response.Body.Len() != 0 {
+		t.Fatalf("unchanged page = %d with %d bytes", response.Code, response.Body.Len())
+	}
+	data.name = "Renamed"
+	if response := revalidate(etag); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Renamed") {
+		t.Fatalf("changed page = %d", response.Code)
+	}
+	// Not-found pages are never revalidated into a 304.
+	if missing := get(site, "/nowhere"); missing.Header().Get("ETag") != "" {
+		t.Error("a 404 page has an ETag")
+	}
+}

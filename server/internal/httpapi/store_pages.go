@@ -53,6 +53,7 @@ func (p *PublicPages) registerStore(mux *http.ServeMux) {
 	mux.HandleFunc("GET /store/t/{id}", p.handleStoreTrack)
 	mux.HandleFunc("GET /store/t/{id}/{slug}", p.handleStoreTrack)
 	mux.HandleFunc("GET /store/t/{id}/stream", p.handleStoreStream)
+	mux.HandleFunc("GET /store/t/{id}/og.jpg", p.handleStoreImage)
 	mux.HandleFunc("GET /store/artists", p.handleStoreArtists)
 	mux.HandleFunc("GET /store/artists/{name}", p.handleStoreArtist)
 	mux.HandleFunc("GET /store/albums", p.handleStoreAlbums)
@@ -293,7 +294,7 @@ func (p *PublicPages) renderStoreList(w http.ResponseWriter, r *http.Request, qu
 		data.NoIndex = true
 	}
 	w.Header().Set("Cache-Control", publicPageMaxAge)
-	p.render(w, http.StatusOK, "store", data)
+	p.render(w, r, http.StatusOK, "store", data)
 }
 
 // handleStore lists every store song by title, or searches them with ?q=.
@@ -387,7 +388,7 @@ func (p *PublicPages) renderStoreIndex(w http.ResponseWriter, r *http.Request, d
 	data.Image, data.OGType = site+"/social.png", "website"
 	data.setCrumbs(site, crumb{Name: "استور", Link: "/store"}, crumb{Name: data.Heading})
 	w.Header().Set("Cache-Control", publicPageMaxAge)
-	p.render(w, http.StatusOK, "storeIndex", data)
+	p.render(w, r, http.StatusOK, "storeIndex", data)
 }
 
 func (p *PublicPages) handleStoreArtists(w http.ResponseWriter, r *http.Request) {
@@ -501,8 +502,10 @@ func (p *PublicPages) handleStoreTrack(w http.ResponseWriter, r *http.Request) {
 	}
 	meta := pageMeta{
 		Title:       title + " | پخش آنلاین در ریتمو",
-		Description: description, Canonical: canonical, Image: site + "/social.png",
-		OGType: "music.song", JSONLD: recording,
+		Description: description, Canonical: canonical,
+		Image:    shareImageURL(site, "/store/t/"+entry.ID+"/og.jpg", songCard(site, t.Title, track.Artist, track.Album)),
+		ImageAlt: title + " در ریتمو",
+		OGType:   "music.song", JSONLD: recording,
 	}
 	trail := []crumb{{Name: "استور", Link: "/store"}}
 	if track.Artist != "" {
@@ -510,10 +513,23 @@ func (p *PublicPages) handleStoreTrack(w http.ResponseWriter, r *http.Request) {
 	}
 	meta.setCrumbs(site, append(trail, crumb{Name: t.Title})...)
 	w.Header().Set("Cache-Control", publicPageMaxAge)
-	p.render(w, http.StatusOK, "storeTrack", struct {
+	p.render(w, r, http.StatusOK, "storeTrack", struct {
 		pageMeta
 		Track storeTrackPage
 	}{pageMeta: meta, Track: track})
+}
+
+// handleStoreImage draws a store song's link preview.
+func (p *PublicPages) handleStoreImage(w http.ResponseWriter, r *http.Request) {
+	if !enforceRateLimit(w, p.limits.View, clientIP(r)) {
+		return
+	}
+	entry, ok := p.storeEntry(w, r)
+	if !ok {
+		return
+	}
+	t := entry.Track
+	p.serveShareImage(w, songCard(p.origin(r), t.Title, optional(t.Artist), optional(t.Album)))
 }
 
 // handleStoreStream sends a player to a short-lived URL for a store song's

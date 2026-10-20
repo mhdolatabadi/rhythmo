@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"image/jpeg"
 	"net/http"
 	"regexp"
 	"strings"
@@ -339,5 +340,70 @@ func TestStorePageTitlesFollowPersianSearches(t *testing.T) {
 	song := get(site, storeSongPath).Body.String()
 	if !strings.Contains(song, `content="آهنگ «باران» از AC/DC، آلبوم Seasons را آنلاین، با کیفیت اصلی (FLAC) و بدون ثبت‌نام در ریتمو بشنو`) {
 		t.Error("the song description does not name its album and format")
+	}
+}
+
+// ogImage returns the page's og:image URL, failing if it has none.
+func ogImage(t *testing.T, page string) string {
+	t.Helper()
+	match := regexp.MustCompile(`<meta property="og:image" content="([^"]+)">`).FindStringSubmatch(page)
+	if match == nil {
+		t.Fatal("no og:image")
+	}
+	return strings.ReplaceAll(match[1], "&amp;", "&")
+}
+
+func TestPublicPagesHaveTheirOwnShareImages(t *testing.T) {
+	site, catalog := storeSite(t, AnonymousLimits{})
+	token := strings.Repeat("A", 22)
+	artist := "AC/DC"
+	data := &sharingStore{token: &token, public: true, name: "Road trip", tracks: []store.Track{
+		{ID: "t1", Title: "باران", Artist: &artist, StorageKey: "k1"},
+	}}
+	playlistSite := NewHandler(Config{Public: NewPublicPages(data, fixedPresigner{}, AnonymousLimits{}).WithStore(catalog)})
+
+	for _, c := range []struct {
+		handler http.Handler
+		path    string
+		prefix  string
+		alt     string
+	}{
+		{playlistSite, "/p/" + token, "https://rhythmo.example.com/p/" + token + "/og.jpg?v=", "فهرست پخش «Road trip» در ریتمو"},
+		{site, storeSongPath, "https://rhythmo.example.com/store/t/" + storeEntryID + "/og.jpg?v=", "آهنگ باران از AC/DC در ریتمو"},
+	} {
+		page := get(c.handler, c.path).Body.String()
+		image := ogImage(t, page)
+		if !strings.HasPrefix(image, c.prefix) || !strings.Contains(page, `<meta name="twitter:image" content="`+image+`">`) ||
+			!strings.Contains(page, `<meta property="og:image:alt" content="`+c.alt+`">`) {
+			t.Errorf("%s share image = %s", c.path, image)
+		}
+		response := get(c.handler, strings.TrimPrefix(image, "https://rhythmo.example.com"))
+		if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "image/jpeg" ||
+			!strings.Contains(response.Header().Get("Cache-Control"), "max-age=604800") {
+			t.Fatalf("%s = %d %v", image, response.Code, response.Header())
+		}
+		if _, err := jpeg.Decode(response.Body); err != nil {
+			t.Fatalf("%s is not a JPEG: %v", image, err)
+		}
+	}
+
+	// What the card says versions its URL.
+	before := ogImage(t, get(playlistSite, "/p/"+token).Body.String())
+	data.name = "Road trip 2"
+	if after := ogImage(t, get(playlistSite, "/p/"+token).Body.String()); after == before {
+		t.Error("renaming the playlist kept its share image URL")
+	}
+
+	// Link-only playlists and hidden songs have no card.
+	data.public = false
+	catalog.hidden = true
+	for _, path := range []string{"/p/" + token + "/og.jpg", "/store/t/" + storeEntryID + "/og.jpg"} {
+		if response := get(playlistSite, path); response.Code != http.StatusNotFound {
+			t.Errorf("%s = %d", path, response.Code)
+		}
+	}
+	// Other pages keep the site's own card.
+	if image := ogImage(t, get(site, "/store").Body.String()); image != "https://rhythmo.example.com/social.png" {
+		t.Errorf("store listing image = %s", image)
 	}
 }

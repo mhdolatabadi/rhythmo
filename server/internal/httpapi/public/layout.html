@@ -8,6 +8,7 @@
 {{if .NoIndex}}<meta name="robots" content="noindex">{{else}}<link rel="canonical" href="{{.Canonical}}">{{end}}
 <meta name="theme-color" content="#070810">
 <link rel="icon" type="image/png" href="/rhythmo.png">
+<link rel="preload" href="/fonts/vazirmatn-regular.woff2" as="font" type="font/woff2" crossorigin>
 <meta property="og:site_name" content="ریتمو">
 <meta property="og:locale" content="fa_IR">
 <meta property="og:type" content="{{.OGType}}">
@@ -17,7 +18,7 @@
 <meta property="og:image" content="{{.Image}}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="ریتمو — کتابخانه‌ی موسیقی ابری">
+<meta property="og:image:alt" content="{{if .ImageAlt}}{{.ImageAlt}}{{else}}ریتمو — کتابخانه‌ی موسیقی ابری{{end}}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{.Title}}">
 <meta name="twitter:description" content="{{.Description}}">
@@ -26,6 +27,8 @@
 {{if .JSONLD}}<script type="application/ld+json">{{.JSONLD}}</script>{{end}}
 {{if .CrumbsLD}}<script type="application/ld+json">{{.CrumbsLD}}</script>{{end}}
 <style>
+@font-face{font-family:Vazirmatn;font-weight:400;font-display:swap;src:url(/fonts/vazirmatn-regular.woff2) format("woff2")}
+@font-face{font-family:Vazirmatn;font-weight:700 900;font-display:swap;src:url(/fonts/vazirmatn-bold.woff2) format("woff2")}
 :root{--bg:#070810;--surface:#121522;--strong:#191d2d;--text:#f3f4f8;--muted:#b4b8c7;--primary:#ff626a;--border:#ffffff26}
 *{box-sizing:border-box}
 html{color-scheme:dark}
