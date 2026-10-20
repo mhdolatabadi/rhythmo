@@ -240,6 +240,8 @@ func storeQueryText(raw string) string {
 }
 
 type storeListData struct {
+	ArtistName           string
+	AlbumPrev, AlbumNext string
 	pageMeta
 	// Trail is the breadcrumb trail below the store.
 	Trail   []crumb
@@ -278,7 +280,7 @@ func (p *PublicPages) renderStoreList(w http.ResponseWriter, r *http.Request, qu
 		}
 		recordings = append(recordings, map[string]any{"@type": "ListItem", "position": query.Offset + i + 1, "item": recording})
 	}
-	data.Prev, data.Next = pageLinks(r.URL.Path, keep, page, more)
+	data.Prev, data.Next = pageLinks(r.URL.EscapedPath(), keep, page, more)
 	canonical := site + canonicalPath
 	if page > 1 {
 		canonical += map[bool]string{true: "&", false: "?"}[strings.Contains(canonicalPath, "?")] + "page=" + strconv.Itoa(page)
@@ -338,42 +340,71 @@ func (p *PublicPages) handleStoreArtist(w http.ResponseWriter, r *http.Request) 
 		p.renderStoreMissing(w, r)
 		return
 	}
-	songs, err := p.artistSongCount(r, name)
+	data := storeListData{
+		Heading: name, Intro: "آهنگ‌های " + name + " در استور ریتمو.",
+		Empty: "آهنگی از این خواننده در استور نیست.",
+	}
+	data.Title = "آهنگ‌های " + name + " | پخش آنلاین در ریتمو"
+	data.Description = "آهنگ‌های " + name + " را در ریتمو بدون ثبت‌نام بشنو."
+	tracks, albumCount, err := p.catalog.StoreArtistCounts(r.Context(), name)
 	if err != nil {
-		internalError(w, "count store artist songs", err)
+		internalError(w, "count artist catalog", err)
 		return
 	}
-	albums, _, err := p.catalog.StoreAlbums(r.Context(), "", name, storePageSize, 0)
+	albumPage := 1
+	if n, err := strconv.Atoi(r.URL.Query().Get("albumPage")); err == nil && n > 0 && n <= storeMaxPage {
+		albumPage = n
+	}
+	albums, more, err := p.catalog.StoreAlbums(r.Context(), "", name, storePageSize, (albumPage-1)*storePageSize)
 	if err != nil {
-		internalError(w, "list store artist albums", err)
+		internalError(w, "list artist albums", err)
 		return
 	}
-	data := storeListData{Heading: name, Empty: "آهنگی از این خواننده در استور نیست."}
-	site := p.origin(r)
-	group := map[string]any{"@type": "MusicGroup", "name": name, "url": site + artistLink(name)}
+	data.ArtistName = name
+	data.Intro = fmt.Sprintf("%s آهنگ و %s آلبوم از %s در استور ریتمو؛ آنلاین، با کیفیت اصلی و بدون ثبت‌نام بشنو.", display.PersianDigits(tracks), display.PersianDigits(albumCount), name)
+	if tracks == 0 {
+		data.Intro = "آهنگ‌های " + name + " در استور ریتمو؛ آنلاین، با کیفیت اصلی و بدون ثبت‌نام بشنو."
+	}
+	data.Description = data.Intro
+	data.Trail = []crumb{{Name: "خواننده‌ها", Link: "/store/artists"}, {Name: name}}
+	for _, album := range albums {
+		data.Albums = append(data.Albums, storeIndexItem{Name: album.Name, Link: albumLink(album.Name, name), TrackCount: album.TrackCount})
+	}
+	group := map[string]any{"@type": "MusicGroup", "name": name, "url": p.origin(r) + artistLink(name)}
 	var albumLD []map[string]any
-	for _, a := range albums {
-		item := storeIndexItem{Name: a.Name, Link: albumLink(a.Name, name), TrackCount: a.TrackCount}
-		data.Albums = append(data.Albums, item)
-		albumLD = append(albumLD, map[string]any{"@type": "MusicAlbum", "name": a.Name, "url": site + item.Link})
+	for _, album := range data.Albums {
+		albumLD = append(albumLD, map[string]any{"@type": "MusicAlbum", "name": album.Name, "url": p.origin(r) + album.Link, "numTracks": album.TrackCount})
 	}
 	if len(albumLD) > 0 {
 		group["album"] = albumLD
 	}
 	data.about = group
-	data.Intro = "آهنگ‌های " + name + " در استور ریتمو"
-	if songs > 0 {
-		data.Intro = display.PersianDigits(songs) + " آهنگ"
-		if len(albums) > 0 {
-			data.Intro += " و " + display.PersianDigits(len(albums)) + " آلبوم"
+	albumURL := func(n int) string {
+		q := url.Values{}
+		if n > 1 {
+			q.Set("albumPage", strconv.Itoa(n))
 		}
-		data.Intro += " از " + name + " در استور ریتمو"
+		if page := storePage(r); page > 1 {
+			q.Set("page", strconv.Itoa(page))
+		}
+		if len(q) > 0 {
+			return artistLink(name) + "?" + q.Encode()
+		}
+		return artistLink(name)
 	}
-	data.Intro += "؛ آنلاین، با کیفیت اصلی و بدون ثبت‌نام بشنو."
-	data.Trail = []crumb{{Name: "خواننده‌ها", Link: "/store/artists"}, {Name: name}}
-	data.Title = "آهنگ‌های " + name + " | پخش آنلاین در ریتمو"
-	data.Description = data.Intro
-	p.renderStoreList(w, r, store.StoreQuery{Artist: name}, data, artistLink(name), url.Values{})
+	if albumPage > 1 {
+		data.AlbumPrev = albumURL(albumPage - 1)
+	}
+	if more && albumPage < storeMaxPage {
+		data.AlbumNext = albumURL(albumPage + 1)
+	}
+	keep := url.Values{}
+	canonicalPath := artistLink(name)
+	if albumPage > 1 {
+		keep.Set("albumPage", strconv.Itoa(albumPage))
+		canonicalPath += "?" + keep.Encode()
+	}
+	p.renderStoreList(w, r, store.StoreQuery{Artist: name}, data, canonicalPath, keep)
 }
 
 // artistSongCount is how many store songs name has, or 0 when the store

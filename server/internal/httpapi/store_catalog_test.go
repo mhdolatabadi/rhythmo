@@ -16,14 +16,17 @@ import (
 const storeEntryID = "11111111-1111-1111-1111-111111111111"
 
 type fakeCatalog struct {
-	entry    store.StoreEntry
-	hidden   bool
-	owners   map[string]bool
-	query    store.StoreQuery
-	reports  []string
-	hiddenBy string
-	plays    []string
-	ranked   store.StoreRanking
+	artistAlbums    []store.StoreAlbum
+	artistCountsErr error
+	albumOffset     int
+	entry           store.StoreEntry
+	hidden          bool
+	owners          map[string]bool
+	query           store.StoreQuery
+	reports         []string
+	hiddenBy        string
+	plays           []string
+	ranked          store.StoreRanking
 	// inStore are other track IDs grouped into the entry.
 	inStore map[string]bool
 	// noAlbums empties the album lists; albumArtist is the last one asked for.
@@ -76,8 +79,31 @@ func (c *fakeCatalog) StoreArtists(_ context.Context, search string, limit, offs
 	return []store.StoreArtist{{Name: "Kayhan", TrackCount: 2}}, false, nil
 }
 
+func (c *fakeCatalog) StoreArtistCounts(_ context.Context, artist string) (int, int, error) {
+	if c.artistAlbums != nil {
+		return 1, len(c.artistAlbums), c.artistCountsErr
+	}
+	if c.noAlbums {
+		return 0, 0, c.artistCountsErr
+	}
+	if sameName(artist, "Kayhan") {
+		return 2, 1, c.artistCountsErr
+	}
+	return 1, 1, c.artistCountsErr
+}
+
 func (c *fakeCatalog) StoreAlbums(_ context.Context, search, artist string, limit, offset int) ([]store.StoreAlbum, bool, error) {
-	c.albumArtist = artist
+	c.albumArtist, c.albumOffset = artist, offset
+	if c.artistAlbums != nil {
+		if offset >= len(c.artistAlbums) {
+			return nil, false, nil
+		}
+		end := offset + limit
+		if end > len(c.artistAlbums) {
+			end = len(c.artistAlbums)
+		}
+		return c.artistAlbums[offset:end], end < len(c.artistAlbums), nil
+	}
 	if c.noAlbums {
 		return nil, false, nil
 	}
