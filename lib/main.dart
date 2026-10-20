@@ -203,9 +203,15 @@ class _RhythmoAppState extends State<RhythmoApp> {
 
   final ListeningJourney _journey = ListeningJourney();
 
+  String? _artworkToken;
+
   void _selectJourneyAccount() {
     _journey.selectAccount(_auth?.user?.id);
-    _artwork.clear();
+    final token = _auth?.token;
+    if (_artworkToken != token) {
+      _artworkToken = token;
+      _artwork.clear();
+    }
   }
 
   // One cache shared by playback and the Settings screen.

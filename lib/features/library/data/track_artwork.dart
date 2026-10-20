@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 
@@ -14,6 +15,7 @@ class TrackArtworkController extends ChangeNotifier {
   final _pending = <String, Future<Uint8List?>>{};
   final _active = <Future<void>>[];
   int generation = 0;
+  bool _disposed = false;
 
   String keyFor(Track track) =>
       '${track.id}:${track.version}:${track.sourceUri}:${track.fromStore}:${track.sharedVia}:${track.viaPlaylist}';
@@ -50,7 +52,20 @@ class TrackArtworkController extends ChangeNotifier {
   void clear() {
     _pending.clear();
     generation++;
-    notifyListeners();
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed) notifyListeners();
+      });
+    } else {
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 
   static Future<Uint8List?> local(Track track) async {
