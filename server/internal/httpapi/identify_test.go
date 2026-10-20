@@ -84,7 +84,7 @@ func TestIdentifyAPI(t *testing.T) {
 	list, _ := playlists.Create(ctx, bob.ID, "public")
 	_ = playlists.ReplaceTracks(ctx, bob.ID, list.ID, []string{public.ID})
 	yes := true
-	_, _ = playlists.Share(ctx, bob.ID, list.ID, shareToken, &yes)
+	_, _ = playlists.Share(ctx, bob.ID, list.ID, shareToken, &yes, true)
 
 	identify := func(body, contentType string) (*httptest.ResponseRecorder, identifyResponse) {
 		t.Helper()
@@ -232,7 +232,7 @@ func TestIdentifyWithoutAnAccountMatchesOnlyTheStore(t *testing.T) {
 	_ = playlists.ReplaceTracks(ctx, bob.ID, list.ID, []string{listed.ID, hidden.ID})
 	shareToken, _ := newShareToken()
 	yes := true
-	_, _ = playlists.Share(ctx, bob.ID, list.ID, shareToken, &yes)
+	_, _ = playlists.Share(ctx, bob.ID, list.ID, shareToken, &yes, true)
 	entries, _, _ := catalog.StoreEntries(ctx, store.StoreQuery{Limit: 10})
 	for _, entry := range entries {
 		if entry.Track.ID == hidden.ID {
@@ -271,7 +271,7 @@ func TestIdentifyWithoutAnAccountMatchesOnlyTheStore(t *testing.T) {
 	}
 	// Unpublishing takes the song out of matching at once.
 	no := false
-	_, _ = playlists.Share(ctx, bob.ID, list.ID, shareToken, &no)
+	_, _ = playlists.Share(ctx, bob.ID, list.ID, shareToken, &no, true)
 	if _, result := identify("song-a", "203.0.113.1"); result.Status != "not_found" {
 		t.Fatalf("unpublished song = %+v", result)
 	}

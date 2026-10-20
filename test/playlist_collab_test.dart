@@ -212,10 +212,15 @@ void main() {
           ..tracks = [theirs, mine]);
 
     // The owner's controls are gone; leaving is offered instead.
-    expect(find.byTooltip('تغییر نام'), findsNothing);
-    expect(find.byTooltip('حذف'), findsNothing);
     expect(find.byTooltip('دعوت دوستان و مدیریت اعضا'), findsNothing);
-    expect(find.byTooltip('ترک فهرست پخش'), findsOneWidget);
+    expect(find.byTooltip('اشتراک‌گذاری'), findsNothing);
+    await tester.tap(find.byTooltip('گزینه‌های فهرست پخش'));
+    await tester.pumpAndSettle();
+    expect(find.text('تغییر نام'), findsNothing);
+    expect(find.text('حذف فهرست پخش'), findsNothing);
+    expect(find.text('ترک فهرست پخش'), findsOneWidget);
+    await tester.tapAt(const Offset(4, 300));
+    await tester.pumpAndSettle();
     expect(find.textContaining('از o***@example.com'), findsOneWidget);
     expect(find.text('خواننده نامشخص · افزوده‌ی f***@example.com'),
         findsOneWidget);
@@ -259,7 +264,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.replacedWith, ['theirs', 'extra']);
 
-    await tester.tap(find.byTooltip('ترک فهرست پخش'));
+    await tester.tap(find.byTooltip('گزینه‌های فهرست پخش'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ترک فهرست پخش'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'ترک'));
     await tester.pumpAndSettle();
@@ -332,17 +339,30 @@ void main() {
           ]);
     expect(tester.takeException(), isNull);
     for (final tooltip in [
+      'گزینه‌های فهرست پخش',
+      'پخش تصادفی',
       'دعوت دوستان و مدیریت اعضا',
       'اشتراک‌گذاری',
-      'تغییر نام',
-      'حذف'
+      'حذف از فهرست پخش',
+      'برای جابه‌جایی بکش',
     ]) {
-      final size = tester.getSize(find
-          .ancestor(
-              of: find.byTooltip(tooltip), matching: find.byType(IconButton))
-          .first);
-      expect(size.width, greaterThanOrEqualTo(48), reason: tooltip);
+      final button = find.ancestor(
+          of: find.byTooltip(tooltip), matching: find.byType(IconButton));
+      final rect = tester.getRect(button.evaluate().isEmpty
+          ? find.byTooltip(tooltip).first
+          : button.first);
+      expect(rect.width, greaterThanOrEqualTo(48), reason: tooltip);
+      expect(rect.height, greaterThanOrEqualTo(48), reason: tooltip);
+      expect(rect.left, greaterThanOrEqualTo(0), reason: tooltip);
+      expect(rect.right, lessThanOrEqualTo(360), reason: tooltip);
     }
+    // The add action sits in the list's heading, clear of the screen edge,
+    // and nothing floats over the tracks.
+    final add = tester.getRect(find.ancestor(
+        of: find.text('مدیریت آهنگ‌ها'), matching: find.byType(FilledButton)));
+    expect(add.left, greaterThanOrEqualTo(16));
+    expect(add.right, lessThanOrEqualTo(360 - 16));
+    expect(find.byType(FloatingActionButton), findsNothing);
 
     await tester.tap(find.text('مدیریت آهنگ‌ها'));
     await tester.pumpAndSettle();
@@ -363,5 +383,47 @@ void main() {
     expect(remove.width, greaterThanOrEqualTo(48));
     expect(remove.left, greaterThanOrEqualTo(0));
     expect(remove.right, lessThanOrEqualTo(360));
+  });
+
+  testWidgets('the owner\'s page is centred on desktop and reorders in place',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api =
+        await pumpDetail(tester, FakePlaylistsApi()..tracks = [mine, extra]);
+    expect(tester.takeException(), isNull);
+
+    // One centred column: equal room on both sides, never past 960 px.
+    final add = tester.getRect(find.ancestor(
+        of: find.text('مدیریت آهنگ‌ها'), matching: find.byType(FilledButton)));
+    final row = tester.getRect(find.ancestor(
+        of: find.text('My song'), matching: find.byType(InkWell)));
+    expect(row.width, lessThanOrEqualTo(960));
+    expect((row.left - (1600 - row.right)).abs(), lessThan(1));
+    expect(add.left, greaterThanOrEqualTo(row.left));
+
+    // Rename and delete live in the page's menu.
+    await tester.tap(find.byTooltip('گزینه‌های فهرست پخش'));
+    await tester.pumpAndSettle();
+    expect(find.text('تغییر نام'), findsOneWidget);
+    expect(find.text('حذف فهرست پخش'), findsOneWidget);
+    expect(find.text('ترک فهرست پخش'), findsNothing);
+    await tester.tapAt(const Offset(4, 500));
+    await tester.pumpAndSettle();
+
+    // Dragging the handle moves a track and keeps the page on screen.
+    final handle = find.byTooltip('برای جابه‌جایی بکش');
+    final gesture = await tester.startGesture(tester.getCenter(handle.first));
+    await tester.pump();
+    for (var i = 0; i < 10; i++) {
+      await gesture.moveBy(const Offset(0, 12));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(api.replacedWith, ['extra', 'mine']);
+    expect(find.text('My song'), findsOneWidget);
   });
 }

@@ -445,9 +445,44 @@ void main() {
       await pump(tester, size: const Size(1440, 900));
       final row = tester.getRect(find.ancestor(
           of: find.text('Song 0'), matching: find.byType(ListTile)));
-      expect(row.width, lessThanOrEqualTo(RhythmoSpace.pageWidth));
+      // A song's actions stay near its title: the list is a narrow column.
+      expect(row.width, lessThanOrEqualTo(storeContentWidth));
       expect((row.left - (1440 - row.right)).abs(), lessThan(2));
+      // The search lines up with the list.
+      final search = tester.getRect(find.byType(TextField));
+      expect(search.width, lessThanOrEqualTo(storeContentWidth));
+      expect((search.left - (1440 - search.right)).abs(), lessThan(2));
+      // The tabs sit together at the start (the right, in RTL), not spread
+      // across the column.
+      final songsTab = tester.getRect(find.text('آهنگ‌ها'));
+      final albumsTab = tester.getRect(find.text('آلبوم‌ها'));
+      expect(songsTab.right, greaterThan(albumsTab.right));
+      expect(
+          songsTab.right - albumsTab.left, lessThan(storeContentWidth * 0.75));
     });
+
+    for (final size in [const Size(360, 640), const Size(1440, 900)]) {
+      testWidgets('shows artists and albums as cards at ${size.width}',
+          (tester) async {
+        await pump(tester, size: size);
+        await tester.tap(find.text('خواننده‌ها'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final card = tester.getRect(find
+            .ancestor(of: find.text('Artist 0'), matching: find.byType(InkWell))
+            .first);
+        // At least two cards fit side by side, each a 48 px target or more.
+        expect(card.width, lessThanOrEqualTo(storeContentWidth / 2));
+        expect(card.width, greaterThanOrEqualTo(RhythmoSpace.target));
+        expect(card.height, greaterThan(card.width));
+        expect(find.bySemanticsLabel('Artist 0، ۲ آهنگ'), findsOneWidget);
+
+        await tester.tap(find.text('آلبوم‌ها'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('Seasons'), findsOneWidget);
+      });
+    }
 
     testWidgets('plays a song without an account and loads more on scroll',
         (tester) async {

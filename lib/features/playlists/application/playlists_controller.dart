@@ -96,6 +96,24 @@ class PlaylistsController extends ChangeNotifier {
     return true;
   }
 
+  /// An admin deletes [playlist], whoever owns it; it leaves the popular
+  /// list once the server confirms. Returns whether it was deleted.
+  Future<bool> deletePublic(PublicPlaylist playlist) async {
+    final token = _token();
+    if (token == null || !canModeratePopular) return false;
+    try {
+      await _api.deletePublicPlaylist(token, playlist.shareToken);
+    } catch (_) {
+      return false;
+    }
+    popular = [
+      for (final p in popular)
+        if (p.shareToken != playlist.shareToken) p,
+    ];
+    notifyListeners();
+    return true;
+  }
+
   /// Likes or unlikes a shared playlist. The popular list shows the change
   /// at once and goes back if the server refuses it; [onChange] lets a
   /// screen do the same with its own copy. A like already on its way is

@@ -19,6 +19,7 @@ type sharingStore struct {
 	name    string
 	token   *string
 	public  bool
+	review  *string
 	tracks  []store.Track
 	outside store.Track
 	likers  map[string]bool
@@ -54,17 +55,22 @@ func (s *sharingStore) ReplaceTracks(context.Context, string, string, []string) 
 }
 func (s *sharingStore) Delete(context.Context, string, string) error { return errors.New("unused") }
 
-func (s *sharingStore) Share(_ context.Context, ownerID, playlistID, token string, public *bool) (store.Playlist, error) {
+func (s *sharingStore) Share(_ context.Context, ownerID, playlistID, token string, public *bool, direct bool) (store.Playlist, error) {
 	if ownerID != "alice" || playlistID != "p1" {
 		return store.Playlist{}, store.ErrNotFound
 	}
 	if s.token == nil {
 		s.token = &token
 	}
-	if public != nil {
-		s.public = *public
+	switch {
+	case public == nil:
+	case *public && !direct && !s.public:
+		pending := store.ReviewPending
+		s.review = &pending
+	default:
+		s.public, s.review = *public, nil
 	}
-	return store.Playlist{ID: "p1", OwnerID: "alice", ShareToken: s.token, IsPublic: s.public}, nil
+	return store.Playlist{ID: "p1", OwnerID: "alice", ShareToken: s.token, IsPublic: s.public, PublicReview: s.review}, nil
 }
 
 func (s *sharingStore) Unshare(_ context.Context, ownerID, playlistID string) error {

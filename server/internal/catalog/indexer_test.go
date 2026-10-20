@@ -167,7 +167,7 @@ func TestIndexerGroupsCopiesIntoOneEntry(t *testing.T) {
 			t.Fatal(err)
 		}
 		public := true
-		if _, err := playlists.Share(ctx, user.ID, playlist.ID, "token-"+playlist.ID, &public); err != nil {
+		if _, err := playlists.Share(ctx, user.ID, playlist.ID, "token-"+playlist.ID, &public, true); err != nil {
 			t.Fatal(err)
 		}
 		return track

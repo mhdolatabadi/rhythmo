@@ -196,6 +196,10 @@ abstract interface class PlaylistsApi {
   Future<void> setPopularPlaylistHidden(
       String token, String shareToken, bool hidden);
 
+  /// An admin deletes a shared playlist, whoever owns it. Its tracks stay
+  /// in their owners' libraries.
+  Future<void> deletePublicPlaylist(String token, String shareToken);
+
   /// Makes a new collaboration link and returns its token; the old link
   /// stops working.
   Future<String> createCollabLink(String token, String playlistId);
@@ -214,8 +218,9 @@ abstract interface class PlaylistsApi {
   Future<void> leavePlaylist(String token, String playlistId);
 }
 
-/// A playlist's share link as its owner set it.
-typedef PlaylistShare = ({String shareToken, bool isPublic});
+/// A playlist's share link as its owner set it. [pending] is true while a
+/// request to list it publicly waits for an admin (#322).
+typedef PlaylistShare = ({String shareToken, bool isPublic, bool pending});
 
 abstract interface class BotsApi {
   Future<List<MessengerBot>> listBots(String token);
@@ -342,6 +347,25 @@ class ApiClient
 
   final Uri baseUri;
   final http.Client _httpClient;
+
+  @override
+  Future<List<PendingPublication>> listPendingPublications(String token) async {
+    final body = await _send('GET', '/api/v1/admin/publications', token: token);
+    return [
+      for (final json in body['publications'] as List<dynamic>)
+        PendingPublication.fromJson(json as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<void> reviewPublication(
+      String token, PendingPublication publication, bool approved) async {
+    final kind =
+        publication.kind == PublicationKind.playlist ? 'playlists' : 'tracks';
+    await _send('PATCH',
+        '/api/v1/admin/publications/$kind/${Uri.encodeComponent(publication.id)}',
+        token: token, body: {'approved': approved});
+  }
 
   @override
   Future<AdminAccountPage> listAccounts(String token,
@@ -544,6 +568,7 @@ class ApiClient
     return (
       shareToken: body['shareToken'] as String,
       isPublic: body['public'] == true,
+      pending: body['publicReview'] == 'pending',
     );
   }
 
@@ -571,6 +596,13 @@ class ApiClient
     await _send('PATCH',
         '/api/v1/admin/public-playlists/${Uri.encodeComponent(shareToken)}',
         token: token, body: {'hidden': hidden});
+  }
+
+  @override
+  Future<void> deletePublicPlaylist(String token, String shareToken) async {
+    await _send('DELETE',
+        '/api/v1/admin/public-playlists/${Uri.encodeComponent(shareToken)}',
+        token: token, expectBody: false);
   }
 
   @override
@@ -781,12 +813,17 @@ class ApiClient
   }
 
   @override
-  Future<bool> setPublished(
+  Future<PublishState> setPublished(
       String token, String trackId, bool published) async {
     final body = await _send(published ? 'PUT' : 'DELETE',
         '/api/v1/tracks/${Uri.encodeComponent(trackId)}/published',
         token: token);
-    return body['published'] == true;
+    if (body['published'] == true) return PublishState.published;
+    return switch (body['review']) {
+      'pending' => PublishState.pending,
+      'rejected' => PublishState.rejected,
+      _ => PublishState.private,
+    };
   }
 
   @override

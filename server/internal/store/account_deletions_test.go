@@ -35,7 +35,7 @@ func TestDeleteAccountCascadesAndQueuesObjects(t *testing.T) {
 	if err := playlists.ReplaceTracks(ctx, gone.ID, goneList.ID, []string{goneTrack.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := playlists.Share(ctx, gone.ID, goneList.ID, "gone-share", nil); err != nil {
+	if _, err := playlists.Share(ctx, gone.ID, goneList.ID, "gone-share", nil, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := playlists.SetLike(ctx, kept.ID, "gone-share", true); err != nil {
@@ -57,7 +57,7 @@ func TestDeleteAccountCascadesAndQueuesObjects(t *testing.T) {
 	if err := playlists.ReplaceTracks(ctx, kept.ID, keptList.ID, []string{goneTrack.ID, keptTrack.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := playlists.Share(ctx, kept.ID, keptList.ID, "kept-share", nil); err != nil {
+	if _, err := playlists.Share(ctx, kept.ID, keptList.ID, "kept-share", nil, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := playlists.SetLike(ctx, gone.ID, "kept-share", true); err != nil {

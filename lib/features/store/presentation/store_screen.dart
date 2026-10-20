@@ -13,6 +13,10 @@ import 'package:rhythmo/features/store/application/store_controller.dart';
 import 'package:rhythmo/features/store/data/store_catalog.dart';
 import 'package:rhythmo/features/store/presentation/store_carousel.dart';
 
+/// How wide the store's search, tabs and lists grow on a wide screen: a
+/// song's actions stay near its title instead of across the window.
+const storeContentWidth = RhythmoSpace.listWidth;
+
 /// «استور»: every song in rhythmo's public playlists, once, by title,
 /// artist and album. Anyone can search and play; adding a song to the
 /// library and reporting one need an account. Whose copy a song is is
@@ -166,6 +170,37 @@ class _StoreScreenState extends State<StoreScreen>
     ));
   }
 
+  static final _searchBorder = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(RhythmoRadii.pill),
+    borderSide: const BorderSide(color: RhythmoColors.softBorder),
+  );
+
+  /// Three compact pills: they share a phone's width, and sit together at
+  /// the start on a wide screen instead of spreading across it.
+  Widget _tabBar(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= storeContentWidth;
+    final text = Theme.of(context).textTheme;
+    return TabBar(
+      controller: _tabs,
+      isScrollable: wide,
+      tabAlignment: wide ? TabAlignment.start : TabAlignment.fill,
+      labelStyle: text.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+      unselectedLabelStyle:
+          text.titleSmall?.copyWith(fontWeight: FontWeight.w500),
+      labelPadding: EdgeInsets.symmetric(
+          horizontal: wide ? RhythmoSpace.xl : RhythmoSpace.xs),
+      padding: const EdgeInsets.symmetric(horizontal: RhythmoSpace.lg),
+      indicatorPadding: const EdgeInsets.symmetric(vertical: RhythmoSpace.sm),
+      splashBorderRadius: BorderRadius.circular(RhythmoRadii.pill),
+      dividerHeight: 0,
+      tabs: const [
+        Tab(height: RhythmoSpace.target, text: 'آهنگ‌ها'),
+        Tab(height: RhythmoSpace.target, text: 'خواننده‌ها'),
+        Tab(height: RhythmoSpace.target, text: 'آلبوم‌ها'),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
@@ -191,9 +226,9 @@ class _StoreScreenState extends State<StoreScreen>
               RhythmoSpace.target * 2 + RhythmoSpace.md * 2),
           child: Center(
             child: ConstrainedBox(
-              constraints:
-                  const BoxConstraints(maxWidth: RhythmoSpace.pageWidth),
+              constraints: const BoxConstraints(maxWidth: storeContentWidth),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(
@@ -206,6 +241,17 @@ class _StoreScreenState extends State<StoreScreen>
                         hintText: 'نام آهنگ، خواننده یا آلبوم',
                         prefixIcon: const Icon(RhythmoIcons.magnifyingGlass),
                         counterText: '',
+                        // A rounded search pill, like the tabs under it.
+                        border: _searchBorder,
+                        enabledBorder: _searchBorder,
+                        focusedBorder: _searchBorder.copyWith(
+                          borderSide: BorderSide(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 2),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: RhythmoSpace.xl,
+                            vertical: RhythmoSpace.md + 2),
                         suffixIcon: ListenableBuilder(
                           listenable: _search,
                           builder: (context, _) => _search.text.isEmpty
@@ -224,14 +270,7 @@ class _StoreScreenState extends State<StoreScreen>
                       onSubmitted: controller.search,
                     ),
                   ),
-                  TabBar(
-                    controller: _tabs,
-                    tabs: const [
-                      Tab(height: RhythmoSpace.target, text: 'آهنگ‌ها'),
-                      Tab(height: RhythmoSpace.target, text: 'خواننده‌ها'),
-                      Tab(height: RhythmoSpace.target, text: 'آلبوم‌ها'),
-                    ],
-                  ),
+                  _tabBar(context),
                 ],
               ),
             ),
@@ -300,8 +339,10 @@ class _StoreScreenState extends State<StoreScreen>
             _Listing<StoreArtist>(
               listing: controller.artists,
               emptyTitle: 'خواننده‌ای پیدا نشد',
-              row: (artist) => _IndexRow(
+              grid: true,
+              row: (artist) => _IndexCard(
                 icon: RhythmoIcons.microphoneStage,
+                round: true,
                 seed: 'artist:${artist.name}',
                 title: artist.name,
                 subtitle: '${persianDigits(artist.trackCount)} آهنگ',
@@ -312,7 +353,8 @@ class _StoreScreenState extends State<StoreScreen>
             _Listing<StoreAlbum>(
               listing: controller.albums,
               emptyTitle: 'آلبومی پیدا نشد',
-              row: (album) => _IndexRow(
+              grid: true,
+              row: (album) => _IndexCard(
                 icon: RhythmoIcons.vinylRecord,
                 seed: 'album:${album.name}:${album.artist}',
                 title: album.name,
@@ -683,13 +725,16 @@ class _SongMenu extends StatelessWidget {
   }
 }
 
-class _IndexRow extends StatelessWidget {
-  const _IndexRow({
+/// An artist or album in the store's grid: a large tinted cover (round
+/// for an artist), its name and a count, all one tap target.
+class _IndexCard extends StatelessWidget {
+  const _IndexCard({
     required this.icon,
     required this.seed,
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.round = false,
   });
 
   final IconData icon;
@@ -697,18 +742,69 @@ class _IndexRow extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final bool round;
 
   @override
   Widget build(BuildContext context) {
-    return RhythmoTrackRow(
-      seed: seed,
-      leadingIcon: icon,
-      title: title,
-      subtitle: subtitle,
-      onTap: onTap,
-      trailing: const Padding(
-        padding: EdgeInsetsDirectional.only(end: RhythmoSpace.md),
-        child: Icon(RhythmoIcons.caretLeft),
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final tint = artworkTint(seed);
+    return Semantics(
+      button: true,
+      label: '$title، $subtitle',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: RhythmoRadii.surface,
+        child: Padding(
+          padding: const EdgeInsets.all(RhythmoSpace.sm),
+          child: Column(
+            crossAxisAlignment:
+                round ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+            children: [
+              AspectRatio(
+                aspectRatio: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: round ? BoxShape.circle : BoxShape.rectangle,
+                    borderRadius: round ? null : RhythmoRadii.surface,
+                    border: Border.all(color: RhythmoColors.softBorder),
+                    gradient: LinearGradient(
+                      begin: AlignmentDirectional.topStart,
+                      end: AlignmentDirectional.bottomEnd,
+                      colors: [
+                        Color.lerp(tint, colors.onSurface, 0.14)!,
+                        tint,
+                        Color.lerp(tint, RhythmoColors.background, 0.45)!,
+                      ],
+                    ),
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, box) => Icon(icon,
+                        size: box.maxWidth * 0.32,
+                        color: colors.onSurfaceVariant),
+                  ),
+                ),
+              ),
+              const SizedBox(height: RhythmoSpace.sm),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: round ? TextAlign.center : TextAlign.start,
+                style: theme.textTheme.titleSmall,
+              ),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: round ? TextAlign.center : TextAlign.start,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -724,7 +820,11 @@ class _Listing<T> extends StatelessWidget {
     required this.emptyTitle,
     this.empty,
     this.header,
+    this.grid = false,
   });
+
+  /// Lays the items out as cards in a grid instead of rows.
+  final bool grid;
 
   /// Shown above the first row, such as the carousels.
   final Widget? header;
@@ -762,33 +862,128 @@ class _Listing<T> extends StatelessWidget {
               child: Center(
                 child: ConstrainedBox(
                   constraints:
-                      const BoxConstraints(maxWidth: RhythmoSpace.pageWidth),
-                  child: ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    // extendBody puts the mini player's height in the
-                    // bottom padding, with the system inset.
-                    padding: EdgeInsets.only(
-                      top: RhythmoSpace.sm,
-                      bottom: MediaQuery.paddingOf(context).bottom +
-                          RhythmoSpace.lg,
-                    ),
-                    itemCount: items.length +
-                        (listing.hasMore ? 1 : 0) +
-                        (header == null ? 0 : 1),
-                    itemBuilder: (context, index) {
-                      if (header != null) {
-                        if (index == 0) return header!;
-                        index--;
-                      }
-                      if (index < items.length) return row(items[index]);
-                      return _MoreRow(listing: listing);
-                    },
-                  ),
+                      const BoxConstraints(maxWidth: storeContentWidth),
+                  child: grid ? _grid(context, items) : _list(items),
                 ),
               ),
             ),
         };
       },
+    );
+  }
+
+  // extendBody puts the mini player's height in the bottom padding, with
+  // the system inset.
+  double _bottom(BuildContext context) =>
+      MediaQuery.paddingOf(context).bottom + RhythmoSpace.lg;
+
+  Widget _list(List<T> items) => Builder(
+        builder: (context) => ListView.builder(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding:
+              EdgeInsets.only(top: RhythmoSpace.sm, bottom: _bottom(context)),
+          itemCount: items.length +
+              (listing.hasMore ? 1 : 0) +
+              (header == null ? 0 : 1),
+          itemBuilder: (context, index) {
+            if (header != null) {
+              if (index == 0) return header!;
+              index--;
+            }
+            if (index < items.length) {
+              return _PanelRow(
+                first: index == 0,
+                last: index == items.length - 1,
+                child: row(items[index]),
+              );
+            }
+            return _MoreRow(listing: listing);
+          },
+        ),
+      );
+
+  Widget _grid(BuildContext context, List<T> items) {
+    // Room under each square cover for a title and a count, at any text
+    // size.
+    final caption =
+        MediaQuery.textScalerOf(context).scale(40) + RhythmoSpace.sm * 3;
+    return LayoutBuilder(builder: (context, constraints) {
+      const gutter = RhythmoSpace.sm;
+      final width = constraints.maxWidth - gutter * 2;
+      final columns = (width / 176).ceil().clamp(2, 6);
+      final cell = width / columns;
+      return CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding:
+                const EdgeInsets.fromLTRB(gutter, RhythmoSpace.md, gutter, 0),
+            sliver: SliverGrid.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisExtent: cell + caption,
+              ),
+              itemCount: items.length,
+              itemBuilder: (context, index) => row(items[index]),
+            ),
+          ),
+          if (listing.hasMore)
+            SliverToBoxAdapter(child: _MoreRow(listing: listing)),
+          SliverPadding(padding: EdgeInsets.only(bottom: _bottom(context))),
+        ],
+      );
+    });
+  }
+}
+
+/// One row of a list that reads as a single rounded panel: the first row
+/// rounds its top, the last its bottom, and rows between are split by a
+/// hairline.
+class _PanelRow extends StatelessWidget {
+  const _PanelRow({
+    required this.first,
+    required this.last,
+    required this.child,
+  });
+
+  final bool first;
+  final bool last;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    const radius = Radius.circular(RhythmoRadii.lg);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: RhythmoSpace.lg),
+      // A Material, so the rows' hover and ink still paint on the panel.
+      child: Material(
+        color: colors.surfaceContainerHigh.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.vertical(
+          top: first ? radius : Radius.zero,
+          bottom: last ? radius : Radius.zero,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+              RhythmoSpace.xs,
+              first ? RhythmoSpace.xs : 0,
+              RhythmoSpace.xs,
+              last ? RhythmoSpace.xs : 0),
+          child: Column(
+            children: [
+              child,
+              if (!last)
+                const Divider(
+                  height: 1,
+                  indent: RhythmoSpace.lg + 44 + RhythmoSpace.lg,
+                  endIndent: RhythmoSpace.md,
+                  color: RhythmoColors.divider,
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

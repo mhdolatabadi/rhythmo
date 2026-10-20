@@ -10,6 +10,7 @@ class Playlist {
     required this.updatedAt,
     this.shareToken,
     this.isPublic = false,
+    this.publicReview,
     this.isOwner = true,
     this.collabToken,
     this.owner,
@@ -33,6 +34,7 @@ class Playlist {
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       shareToken: json['shareToken'] as String?,
       isPublic: json['public'] == true,
+      publicReview: json['publicReview'] as String?,
       // Older servers don't say; every playlist was its owner's then.
       isOwner: json['isOwner'] as bool? ?? true,
       collabToken: json['collabToken'] as String?,
@@ -58,6 +60,13 @@ class Playlist {
   /// Whether the shared playlist is listed among the popular ones for
   /// everyone; otherwise only people with its link find it.
   final bool isPublic;
+
+  /// Owner only: `pending` while a request to list it publicly waits for an
+  /// admin's approval, `rejected` after an admin turned it down (#322).
+  final String? publicReview;
+
+  /// Whether listing it publicly waits for an admin.
+  bool get publicPending => publicReview == 'pending';
 
   /// False for a collaborative playlist the user joined as a member: they
   /// can add their own tracks and remove those, nothing else.
@@ -86,6 +95,7 @@ class Playlist {
         updatedAt: updatedAt,
         shareToken: shareToken,
         isPublic: isPublic,
+        publicReview: publicReview,
         isOwner: isOwner,
         collabToken: collabToken,
         owner: owner,

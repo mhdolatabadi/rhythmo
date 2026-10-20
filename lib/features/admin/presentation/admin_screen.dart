@@ -3,6 +3,7 @@ import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/widgets/glass_surface.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
+import 'package:rhythmo/features/admin/presentation/publication_review_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key, required this.api, required this.token});
@@ -134,7 +135,23 @@ class _AdminScreenState extends State<AdminScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('مدیریت حساب‌ها')),
+      appBar: AppBar(
+        title: const Text('مدیریت حساب‌ها'),
+        actions: [
+          IconButton(
+            tooltip: 'درخواست‌های انتشار',
+            icon: const Icon(RhythmoIcons.shieldCheck),
+            onPressed: _forbidden
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => PublicationReviewScreen(
+                            api: widget.api, token: widget.token),
+                      ),
+                    ),
+          ),
+        ],
+      ),
       body: RhythmoBackdrop(
         child: SafeArea(
           child: Center(
@@ -152,7 +169,7 @@ class _AdminScreenState extends State<AdminScreen> {
                             style: Theme.of(context).textTheme.titleLarge),
                         const SizedBox(height: 8),
                         const Text(
-                            'حساب‌ها را پیدا کن و نشان تأییدشان را مدیریت کن.'),
+                            'حساب‌ها را پیدا کن و نشان تأییدشان را مدیریت کن. حساب‌های تأییدشده بدون تأیید مدیر فهرست پخش و آهنگ عمومی می‌کنند.'),
                         const SizedBox(height: 20),
                         TextField(
                           controller: _search,

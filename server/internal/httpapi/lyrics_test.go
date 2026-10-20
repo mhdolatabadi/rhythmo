@@ -91,7 +91,7 @@ func TestLyricsAPI(t *testing.T) {
 	shared, _ := playlists.Create(ctx, alice.ID, "shared")
 	_ = playlists.ReplaceTracks(ctx, alice.ID, shared.ID, []string{song.ID})
 	notPublic := false
-	if _, err := playlists.Share(ctx, alice.ID, shared.ID, shareToken, &notPublic); err != nil {
+	if _, err := playlists.Share(ctx, alice.ID, shared.ID, shareToken, &notPublic, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -148,7 +148,7 @@ func TestLyricsAPI(t *testing.T) {
 	get("/api/v1/shared-playlists/not-a-token/tracks/"+song.ID+"/lyrics", carolToken, http.StatusNotFound)
 	get("/api/v1/shared-playlists/"+shareToken+"/tracks/"+unknown.ID+"/lyrics", carolToken, http.StatusNotFound)
 	public := true
-	_, _ = playlists.Share(ctx, alice.ID, shared.ID, shareToken, &public)
+	_, _ = playlists.Share(ctx, alice.ID, shared.ID, shareToken, &public, true)
 	if body := get(viaLink, "", http.StatusOK); body.Status != "found" || body.CanChoose {
 		t.Fatalf("visitor of a public playlist = %+v", body)
 	}

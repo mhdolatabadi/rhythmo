@@ -413,6 +413,10 @@ class _ShareSheet extends StatefulWidget {
 class _ShareSheetState extends State<_ShareSheet> {
   late String? _token = widget.playlist.shareToken;
   late bool _public = widget.playlist.isPublic;
+
+  /// Listing it publicly waits for an admin's approval (#322).
+  late bool _pending = widget.playlist.publicPending;
+  late final bool _rejected = widget.playlist.publicReview == 'rejected';
   bool _busy = false;
   String? _error;
 
@@ -433,12 +437,13 @@ class _ShareSheetState extends State<_ShareSheet> {
       } else {
         _token = shared.shareToken;
         _public = shared.isPublic;
+        _pending = shared.pending;
       }
     });
   }
 
   Future<void> _choose(bool public) async {
-    if (public == _public) return;
+    if (public == (_public || _pending)) return;
     if (_token == null) {
       setState(() => _public = public);
       return;
@@ -459,6 +464,7 @@ class _ShareSheetState extends State<_ShareSheet> {
       if (ok) {
         _token = null;
         _public = false;
+        _pending = false;
       } else {
         _error = 'لغو اشتراک ناموفق بود. دوباره تلاش کن.';
       }
@@ -508,7 +514,7 @@ class _ShareSheetState extends State<_ShareSheet> {
                   label: Text('عمومی'),
                 ),
               ],
-              selected: {_public},
+              selected: {_public || _pending},
               onSelectionChanged:
                   _busy ? null : (selected) => _choose(selected.single),
               style: const ButtonStyle(
@@ -517,9 +523,13 @@ class _ShareSheetState extends State<_ShareSheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              _public
-                  ? 'در «فهرست‌های پخش محبوب» به همه‌ی کاربران ریتمو نشان داده می‌شود و می‌توانند آن را بپسندند.'
-                  : 'در هیچ فهرستی نمی‌آید؛ فقط کسی که لینک را دارد پیدایش می‌کند.',
+              _pending
+                  ? 'در انتظار تأیید مدیر است. تا تأیید نشود، در هیچ فهرستی نمی‌آید و فقط کسی که لینک را دارد پیدایش می‌کند.'
+                  : _public
+                      ? 'در «فهرست‌های پخش محبوب» به همه‌ی کاربران ریتمو نشان داده می‌شود و می‌توانند آن را بپسندند.'
+                      : _rejected
+                          ? 'مدیر درخواست قبلی عمومی شدن را نپذیرفت. می‌توانی دوباره درخواست بدهی.'
+                          : 'در هیچ فهرستی نمی‌آید؛ فقط کسی که لینک را دارد پیدایش می‌کند. عمومی شدن حساب‌های تأییدنشده با تأیید مدیر است.',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),

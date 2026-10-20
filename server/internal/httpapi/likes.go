@@ -23,7 +23,7 @@ type LikeStore interface {
 // Publisher publishes an owner's track on its own; *store.Tracks
 // implements it.
 type Publisher interface {
-	SetPublished(ctx context.Context, ownerID, trackID string, published bool) (store.Track, error)
+	SetPublished(ctx context.Context, ownerID, trackID string, published, direct bool) (store.Track, error)
 }
 
 // LikeHandlers serve #284: publishing one track to the store, liking
@@ -34,6 +34,16 @@ type LikeHandlers struct {
 	publisher Publisher
 	tokens    *auth.Tokens
 	rate      *RateLimiter
+	// publishGate sends publishing by unverified owners to an admin first
+	// (#322); nil publishes directly.
+	publishGate *PublishGate
+}
+
+// WithPublishGate makes publishing a track need an admin's approval unless
+// the owner is verified or an admin.
+func (h *LikeHandlers) WithPublishGate(gate *PublishGate) *LikeHandlers {
+	h.publishGate = gate
+	return h
 }
 
 func NewLikeHandlers(likes LikeStore, publisher Publisher, tokens *auth.Tokens, rate *RateLimiter) *LikeHandlers {
@@ -53,24 +63,34 @@ func (h *LikeHandlers) register(mux *http.ServeMux) {
 type publishResponse struct {
 	Published   bool       `json:"published"`
 	PublishedAt *time.Time `json:"publishedAt"`
+	// Review is "pending" while publishing waits for an admin (#322) and
+	// "rejected" after one turned it down.
+	Review *string `json:"review,omitempty"`
 }
 
 // handlePublish publishes (PUT) the caller's own track to the store or
-// makes it private again (DELETE). Both are idempotent.
+// makes it private again (DELETE). Both are idempotent. An owner who is not
+// verified only asks to publish; an admin decides (#322).
 func (h *LikeHandlers) handlePublish(published bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticate(h.tokens, w, r)
 		if !ok || !enforceRateLimit(w, h.rate, userID) {
 			return
 		}
-		track, err := h.publisher.SetPublished(r.Context(), userID, r.PathValue("id"), published)
+		direct := true
+		if published {
+			if direct, ok = h.publishGate.direct(w, r, userID); !ok {
+				return
+			}
+		}
+		track, err := h.publisher.SetPublished(r.Context(), userID, r.PathValue("id"), published, direct)
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found")
 		case err != nil:
 			internalError(w, "publish track", err)
 		default:
-			response := publishResponse{Published: track.PublishedAt != nil}
+			response := publishResponse{Published: track.PublishedAt != nil, Review: track.PublishReview}
 			if track.PublishedAt != nil {
 				at := track.PublishedAt.UTC()
 				response.PublishedAt = &at
@@ -158,6 +178,7 @@ func (h *LikeHandlers) handleLiked(w http.ResponseWriter, r *http.Request) {
 func toOwnTrackResponse(t store.Track, likes store.LikeState) trackResponse {
 	response := toTrackResponse(t)
 	response.Published = t.PublishedAt != nil
+	response.PublishReview = t.PublishReview
 	response.LikeCount, response.Liked = likes.Count, likes.Liked
 	return response
 }

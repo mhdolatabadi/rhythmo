@@ -87,6 +87,7 @@ class Track {
     this.viaPlaylist,
     this.fromStore = false,
     this.published = false,
+    this.publishReview,
     this.likeCount = 0,
     this.liked = false,
     this.version = 1,
@@ -146,6 +147,7 @@ class Track {
         replayGain:
             ReplayGain.fromJson(json['replayGain'] as Map<String, dynamic>?),
         published: json['published'] == true,
+        publishReview: json['publishReview'] as String?,
         likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
         liked: json['liked'] == true,
       );
@@ -198,6 +200,7 @@ class Track {
         viaPlaylist: other.viaPlaylist,
         fromStore: other.fromStore,
         published: published,
+        publishReview: publishReview,
         likeCount: likeCount,
         liked: liked,
         version: version,
@@ -235,6 +238,19 @@ class Track {
   /// In the owner's library: whether they published it to the store (#284).
   final bool published;
 
+  /// In the owner's library: `pending` while publishing waits for an
+  /// admin's approval, `rejected` after an admin turned it down (#322).
+  final String? publishReview;
+
+  /// Where publishing this track stands, for its owner.
+  PublishState get publishState => published
+      ? PublishState.published
+      : switch (publishReview) {
+          'pending' => PublishState.pending,
+          'rejected' => PublishState.rejected,
+          _ => PublishState.private,
+        };
+
   /// How many listeners like the song: shown to the owner on their own
   /// tracks, and to everyone on store songs.
   final int likeCount;
@@ -270,6 +286,7 @@ class Track {
         viaPlaylist: viaPlaylist,
         fromStore: fromStore,
         published: published,
+        publishReview: publishReview,
         likeCount: likeCount,
         liked: liked,
         version: version,
@@ -285,3 +302,7 @@ class Track {
         _ => null,
       };
 }
+
+/// Where publishing a track to the store stands (#322): accounts that are
+/// not verified only ask, and an admin approves or rejects the request.
+enum PublishState { private, pending, rejected, published }

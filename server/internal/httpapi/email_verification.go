@@ -115,6 +115,38 @@ func (g *EmailGate) allow(w http.ResponseWriter, r *http.Request, userID string)
 	return true
 }
 
+// PublishGate decides who publishes directly (#322): verified accounts and
+// admins list a playlist publicly or publish a track at once; anyone else
+// only asks, and an admin approves or rejects the request.
+func (h *AuthHandlers) PublishGate() *PublishGate {
+	return &PublishGate{auth: h}
+}
+
+// PublishGate is checked against a fresh account lookup, so a verification
+// an admin just granted or revoked counts at once. A nil gate lets everyone
+// publish directly.
+type PublishGate struct {
+	auth *AuthHandlers
+}
+
+// direct reports whether userID publishes without review. When ok is false
+// it has written the error itself.
+func (g *PublishGate) direct(w http.ResponseWriter, r *http.Request, userID string) (direct, ok bool) {
+	if g == nil {
+		return true, true
+	}
+	user, err := g.auth.users.ByID(r.Context(), userID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return false, false
+	}
+	if err != nil {
+		internalError(w, "check publish permission", err)
+		return false, false
+	}
+	return user.Verified || g.auth.isAdmin(user), true
+}
+
 var errEmailNotSent = errors.New("verification email not sent")
 
 // sendEmailCode replaces the account's code with a new one and mails it.

@@ -60,18 +60,20 @@ class LibraryController extends ChangeNotifier {
   bool get canPublish => _likes != null;
 
   /// Publishes [track] to the store, or makes it private again, then
-  /// reloads the library so the row shows it. Returns whether it worked.
-  Future<bool> setPublished(Track track, bool published) async {
+  /// reloads the library so the row shows it. Returns where it stands now,
+  /// pending when an admin has to approve (#322), or null when it failed.
+  Future<PublishState?> setPublished(Track track, bool published) async {
     final likes = _likes, token = _token();
-    if (likes == null || token == null) return false;
+    if (likes == null || token == null) return null;
+    final PublishState state;
     try {
-      await likes.setPublished(token, track.id, published);
+      state = await likes.setPublished(token, track.id, published);
     } catch (error) {
       debugPrint('Could not publish: $error');
-      return false;
+      return null;
     }
     await load();
-    return true;
+    return state;
   }
 
   final String? Function() _token;

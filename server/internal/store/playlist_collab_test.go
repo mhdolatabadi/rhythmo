@@ -114,7 +114,7 @@ func TestCollaborativePlaylist(t *testing.T) {
 	}
 
 	// A shared collaborative playlist shows and plays everyone's tracks.
-	if _, err := playlists.Share(ctx, owner.ID, playlist.ID, "share-1", nil); err != nil {
+	if _, err := playlists.Share(ctx, owner.ID, playlist.ID, "share-1", nil, true); err != nil {
 		t.Fatal(err)
 	}
 	if shared, err := playlists.ForShareToken(ctx, "share-1"); err != nil || len(shared.Tracks) != 2 {

@@ -109,10 +109,10 @@ func TestMatchableTracksAreOnlyThoseTheUserMayPlay(t *testing.T) {
 	public, _ := playlists.Create(ctx, bob.ID, "public")
 	_ = playlists.ReplaceTracks(ctx, bob.ID, public.ID, []string{bobPublic.ID})
 	yes, no := true, false
-	_, _ = playlists.Share(ctx, bob.ID, public.ID, "public-token", &yes)
+	_, _ = playlists.Share(ctx, bob.ID, public.ID, "public-token", &yes, true)
 	linkOnly, _ := playlists.Create(ctx, bob.ID, "link only")
 	_ = playlists.ReplaceTracks(ctx, bob.ID, linkOnly.ID, []string{bobLinkOnly.ID})
-	_, _ = playlists.Share(ctx, bob.ID, linkOnly.ID, "link-token", &no)
+	_, _ = playlists.Share(ctx, bob.ID, linkOnly.ID, "link-token", &no, true)
 
 	matchable := func(userID string) map[string]Matchable {
 		t.Helper()

@@ -20,7 +20,7 @@ const shareTokenBytes = 16
 
 // SharedPlaylistStore is what sharing needs from playlists.
 type SharedPlaylistStore interface {
-	Share(ctx context.Context, ownerID, playlistID, token string, public *bool) (store.Playlist, error)
+	Share(ctx context.Context, ownerID, playlistID, token string, public *bool, direct bool) (store.Playlist, error)
 	Unshare(ctx context.Context, ownerID, playlistID string) error
 	ForShareToken(ctx context.Context, token string) (store.SharedPlaylist, error)
 	SharedTrack(ctx context.Context, token, trackID string, publicOnly bool) (store.Track, error)
@@ -136,6 +136,8 @@ type shareRequest struct {
 type shareResponse struct {
 	ShareToken string `json:"shareToken"`
 	Public     bool   `json:"public"`
+	// PublicReview is "pending" when listing it waits for an admin (#322).
+	PublicReview *string `json:"publicReview,omitempty"`
 }
 
 func (h *PlaylistHandlers) handleShare(w http.ResponseWriter, r *http.Request) {
@@ -156,13 +158,20 @@ func (h *PlaylistHandlers) handleShare(w http.ResponseWriter, r *http.Request) {
 	if request.Public != nil && *request.Public && !h.emailGate.allow(w, r, userID) {
 		return
 	}
+	// Owners who are not verified only ask to be listed (#322).
+	direct := true
+	if request.Public != nil && *request.Public {
+		if direct, ok = h.publishGate.direct(w, r, userID); !ok {
+			return
+		}
+	}
 	for range 3 {
 		token, err := newShareToken()
 		if err != nil {
 			internalError(w, "draw share token", err)
 			return
 		}
-		playlist, err := h.shared.Share(r.Context(), userID, r.PathValue("id"), token, request.Public)
+		playlist, err := h.shared.Share(r.Context(), userID, r.PathValue("id"), token, request.Public, direct)
 		switch {
 		case errors.Is(err, store.ErrShareTokenTaken):
 			continue
@@ -171,7 +180,9 @@ func (h *PlaylistHandlers) handleShare(w http.ResponseWriter, r *http.Request) {
 		case err != nil:
 			internalError(w, "share playlist", err)
 		default:
-			writeJSON(w, http.StatusOK, shareResponse{ShareToken: *playlist.ShareToken, Public: playlist.IsPublic})
+			writeJSON(w, http.StatusOK, shareResponse{
+				ShareToken: *playlist.ShareToken, Public: playlist.IsPublic, PublicReview: playlist.PublicReview,
+			})
 		}
 		return
 	}

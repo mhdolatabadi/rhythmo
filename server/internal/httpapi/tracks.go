@@ -155,8 +155,11 @@ type trackResponse struct {
 	// library (#284): whether they published the track to the store, how
 	// many listeners like the song, and whether they do.
 	Published bool `json:"published,omitempty"`
-	LikeCount int  `json:"likeCount,omitempty"`
-	Liked     bool `json:"liked,omitempty"`
+	// PublishReview is "pending" or "rejected" while publishing waits for
+	// or was turned down by an admin (#322); owner's library only.
+	PublishReview *string `json:"publishReview,omitempty"`
+	LikeCount     int     `json:"likeCount,omitempty"`
+	Liked         bool    `json:"liked,omitempty"`
 }
 
 // replayGainResponse holds gains in dB re -18 LUFS and peaks as linear

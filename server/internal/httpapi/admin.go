@@ -18,15 +18,31 @@ type AdminStore interface {
 	SetVerification(context.Context, string, string, bool) (store.User, error)
 }
 
-// AdminPlaylistStore takes public playlists out of the popular list.
+// AdminPlaylistStore takes public playlists out of the popular list, or
+// deletes them.
 type AdminPlaylistStore interface {
 	SetPopularHidden(ctx context.Context, shareToken, actorID string, hidden bool) error
+	DeleteShared(ctx context.Context, shareToken, actorID string) error
 }
 
+// AdminPublicationStore is admin review of what unverified owners publish
+// (#322); *store.Publications implements it.
+type AdminPublicationStore interface {
+	Pending(ctx context.Context, limit int) ([]store.PendingPublication, error)
+	PendingTrack(ctx context.Context, trackID string) (store.Track, error)
+	ReviewPlaylist(ctx context.Context, playlistID, actorID string, approve bool) error
+	ReviewTrack(ctx context.Context, trackID, actorID string, approve bool) error
+}
+
+// maxPendingPublications caps one page of the review queue.
+const maxPendingPublications = 200
+
 type AdminHandlers struct {
-	auth      *AuthHandlers
-	users     AdminStore
-	playlists AdminPlaylistStore
+	auth         *AuthHandlers
+	users        AdminStore
+	playlists    AdminPlaylistStore
+	publications AdminPublicationStore
+	streams      StreamPresigner
 }
 
 func NewAdminHandlers(auth *AuthHandlers, users AdminStore) *AdminHandlers {
@@ -39,11 +55,25 @@ func (h *AdminHandlers) WithPlaylists(playlists AdminPlaylistStore) *AdminHandle
 	return h
 }
 
+// WithPublications lets admins review requests to list playlists publicly
+// and publish tracks, and listen to a pending track first.
+func (h *AdminHandlers) WithPublications(publications AdminPublicationStore, streams StreamPresigner) *AdminHandlers {
+	h.publications, h.streams = publications, streams
+	return h
+}
+
 func (h *AdminHandlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/accounts", h.list)
 	mux.HandleFunc("PATCH /api/v1/admin/accounts/{id}/verification", h.verify)
 	if h.playlists != nil {
 		mux.HandleFunc("PATCH /api/v1/admin/public-playlists/{token}", h.hidePlaylist)
+		mux.HandleFunc("DELETE /api/v1/admin/public-playlists/{token}", h.deletePlaylist)
+	}
+	if h.publications != nil {
+		mux.HandleFunc("GET /api/v1/admin/publications", h.listPublications)
+		mux.HandleFunc("PATCH /api/v1/admin/publications/playlists/{id}", h.reviewPublication(store.PublicationPlaylist))
+		mux.HandleFunc("PATCH /api/v1/admin/publications/tracks/{id}", h.reviewPublication(store.PublicationTrack))
+		mux.HandleFunc("GET /api/v1/admin/publications/tracks/{id}/stream", h.streamPendingTrack)
 	}
 }
 
@@ -182,4 +212,127 @@ func (h *AdminHandlers) hidePlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"hidden": *input.Hidden})
+}
+
+// deletePlaylist deletes a shared playlist, whoever owns it. The tracks stay
+// in their owners' libraries.
+func (h *AdminHandlers) deletePlaylist(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.authorize(w, r)
+	if !ok {
+		return
+	}
+	token := r.PathValue("token")
+	if !validShareToken(token) {
+		writeError(w, http.StatusNotFound, "playlist_not_found")
+		return
+	}
+	err := h.playlists.DeleteShared(r.Context(), token, actor)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "playlist_not_found")
+		return
+	}
+	if err != nil {
+		internalError(w, "delete public playlist", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type pendingPublicationResponse struct {
+	Kind        string    `json:"kind"`
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	Artist      string    `json:"artist,omitempty"`
+	ShareToken  *string   `json:"shareToken,omitempty"`
+	TrackCount  int       `json:"trackCount,omitempty"`
+	OwnerID     string    `json:"ownerId"`
+	OwnerEmail  string    `json:"ownerEmail"`
+	RequestedAt time.Time `json:"requestedAt"`
+}
+
+// listPublications is the review queue (#322): playlists and tracks whose
+// unverified owners asked to publish them, oldest request first.
+func (h *AdminHandlers) listPublications(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.authorize(w, r); !ok {
+		return
+	}
+	pending, err := h.publications.Pending(r.Context(), maxPendingPublications)
+	if err != nil {
+		internalError(w, "list pending publications", err)
+		return
+	}
+	items := make([]pendingPublicationResponse, 0, len(pending))
+	for _, p := range pending {
+		items = append(items, pendingPublicationResponse{
+			Kind: p.Kind, ID: p.ID, Title: p.Title, Artist: p.Artist, ShareToken: p.ShareToken,
+			TrackCount: p.TrackCount, OwnerID: p.OwnerID, OwnerEmail: p.OwnerEmail,
+			RequestedAt: p.RequestedAt.UTC(),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"publications": items})
+}
+
+// reviewPublication approves ({"approved":true}) or rejects
+// ({"approved":false}) a pending request. Deciding a request that is no
+// longer pending is 409 not_pending, so two admins can't both decide it.
+func (h *AdminHandlers) reviewPublication(kind string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actor, ok := h.authorize(w, r)
+		if !ok {
+			return
+		}
+		var input struct {
+			Approved *bool `json:"approved"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxAuthBodyBytes))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil || input.Approved == nil {
+			writeError(w, http.StatusBadRequest, "invalid_json")
+			return
+		}
+		if err := decoder.Decode(new(any)); err != io.EOF {
+			writeError(w, http.StatusBadRequest, "invalid_json")
+			return
+		}
+		review := h.publications.ReviewTrack
+		if kind == store.PublicationPlaylist {
+			review = h.publications.ReviewPlaylist
+		}
+		err := review(r.Context(), r.PathValue("id"), actor, *input.Approved)
+		if errors.Is(err, store.ErrNotPending) {
+			writeError(w, http.StatusConflict, "not_pending")
+			return
+		}
+		if err != nil {
+			internalError(w, "review publication", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"approved": *input.Approved})
+	}
+}
+
+// streamPendingTrack lets an admin listen to a track before deciding.
+func (h *AdminHandlers) streamPendingTrack(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.authorize(w, r); !ok {
+		return
+	}
+	if h.streams == nil {
+		writeError(w, http.StatusServiceUnavailable, "streaming_unavailable")
+		return
+	}
+	track, err := h.publications.PendingTrack(r.Context(), r.PathValue("id"))
+	if errors.Is(err, store.ErrNotPending) {
+		writeError(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		internalError(w, "load pending track", err)
+		return
+	}
+	url, expiresAt, err := h.streams.PresignGet(r.Context(), track.StorageKey)
+	if err != nil {
+		internalError(w, "presign pending track", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, streamResponse{URL: url, ExpiresAt: expiresAt.UTC()})
 }

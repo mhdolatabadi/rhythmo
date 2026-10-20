@@ -136,7 +136,7 @@ class _PopularPlaylistsScreenState extends State<PopularPlaylistsScreen> {
     if (result == LikeResult.gone) await widget.controller.loadPopular();
   }
 
-  Future<void> _remove(PublicPlaylist playlist) async {
+  Future<void> _hide(PublicPlaylist playlist) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -174,6 +174,36 @@ class _PopularPlaylistsScreenState extends State<PopularPlaylistsScreen> {
             )
           : null,
     ));
+  }
+
+  Future<void> _delete(PublicPlaylist playlist) async {
+    final scheme = Theme.of(context).colorScheme;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('پاک کردن فهرست پخش؟'),
+        content: Text('«${playlist.name}» برای همیشه پاک می‌شود و لینکش '
+            'دیگر کار نمی‌کند. آهنگ‌هایش در کتابخانهٔ صاحبانشان می‌مانند. '
+            'این کار برگشت‌پذیر نیست.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('انصراف'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+                backgroundColor: scheme.error, foregroundColor: scheme.onError),
+            child: const Text('پاک کردن'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final deleted = await widget.controller.deletePublic(playlist);
+    _say(deleted
+        ? '«${playlist.name}» پاک شد.'
+        : 'پاک کردن انجام نشد. دوباره تلاش کن.');
   }
 
   @override
@@ -254,7 +284,8 @@ class _PopularPlaylistsScreenState extends State<PopularPlaylistsScreen> {
                     onOpen: _open,
                     onPlay: _play,
                     onLike: _like,
-                    onRemove: controller.canModeratePopular ? _remove : null,
+                    onHide: controller.canModeratePopular ? _hide : null,
+                    onDelete: controller.canModeratePopular ? _delete : null,
                   ),
                 ),
             };
@@ -275,7 +306,8 @@ class _PopularGrid extends StatelessWidget {
     required this.onOpen,
     required this.onPlay,
     required this.onLike,
-    this.onRemove,
+    this.onHide,
+    this.onDelete,
   });
 
   final List<PublicPlaylist> popular;
@@ -287,8 +319,10 @@ class _PopularGrid extends StatelessWidget {
   final ValueChanged<PublicPlaylist> onPlay;
   final ValueChanged<PublicPlaylist> onLike;
 
-  /// Offered to admins only: takes a playlist out of the list.
-  final ValueChanged<PublicPlaylist>? onRemove;
+  /// Offered to admins only: takes a playlist out of the list, or deletes
+  /// it.
+  final ValueChanged<PublicPlaylist>? onHide;
+  final ValueChanged<PublicPlaylist>? onDelete;
 
   /// Below the square cover: the title and count beside a 48 px like.
   static const _textHeight =
@@ -330,7 +364,8 @@ class _PopularGrid extends StatelessWidget {
                   onLike: isLiking(playlist.shareToken)
                       ? null
                       : () => onLike(playlist),
-                  onRemove: onRemove == null ? null : () => onRemove!(playlist),
+                  onHide: onHide == null ? null : () => onHide!(playlist),
+                  onDelete: onDelete == null ? null : () => onDelete!(playlist),
                 );
               },
             ),
@@ -351,7 +386,8 @@ class _PopularTile extends StatelessWidget {
     required this.onOpen,
     required this.onPlay,
     required this.onLike,
-    this.onRemove,
+    this.onHide,
+    this.onDelete,
   });
 
   final PublicPlaylist playlist;
@@ -360,7 +396,8 @@ class _PopularTile extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onPlay;
   final VoidCallback? onLike;
-  final VoidCallback? onRemove;
+  final VoidCallback? onHide;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -398,19 +435,42 @@ class _PopularTile extends StatelessWidget {
                 start: RhythmoSpace.sm,
                 child: _RankBadge(rank: rank),
               ),
-              if (onRemove != null)
+              if (onHide != null || onDelete != null)
                 PositionedDirectional(
                   top: RhythmoSpace.xs,
                   end: RhythmoSpace.xs,
-                  child: IconButton(
-                    tooltip: 'حذف ${playlist.name} از محبوب‌ها',
-                    onPressed: onRemove,
+                  child: PopupMenuButton<_AdminAction>(
+                    tooltip: 'مدیریت ${playlist.name}',
                     style: IconButton.styleFrom(
                       minimumSize: const Size.square(RhythmoSpace.target),
                       backgroundColor: RhythmoColors.scrim,
                       foregroundColor: RhythmoColors.onSurface,
                     ),
-                    icon: const Icon(RhythmoIcons.eyeSlash),
+                    icon: const Icon(RhythmoIcons.dotsThreeVertical),
+                    onSelected: (action) => switch (action) {
+                      _AdminAction.hide => onHide?.call(),
+                      _AdminAction.delete => onDelete?.call(),
+                    },
+                    itemBuilder: (context) => [
+                      if (onHide != null)
+                        const PopupMenuItem(
+                          value: _AdminAction.hide,
+                          child: ListTile(
+                            leading: Icon(RhythmoIcons.eyeSlash),
+                            title: Text('حذف از محبوب‌ها'),
+                          ),
+                        ),
+                      if (onDelete != null)
+                        PopupMenuItem(
+                          value: _AdminAction.delete,
+                          child: ListTile(
+                            leading:
+                                Icon(RhythmoIcons.trash, color: scheme.error),
+                            title: Text('پاک کردن فهرست پخش',
+                                style: TextStyle(color: scheme.error)),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               PositionedDirectional(
@@ -481,6 +541,8 @@ class _PopularTile extends StatelessWidget {
     );
   }
 }
+
+enum _AdminAction { hide, delete }
 
 /// The playlist's place in the list, on its cover.
 class _RankBadge extends StatelessWidget {

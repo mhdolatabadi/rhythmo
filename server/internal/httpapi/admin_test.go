@@ -115,7 +115,17 @@ func TestVerificationInSessionAndMe(t *testing.T) {
 type fakeAdminPlaylists struct {
 	token, actor string
 	hidden       bool
+	deleted      bool
 	calls        int
+}
+
+func (f *fakeAdminPlaylists) DeleteShared(_ context.Context, token, actor string) error {
+	f.calls++
+	if token != f.token || f.deleted {
+		return store.ErrNotFound
+	}
+	f.actor, f.deleted = actor, true
+	return nil
 }
 
 func (f *fakeAdminPlaylists) SetPopularHidden(_ context.Context, token, actor string, hidden bool) error {
@@ -147,6 +157,8 @@ func TestAdminHidesPopularPlaylist(t *testing.T) {
 
 	expectError(t, api.do(t, "PATCH", path, `{"hidden":true}`, ""), http.StatusUnauthorized, "unauthorized")
 	expectError(t, api.do(t, "PATCH", path, `{"hidden":true}`, memberToken), http.StatusForbidden, "admin_required")
+	expectError(t, api.do(t, "DELETE", path, "", ""), http.StatusUnauthorized, "unauthorized")
+	expectError(t, api.do(t, "DELETE", path, "", memberToken), http.StatusForbidden, "admin_required")
 	if playlists.calls != 0 {
 		t.Fatal("a non-admin reached playlist storage")
 	}
@@ -165,4 +177,10 @@ func TestAdminHidesPopularPlaylist(t *testing.T) {
 	}
 	expectError(t, api.do(t, "PATCH", "/api/v1/admin/public-playlists/"+other, `{"hidden":true}`, adminToken), http.StatusNotFound, "playlist_not_found")
 	expectError(t, api.do(t, "PATCH", "/api/v1/admin/public-playlists/bad", `{"hidden":true}`, adminToken), http.StatusNotFound, "playlist_not_found")
+
+	expectError(t, api.do(t, "DELETE", "/api/v1/admin/public-playlists/bad", "", adminToken), http.StatusNotFound, "playlist_not_found")
+	if result := api.do(t, "DELETE", path, "", adminToken); result.Code != http.StatusNoContent || !playlists.deleted || playlists.actor != admin.ID {
+		t.Fatalf("delete: %d %s", result.Code, result.Body)
+	}
+	expectError(t, api.do(t, "DELETE", path, "", adminToken), http.StatusNotFound, "playlist_not_found")
 }

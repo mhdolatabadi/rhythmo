@@ -83,14 +83,23 @@ func (f *fakeLikes) Liked(_ context.Context, userID string, limit, offset int) (
 	return songs, false, nil
 }
 
-type fakePublisher struct{ published map[string]bool }
+type fakePublisher struct {
+	published map[string]bool
+	direct    bool
+}
 
-func (p *fakePublisher) SetPublished(_ context.Context, ownerID, trackID string, published bool) (store.Track, error) {
+func (p *fakePublisher) SetPublished(_ context.Context, ownerID, trackID string, published, direct bool) (store.Track, error) {
 	if ownerID != "alice" || trackID != "t1" {
 		return store.Track{}, store.ErrNotFound
 	}
-	p.published[trackID] = published
+	p.direct = direct
 	track := store.Track{ID: trackID, OwnerID: ownerID}
+	if published && !direct && !p.published[trackID] {
+		pending := store.ReviewPending
+		track.PublishReview = &pending
+		return track, nil
+	}
+	p.published[trackID] = published
 	if published {
 		at := time.Now()
 		track.PublishedAt = &at

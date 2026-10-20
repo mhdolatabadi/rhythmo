@@ -13,7 +13,7 @@
 <ol class="list">
 {{range .Tracks}}<li><div class="row track">
 <span class="art">{{template "note"}}</span>
-<a class="grow" href="{{.Link}}"><span class="title" dir="auto">{{.Title}}</span><span class="sub"><bdi>{{.Artist}}</bdi>{{if and .Artist .Size}} · {{end}}<bdi>{{.Size}}</bdi></span></a>
+<a class="grow" href="{{.Link}}"><span class="title" dir="auto">{{.Title}}</span><span class="sub"><bdi>{{.Artist}}</bdi></span></a>
 <audio controls preload="none" src="/store/t/{{.ID}}/stream" aria-label="پخش {{.Title}}"></audio>
 </div></li>
 {{end}}</ol>

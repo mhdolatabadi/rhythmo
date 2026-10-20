@@ -371,15 +371,20 @@ class _LibraryScreenState extends State<LibraryScreen>
   /// Publishes [track] to the store, or makes it private again (#284).
   Future<void> _setPublished(Track track, bool published) async {
     final messenger = ScaffoldMessenger.of(context);
-    final done = await widget.library.setPublished(track, published);
+    final state = await widget.library.setPublished(track, published);
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
-        content: Text(!done
-            ? 'تغییر انتشار ثبت نشد. دوباره تلاش کن.'
-            : published
-                ? '«${track.title}» در استور منتشر شد. بدون نام تو نمایش داده می‌شود.'
-                : '«${track.title}» دیگر منتشر نمی‌شود، مگر در یک فهرست پخش عمومی باشد.'),
+        content: Text(switch (state) {
+          null => 'تغییر انتشار ثبت نشد. دوباره تلاش کن.',
+          PublishState.published =>
+            '«${track.title}» در استور منتشر شد. بدون نام تو نمایش داده می‌شود.',
+          PublishState.pending =>
+            'درخواست انتشار «${track.title}» برای مدیر فرستاده شد. بعد از تأیید در استور می‌آید.',
+          _ => published
+              ? 'انتشار «${track.title}» ثبت نشد.'
+              : '«${track.title}» دیگر منتشر نمی‌شود، مگر در یک فهرست پخش عمومی باشد.',
+        }),
       ));
   }
 
@@ -1555,7 +1560,12 @@ class _TrackListState extends State<_TrackList> {
           item(
             _TrackAction.publish,
             RhythmoIcons.globe,
-            track.published ? 'لغو انتشار در استور' : 'انتشار در استور',
+            switch (track.publishState) {
+              PublishState.published => 'لغو انتشار در استور',
+              PublishState.pending => 'لغو درخواست انتشار',
+              PublishState.rejected => 'درخواست دوباره‌ی انتشار',
+              PublishState.private => 'انتشار در استور',
+            },
           ),
         if (widget.playlists != null)
           item(_TrackAction.addToPlaylist, RhythmoIcons.listPlus,
@@ -1598,7 +1608,11 @@ class _TrackListState extends State<_TrackList> {
           case (_TrackAction.like, _):
             _like(context, track);
           case (_TrackAction.publish, _):
-            widget.onSetPublished?.call(track, !track.published);
+            final state = track.publishState;
+            widget.onSetPublished?.call(
+                track,
+                state != PublishState.published &&
+                    state != PublishState.pending);
           case (_TrackAction.uploadToServer, _):
             sync?.upload(track);
           case (_TrackAction.downloadToDevice, _):
@@ -2036,6 +2050,7 @@ class _TrackRow extends StatelessWidget {
                     ),
                     _LikeBadges(
                       published: track.published,
+                      pending: track.publishState == PublishState.pending,
                       liked: liked,
                       likeCount: likeCount,
                       style: secondary,
@@ -2056,22 +2071,29 @@ class _TrackRow extends StatelessWidget {
 class _LikeBadges extends StatelessWidget {
   const _LikeBadges({
     required this.published,
+    this.pending = false,
     required this.liked,
     required this.likeCount,
     this.style,
   });
 
   final bool published;
+
+  /// Publishing waits for an admin's approval (#322).
+  final bool pending;
   final bool liked;
   final int likeCount;
   final TextStyle? style;
 
   @override
   Widget build(BuildContext context) {
-    if (!published && !liked && likeCount == 0) return const SizedBox.shrink();
+    if (!published && !pending && !liked && likeCount == 0) {
+      return const SizedBox.shrink();
+    }
     final colors = Theme.of(context).colorScheme;
     final labels = [
       if (published) 'منتشرشده',
+      if (pending) 'در انتظار تأیید مدیر',
       if (liked) 'پسندیده‌ای',
       if (likeCount > 0) '${persianDigits(likeCount)} پسند',
     ];
@@ -2084,6 +2106,14 @@ class _LikeBadges extends StatelessWidget {
           if (published) ...[
             const SizedBox(width: RhythmoSpace.sm),
             Icon(RhythmoIcons.globe, size: 14, color: colors.secondary),
+          ],
+          if (pending) ...[
+            const SizedBox(width: RhythmoSpace.sm),
+            Tooltip(
+              message: 'در انتظار تأیید مدیر',
+              child: Icon(RhythmoIcons.clockCounterClockwise,
+                  size: 14, color: style?.color),
+            ),
           ],
           if (liked || likeCount > 0) ...[
             const SizedBox(width: RhythmoSpace.sm),

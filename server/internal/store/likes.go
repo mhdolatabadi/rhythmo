@@ -12,13 +12,20 @@ import (
 
 // SetPublished publishes the owner's ready track on its own, which lists
 // it in the store (#284), or makes it private again. Unpublishing leaves it
-// in the store while a public playlist still holds it. ErrNotFound unless
-// ownerID owns a ready track with that id.
-func (t *Tracks) SetPublished(ctx context.Context, ownerID, trackID string, published bool) (Track, error) {
+// in the store while a public playlist still holds it. Without direct (an
+// owner who is neither verified nor an admin, #322), publishing only asks
+// for an admin's approval: the track stays private with a pending review.
+// Unpublishing also withdraws such a request. ErrNotFound unless ownerID
+// owns a ready track with that id.
+func (t *Tracks) SetPublished(ctx context.Context, ownerID, trackID string, published, direct bool) (Track, error) {
 	track, err := scanTrack(t.pool.QueryRow(ctx, `
-		UPDATE tracks SET published_at = CASE WHEN $3 THEN COALESCE(published_at, now()) END
+		UPDATE tracks SET
+			published_at = CASE WHEN $3 AND ($4 OR published_at IS NOT NULL) THEN COALESCE(published_at, now()) END,
+			publish_review = CASE WHEN $3 AND NOT $4 AND published_at IS NULL THEN 'pending' END,
+			publish_review_at = CASE WHEN $3 AND NOT $4 AND published_at IS NULL
+				THEN CASE WHEN publish_review = 'pending' THEN publish_review_at ELSE now() END END
 		WHERE id::text = $1 AND owner_id::text = $2 AND status = 'ready'
-		RETURNING `+trackColumns, trackID, ownerID, published))
+		RETURNING `+trackColumns, trackID, ownerID, published, direct))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Track{}, ErrNotFound
 	}

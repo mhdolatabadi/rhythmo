@@ -45,6 +45,16 @@ type PlaylistHandlers struct {
 	// emailGate keeps unverified accounts from listing playlists publicly
 	// and from saving copies into their storage; nil allows everyone.
 	emailGate *EmailGate
+	// publishGate sends public listing by unverified owners to an admin
+	// first (#322); nil lists directly.
+	publishGate *PublishGate
+}
+
+// WithPublishGate makes listing a playlist publicly need an admin's
+// approval unless the owner is verified or an admin.
+func (h *PlaylistHandlers) WithPublishGate(gate *PublishGate) *PlaylistHandlers {
+	h.publishGate = gate
+	return h
 }
 
 // WithEmailGate keeps accounts with an unverified email out of what costs
@@ -81,6 +91,9 @@ type playlistResponse struct {
 	ShareToken *string `json:"shareToken,omitempty"`
 	// Public is whether a shared playlist is listed for everyone.
 	Public bool `json:"public"`
+	// PublicReview is "pending" while a request to list it waits for an
+	// admin and "rejected" after one turned it down; only its owner sees it.
+	PublicReview *string `json:"publicReview,omitempty"`
 	// CollabToken is set while people can join; only its owner sees it.
 	CollabToken *string `json:"collabToken,omitempty"`
 	// Owner and Members are loaded with the tracks.
@@ -118,6 +131,7 @@ func toPlaylistResponse(playlist store.Playlist, viewerID string, includeTracks 
 	}
 	if isOwner {
 		response.ShareToken, response.CollabToken = playlist.ShareToken, playlist.CollabToken
+		response.PublicReview = playlist.PublicReview
 	}
 	if !includeTracks {
 		return response

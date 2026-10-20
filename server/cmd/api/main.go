@@ -242,6 +242,7 @@ func run() error {
 		return err
 	}
 	emailGate := authHandlers.EmailGate()
+	publishGate := authHandlers.PublishGate()
 	// Uploads handed out before an account is deleted may still land until
 	// pending reservations expire, so the purge job sweeps until then.
 	authHandlers.WithAccountDeletion(httpapi.AccountDeletion{
@@ -332,7 +333,8 @@ func run() error {
 		return err
 	}
 	trackLikes := store.NewTrackLikes(pool)
-	adminHandlers := httpapi.NewAdminHandlers(authHandlers, users).WithPlaylists(playlists)
+	adminHandlers := httpapi.NewAdminHandlers(authHandlers, users).WithPlaylists(playlists).
+		WithPublications(store.NewPublications(pool), objects)
 	storeHandlers := httpapi.NewCatalogHandlers(storeCatalog, tokens, objects,
 		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 		WithSave(store.NewFingerprints(pool), httpapi.SavePolicy{
@@ -369,7 +371,7 @@ func run() error {
 			Playlists: httpapi.NewPlaylistHandlers(playlists, tokens).WithSharing(playlists, objects, httpapi.SavePolicy{
 				Objects: objects, MaxOwnerBytes: ownerQuotaBytes, Enabled: uploadsEnabled,
 			}).WithAnonymous(httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
-				WithEmailGate(emailGate),
+				WithEmailGate(emailGate).WithPublishGate(publishGate),
 			History: httpapi.NewHistoryHandlers(store.NewHistory(pool), tokens, historyRate),
 			Public: httpapi.NewPublicPages(playlists, objects,
 				httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
@@ -385,7 +387,7 @@ func run() error {
 			Lyrics:   lyricsHandlers,
 			Identify: identifyHandlers,
 			Store:    storeHandlers,
-			Likes:    httpapi.NewLikeHandlers(trackLikes, tracks, tokens, likeRate),
+			Likes:    httpapi.NewLikeHandlers(trackLikes, tracks, tokens, likeRate).WithPublishGate(publishGate),
 			Ops:      ops,
 			Webhooks: webhooks,
 		}),

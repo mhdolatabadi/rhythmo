@@ -61,7 +61,7 @@ func (f catalogFixture) playlist(ownerID string, public bool, trackIDs ...string
 	if err := f.playlists.ReplaceTracks(f.ctx, ownerID, playlist.ID, trackIDs); err != nil {
 		f.t.Fatal(err)
 	}
-	playlist, err = f.playlists.Share(f.ctx, ownerID, playlist.ID, "token-"+playlist.ID, &public)
+	playlist, err = f.playlists.Share(f.ctx, ownerID, playlist.ID, "token-"+playlist.ID, &public, true)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestStoreListsOnlyTracksInPublicPlaylists(t *testing.T) {
 	// Making the playlist link-only takes the track out of the store at
 	// once, before any pruning.
 	notPublic := false
-	if _, err := f.playlists.Share(f.ctx, alice.ID, playlist.ID, *playlist.ShareToken, &notPublic); err != nil {
+	if _, err := f.playlists.Share(f.ctx, alice.ID, playlist.ID, *playlist.ShareToken, &notPublic, true); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.listed(StoreQuery{}); len(got) != 0 {

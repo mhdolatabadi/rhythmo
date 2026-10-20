@@ -40,6 +40,8 @@ abstract interface class LikesApi {
   Future<List<LikedSong>> likedSongs(String token);
 
   /// Publishes one of the listener's own tracks to the store, or makes it
-  /// private again; returns whether it is published now.
-  Future<bool> setPublished(String token, String trackId, bool published);
+  /// private again; returns where it stands now. Unless the account is
+  /// verified, publishing only asks an admin (#322) and is pending.
+  Future<PublishState> setPublished(
+      String token, String trackId, bool published);
 }

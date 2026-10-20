@@ -407,3 +407,18 @@ func TestPublicPagesHaveTheirOwnShareImages(t *testing.T) {
 		t.Errorf("store listing image = %s", image)
 	}
 }
+
+// List rows stay scannable; detailed size and format belong to the song page.
+func TestStoreRowsShowArtistWithoutFileSize(t *testing.T) {
+	site, _ := storeSite(t, AnonymousLimits{})
+	page := get(site, "/store").Body.String()
+	if !strings.Contains(page, `<span class="sub"><bdi>AC/DC</bdi></span>`) {
+		t.Fatal("store row must show the artist")
+	}
+	if strings.Contains(page, "۳۰٫۴ مگابایت") {
+		t.Fatal("store rows must not show file size")
+	}
+	if !strings.Contains(get(site, storeSongPath).Body.String(), "۳۰٫۴ مگابایت") {
+		t.Fatal("song details must retain file size")
+	}
+}

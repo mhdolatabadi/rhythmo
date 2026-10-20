@@ -31,7 +31,8 @@ Track own(String id,
         {String? title,
         bool published = false,
         int likes = 0,
-        bool liked = false}) =>
+        bool liked = false,
+        String? publishReview}) =>
     Track(
       id: id,
       title: title ?? 'Track $id',
@@ -39,6 +40,7 @@ Track own(String id,
       contentType: 'audio/mpeg',
       sizeBytes: 2 * 1024 * 1024,
       published: published,
+      publishReview: publishReview,
       likeCount: likes,
       liked: liked,
     );
@@ -76,11 +78,16 @@ class FakeLikesApi implements LikesApi {
   }
 
   @override
-  Future<bool> setPublished(String token, String trackId, bool publish) async {
+  Future<PublishState> setPublished(
+      String token, String trackId, bool publish) async {
     calls.add('${publish ? 'publish' : 'unpublish'}:$trackId');
+    if (publish && needsReview) return PublishState.pending;
     published[trackId] = publish;
-    return publish;
+    return publish ? PublishState.published : PublishState.private;
   }
+
+  /// The owner isn't verified: publishing only asks an admin (#322).
+  bool needsReview = false;
 }
 
 Widget _app(Widget home) => MaterialApp(
@@ -227,6 +234,10 @@ void main() {
             ],
             'hasMore': request.url.queryParameters['offset'] == '0',
           },
+        _ when path.endsWith('t2/published') => {
+            'published': false,
+            'review': 'pending'
+          },
         _ when path.endsWith('/published') => {
             'published': request.method == 'PUT'
           },
@@ -254,10 +265,12 @@ void main() {
             .map((r) => r.url.query),
         ['limit=100&offset=0', 'limit=100&offset=2']);
 
-    expect(await client.setPublished('tok', 't1', true), isTrue);
+    expect(
+        await client.setPublished('tok', 't1', true), PublishState.published);
     expect(sent.last.method, 'PUT');
     expect(sent.last.url.path, '/api/v1/tracks/t1/published');
-    expect(await client.setPublished('tok', 't1', false), isFalse);
+    expect(await client.setPublished('tok', 't1', false), PublishState.private);
+    expect(await client.setPublished('tok', 't2', true), PublishState.pending);
   });
 
   test('my published tracks sort by likes', () {
@@ -428,6 +441,32 @@ void main() {
       expect(likes.calls, contains('like:t1'));
       expect(find.bySemanticsLabel(RegExp('منتشرشده، پسندیده‌ای، ۱۳ پسند')),
           findsOneWidget);
+    });
+
+    testWidgets('an unverified owner asks an admin to publish', (tester) async {
+      final tracks = FakeTracksApi([
+        own('t1', title: 'در انتظار', publishReview: 'pending'),
+        own('t2', title: 'خصوصی'),
+      ]);
+      final likes = FakeLikesApi()..needsReview = true;
+      await pumpLibrary(tester, tracks, likes);
+      expect(tester.takeException(), isNull);
+      expect(find.bySemanticsLabel(RegExp('در انتظار تأیید مدیر')),
+          findsOneWidget);
+
+      await tester.tap(find.byTooltip('اقدامات آهنگ').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('انتشار در استور'));
+      await tester.pumpAndSettle();
+      expect(likes.calls, contains('publish:t2'));
+      expect(find.textContaining('برای مدیر فرستاده شد'), findsOneWidget);
+
+      // A pending request is withdrawn from the same menu.
+      await tester.tap(find.byTooltip('اقدامات آهنگ').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('لغو درخواست انتشار'));
+      await tester.pumpAndSettle();
+      expect(likes.calls, contains('unpublish:t1'));
     });
 
     testWidgets('the «پسندیده‌ها» tab lists server likes', (tester) async {

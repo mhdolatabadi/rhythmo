@@ -21,6 +21,10 @@ type Playlist struct {
 	// IsPublic lists a shared playlist for everyone to discover; otherwise
 	// only people with its link find it.
 	IsPublic bool
+	// PublicReview is ReviewPending while an unverified owner's request to
+	// list it publicly waits for an admin (#322), ReviewRejected after an
+	// admin turned it down, and nil otherwise.
+	PublicReview *string
 	// CollabToken is set while people can join the playlist by its
 	// collaboration link; only the owner ever sees it.
 	CollabToken *string
@@ -49,7 +53,7 @@ var ErrForbidden = errors.New("not allowed")
 var ErrShareTokenTaken = errors.New("share token is already in use")
 
 // playlistColumnNames is the one list of columns scanPlaylist reads, in order.
-var playlistColumnNames = []string{"id::text", "owner_id::text", "name", "share_token", "is_public", "collab_token", "created_at", "updated_at"}
+var playlistColumnNames = []string{"id::text", "owner_id::text", "name", "share_token", "is_public", "public_review", "collab_token", "created_at", "updated_at"}
 
 var (
 	playlistColumns          = strings.Join(playlistColumnNames, ", ")
@@ -58,7 +62,7 @@ var (
 
 func scanPlaylist(row pgx.Row) (Playlist, error) {
 	var p Playlist
-	err := row.Scan(&p.ID, &p.OwnerID, &p.Name, &p.ShareToken, &p.IsPublic, &p.CollabToken, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.OwnerID, &p.Name, &p.ShareToken, &p.IsPublic, &p.PublicReview, &p.CollabToken, &p.CreatedAt, &p.UpdatedAt)
 	return p, err
 }
 
@@ -113,6 +117,7 @@ func (p *Playlists) ListForUser(ctx context.Context, userID string) ([]Playlist,
 			&playlist.Name,
 			&playlist.ShareToken,
 			&playlist.IsPublic,
+			&playlist.PublicReview,
 			&playlist.CollabToken,
 			&playlist.CreatedAt,
 			&playlist.UpdatedAt,
@@ -308,12 +313,21 @@ func (p *Playlists) Delete(ctx context.Context, ownerID, playlistID string) erro
 
 // Share makes the playlist shared with the given token, or keeps the token
 // it already has, so sharing twice gives the same link. A non-nil public
-// sets whether it is listed for everyone; nil keeps what it was.
-func (p *Playlists) Share(ctx context.Context, ownerID, playlistID, token string, public *bool) (Playlist, error) {
+// sets whether it is listed for everyone; nil keeps what it was. Without
+// direct (an owner who is neither verified nor an admin, #322), listing a
+// playlist that isn't public yet only asks for an admin's approval: it stays
+// link-only with a pending review. Making it link-only withdraws a request.
+func (p *Playlists) Share(ctx context.Context, ownerID, playlistID, token string, public *bool, direct bool) (Playlist, error) {
 	playlist, err := scanPlaylist(p.pool.QueryRow(ctx, `
-		UPDATE playlists SET share_token = COALESCE(share_token, $3), is_public = COALESCE($4, is_public)
+		UPDATE playlists SET share_token = COALESCE(share_token, $3),
+			is_public = CASE WHEN $4::boolean IS NULL THEN is_public WHEN $4 THEN is_public OR $5 ELSE false END,
+			public_review = CASE WHEN $4::boolean IS NULL THEN public_review
+				WHEN $4 AND NOT $5 AND NOT is_public THEN 'pending' END,
+			public_review_at = CASE WHEN $4::boolean IS NULL THEN public_review_at
+				WHEN $4 AND NOT $5 AND NOT is_public
+				THEN CASE WHEN public_review = 'pending' THEN public_review_at ELSE now() END END
 		WHERE id::text = $1 AND owner_id::text = $2
-		RETURNING `+playlistColumns, playlistID, ownerID, token, public))
+		RETURNING `+playlistColumns, playlistID, ownerID, token, public, direct))
 	var pgErr *pgconn.PgError
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -325,10 +339,12 @@ func (p *Playlists) Share(ctx context.Context, ownerID, playlistID, token string
 }
 
 // Unshare makes the playlist private; its link stops working for good and
-// it is no longer listed. Its likes are kept for if it is shared again.
+// it is no longer listed, and a request to list it is withdrawn. Its likes
+// are kept for if it is shared again.
 func (p *Playlists) Unshare(ctx context.Context, ownerID, playlistID string) error {
 	tag, err := p.pool.Exec(ctx, `
-		UPDATE playlists SET share_token = NULL, is_public = false
+		UPDATE playlists SET share_token = NULL, is_public = false,
+			public_review = NULL, public_review_at = NULL
 		WHERE id::text = $1 AND owner_id::text = $2
 	`, playlistID, ownerID)
 	if err != nil {
@@ -355,7 +371,7 @@ func (p *Playlists) ForShareToken(ctx context.Context, token string) (SharedPlay
 		FROM playlists JOIN users ON users.id = playlists.owner_id
 		WHERE playlists.share_token = $1
 	`, token).Scan(&shared.ID, &shared.OwnerID, &shared.Name, &shared.ShareToken,
-		&shared.IsPublic, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.OwnerEmail)
+		&shared.IsPublic, &shared.PublicReview, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.OwnerEmail)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SharedPlaylist{}, ErrNotFound
 	}
@@ -623,6 +639,31 @@ func (p *Playlists) SetPopularHidden(ctx context.Context, token, actorID string,
 			INSERT INTO popular_playlist_audit (playlist_id, actor_id, hidden)
 			VALUES ($1::uuid, $2::uuid, $3)
 		`, playlistID, actorID, hidden)
+		return err
+	})
+}
+
+// DeleteShared deletes the playlist shared with token for the admin
+// actorID, whoever owns it, and records what was deleted. The tracks stay
+// in their owners' libraries. It is ErrNotFound when no playlist is shared
+// with token.
+func (p *Playlists) DeleteShared(ctx context.Context, token, actorID string) error {
+	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error {
+		var playlistID, ownerID, name string
+		err := tx.QueryRow(ctx, `
+			DELETE FROM playlists WHERE share_token = $1
+			RETURNING id::text, owner_id::text, name
+		`, token).Scan(&playlistID, &ownerID, &name)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO playlist_deletion_audit (playlist_id, owner_id, name, actor_id)
+			VALUES ($1::uuid, $2::uuid, $3, $4::uuid)
+		`, playlistID, ownerID, name, actorID)
 		return err
 	})
 }

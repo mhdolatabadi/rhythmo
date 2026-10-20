@@ -66,6 +66,34 @@ jobs:
           # 10.0.2.2 is the host from inside the emulator; nothing listens on port 9.
           script: flutter test integration_test --dart-define=API_BASE_URL=http://10.0.2.2:9
 
+  public-design:
+    runs-on: ubuntu-latest
+    env:
+      RHYTHMO_PUBLIC_PREVIEW_DIR: ${{ github.workspace }}/public-preview
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Render public pages from the real handlers
+        working-directory: server
+        run: go test ./internal/httpapi -run '^TestPublicDesignPreview$' -count=1
+      - name: Check mobile and desktop public layouts
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: |
+          npm install --prefix "$RUNNER_TEMP/public-browser" playwright@1.58.2
+          export NODE_PATH="$RUNNER_TEMP/public-browser/node_modules"
+          export CHROME_PATH="$(command -v google-chrome)"
+          node tool/check_public_design.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-design-previews
+          path: public-preview/*.png
+          if-no-files-found: ignore
+
   transcription:
     runs-on: ubuntu-latest
     steps:

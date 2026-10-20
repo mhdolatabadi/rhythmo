@@ -464,7 +464,10 @@ class PlaylistDetailScreen extends StatefulWidget {
 
 class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   Playlist? playlist;
-  bool busy = true;
+  bool loading = true;
+
+  /// A change is on its way to the server; the page stays in place.
+  bool saving = false;
 
   @override
   void initState() {
@@ -477,7 +480,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     if (!mounted) return;
     setState(() {
       playlist = loaded;
-      busy = false;
+      loading = false;
     });
   }
 
@@ -549,12 +552,12 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   }
 
   Future<void> _save(List<String> ids) async {
-    setState(() => busy = true);
+    setState(() => saving = true);
     final saved = await widget.controller.replaceTracks(widget.playlistId, ids);
     if (!mounted) return;
     setState(() {
-      playlist = saved;
-      busy = false;
+      playlist = saved ?? playlist;
+      saving = false;
     });
     if (saved == null) {
       _message('ذخیرهٔ فهرست پخش ناموفق بود.');
@@ -616,132 +619,229 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     final current = playlist;
     return Scaffold(
       appBar: AppBar(
-        title: Text(current?.name ?? 'فهرست پخش'),
+        backgroundColor: RhythmoColors.transparent,
+        bottom: saving
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(2),
+                child: LinearProgressIndicator(minHeight: 2),
+              )
+            : null,
         actions: [
-          // A member adds and removes their own tracks; the rest is the
-          // owner's.
-          if (current != null && !current.isOwner)
-            IconButton(
-              tooltip: 'ترک فهرست پخش',
-              onPressed: _leave,
-              icon: const Icon(RhythmoIcons.signOut),
-            )
-          else ...[
-            IconButton(
-              tooltip: 'دعوت دوستان و مدیریت اعضا',
-              onPressed: current == null ? null : _collab,
-              icon: Icon(current?.collabToken == null
-                  ? RhythmoIcons.userPlus
-                  : RhythmoIcons.usersFill),
+          if (current != null)
+            PopupMenuButton<_PlaylistAction>(
+              tooltip: 'گزینه‌های فهرست پخش',
+              icon: const Icon(RhythmoIcons.dotsThreeVertical),
+              onSelected: (action) => switch (action) {
+                _PlaylistAction.rename => _rename(),
+                _PlaylistAction.delete => _delete(),
+                _PlaylistAction.leave => _leave(),
+              },
+              itemBuilder: (context) {
+                final danger = Theme.of(context).colorScheme.error;
+                // A member adds and removes their own tracks; the rest is
+                // the owner's.
+                return current.isOwner
+                    ? [
+                        const PopupMenuItem(
+                          value: _PlaylistAction.rename,
+                          child: _MenuRow(
+                            icon: RhythmoIcons.pencilSimple,
+                            label: 'تغییر نام',
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: _PlaylistAction.delete,
+                          child: _MenuRow(
+                            icon: RhythmoIcons.trash,
+                            label: 'حذف فهرست پخش',
+                            color: danger,
+                          ),
+                        ),
+                      ]
+                    : [
+                        PopupMenuItem(
+                          value: _PlaylistAction.leave,
+                          child: _MenuRow(
+                            icon: RhythmoIcons.signOut,
+                            label: 'ترک فهرست پخش',
+                            color: danger,
+                          ),
+                        ),
+                      ];
+              },
             ),
-            IconButton(
-              tooltip: 'اشتراک‌گذاری',
-              onPressed: current == null ? null : _share,
-              icon: Icon(current?.shareToken == null
-                  ? RhythmoIcons.shareNetwork
-                  : RhythmoIcons.link),
-            ),
-            IconButton(
-              tooltip: 'تغییر نام',
-              onPressed: current == null ? null : _rename,
-              icon: const Icon(RhythmoIcons.pencilSimple),
-            ),
-            IconButton(
-              tooltip: 'حذف',
-              onPressed: current == null ? null : _delete,
-              icon: const Icon(RhythmoIcons.trash),
-            ),
-          ],
+          const SizedBox(width: RhythmoSpace.sm),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: current == null || busy ? null : _selectTracks,
-        icon: const Icon(RhythmoIcons.plusCircle),
-        label: const Text('مدیریت آهنگ‌ها'),
-      ),
-      body: busy
-          ? const Center(child: CircularProgressIndicator())
-          : current == null
-              ? _Retry(onRetry: _load)
-              : Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 900),
-                    child: current.tracks.isEmpty
-                        ? _PlaylistEmptyState(
-                            message: 'برای این فهرست پخش آهنگ انتخاب کن.',
-                            action: 'انتخاب از کتابخانه',
-                            onPressed: _selectTracks,
-                          )
-                        : Column(
-                            children: [
-                              _PlaylistDetailHeader(
-                                playlist: current,
-                                onPlay: () =>
-                                    widget.player.playFrom(current.tracks, 0),
-                                onShuffle: () =>
-                                    widget.player.playShuffled(current.tracks),
-                              ),
-                              Expanded(
-                                child: ReorderableListView.builder(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(8, 8, 8, 112),
-                                  itemCount: current.tracks.length,
-                                  onReorderItem: (oldIndex, newIndex) {
-                                    final tracks =
-                                        List<Track>.from(current.tracks);
-                                    tracks.insert(
-                                      newIndex,
-                                      tracks.removeAt(oldIndex),
-                                    );
-                                    setState(() {
-                                      playlist = current.withTracks(tracks);
-                                    });
-                                    _save(tracks
-                                        .map((track) => track.id)
-                                        .toList());
-                                  },
-                                  itemBuilder: (context, index) {
-                                    final track = current.tracks[index];
-                                    return ListTile(
-                                      key: ValueKey(track.id),
-                                      leading: const _PlaylistTrackHandle(),
-                                      title: Text(
-                                        track.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      subtitle: Text(
-                                        [
-                                          track.artist?.trim().isNotEmpty ==
-                                                  true
-                                              ? track.artist!
-                                              : 'خواننده نامشخص',
-                                          if (track.addedBy case final who?)
-                                            'افزوده‌ی $who',
-                                        ].join(' · '),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      trailing: current.canRemove(track)
-                                          ? IconButton(
-                                              tooltip: 'حذف از فهرست پخش',
-                                              onPressed: () =>
-                                                  _removeTrack(track),
-                                              icon: const Icon(
-                                                  RhythmoIcons.minusCircle),
-                                            )
-                                          : null,
-                                      onTap: () => widget.player
-                                          .playTapped(current.tracks, index),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
+      extendBodyBehindAppBar: true,
+      body: RhythmoBackdrop(
+        child: loading
+            ? const RhythmoStateView.loading(
+                title: 'در حال بارگذاری فهرست پخش…')
+            : current == null
+                ? _Retry(onRetry: _load)
+                : ListenableBuilder(
+                    listenable: widget.player,
+                    builder: (context, _) => _PlaylistBody(
+                      playlist: current,
+                      playingId: widget.player.track?.id,
+                      saving: saving,
+                      onPlay: () => widget.player.playFrom(current.tracks, 0),
+                      onShuffle: () =>
+                          widget.player.playShuffled(current.tracks),
+                      onCollab: current.isOwner ? _collab : null,
+                      onShare: current.isOwner ? _share : null,
+                      onSelectTracks: _selectTracks,
+                      onTapTrack: (index) =>
+                          widget.player.playTapped(current.tracks, index),
+                      onRemoveTrack: _removeTrack,
+                      onReorder: _reorder,
+                    ),
                   ),
-                ),
+      ),
     );
+  }
+
+  void _reorder(int oldIndex, int newIndex) {
+    final current = playlist;
+    if (current == null) return;
+    final tracks = List<Track>.from(current.tracks);
+    tracks.insert(newIndex, tracks.removeAt(oldIndex));
+    setState(() => playlist = current.withTracks(tracks));
+    _save(tracks.map((track) => track.id).toList());
+  }
+}
+
+enum _PlaylistAction { rename, delete, leave }
+
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({required this.icon, required this.label, this.color});
+
+  final IconData icon;
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: RhythmoSpace.md),
+          Text(label, style: TextStyle(color: color)),
+        ],
+      );
+}
+
+/// The playlist page: a hero with the cover and the play controls, then the
+/// tracks under a heading that holds the add action. Everything sits in one
+/// centred column so nothing touches the window edges, and nothing floats
+/// over the list.
+class _PlaylistBody extends StatelessWidget {
+  const _PlaylistBody({
+    required this.playlist,
+    required this.playingId,
+    required this.saving,
+    required this.onPlay,
+    required this.onShuffle,
+    required this.onCollab,
+    required this.onShare,
+    required this.onSelectTracks,
+    required this.onTapTrack,
+    required this.onRemoveTrack,
+    required this.onReorder,
+  });
+
+  final Playlist playlist;
+  final String? playingId;
+  final bool saving;
+  final VoidCallback onPlay;
+  final VoidCallback onShuffle;
+  final VoidCallback? onCollab;
+  final VoidCallback? onShare;
+  final VoidCallback onSelectTracks;
+  final void Function(int index) onTapTrack;
+  final void Function(Track track) onRemoveTrack;
+  final void Function(int oldIndex, int newIndex) onReorder;
+
+  @override
+  Widget build(BuildContext context) {
+    final tracks = playlist.tracks;
+    return LayoutBuilder(builder: (context, constraints) {
+      final gutter = constraints.maxWidth > RhythmoSpace.pageWidth + 48
+          ? (constraints.maxWidth - RhythmoSpace.pageWidth) / 2
+          : RhythmoSpace.lg;
+      final side = EdgeInsets.symmetric(horizontal: gutter);
+      return CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: side.add(EdgeInsets.only(
+                top: MediaQuery.paddingOf(context).top + kToolbarHeight)),
+            sliver: SliverToBoxAdapter(
+              child: _PlaylistDetailHeader(
+                playlist: playlist,
+                onPlay: onPlay,
+                onShuffle: onShuffle,
+                onCollab: onCollab,
+                onShare: onShare,
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: side,
+            sliver: SliverToBoxAdapter(
+              child: RhythmoSectionHeader(
+                title: 'آهنگ‌ها',
+                padding: const EdgeInsetsDirectional.fromSTEB(RhythmoSpace.sm,
+                    RhythmoSpace.xxl, RhythmoSpace.xs, RhythmoSpace.sm),
+                trailing: FilledButton.tonalIcon(
+                  onPressed: saving ? null : onSelectTracks,
+                  icon: const Icon(RhythmoIcons.plus, size: 20),
+                  label: const Text('مدیریت آهنگ‌ها'),
+                ),
+              ),
+            ),
+          ),
+          if (tracks.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _PlaylistEmptyState(
+                message: 'برای این فهرست پخش آهنگ انتخاب کن.',
+                action: 'انتخاب از کتابخانه',
+                onPressed: onSelectTracks,
+              ),
+            )
+          else
+            SliverPadding(
+              padding: side.add(
+                  rhythmoListBottomPadding(context, extra: RhythmoSpace.xxxl)),
+              sliver: SliverReorderableList(
+                itemCount: tracks.length,
+                onReorderItem: onReorder,
+                proxyDecorator: (child, index, animation) => Material(
+                  color: RhythmoColors.surfaceRaised,
+                  elevation: 8,
+                  shadowColor: RhythmoColors.shadow,
+                  borderRadius: RhythmoRadii.control,
+                  child: child,
+                ),
+                itemBuilder: (context, index) {
+                  final track = tracks[index];
+                  return _PlaylistTrackRow(
+                    key: ValueKey(track.id),
+                    index: index,
+                    track: track,
+                    playing: track.id == playingId,
+                    onTap: () => onTapTrack(index),
+                    onRemove: playlist.canRemove(track) && !saving
+                        ? () => onRemoveTrack(track)
+                        : null,
+                    canRemove: playlist.canRemove(track),
+                  );
+                },
+              ),
+            ),
+        ],
+      );
+    });
   }
 }
 
@@ -750,83 +850,158 @@ class _PlaylistDetailHeader extends StatelessWidget {
     required this.playlist,
     required this.onPlay,
     required this.onShuffle,
+    required this.onCollab,
+    required this.onShare,
   });
 
   final Playlist playlist;
   final VoidCallback onPlay;
   final VoidCallback onShuffle;
 
+  /// Owner-only: null hides the control.
+  final VoidCallback? onCollab;
+  final VoidCallback? onShare;
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: GlassSurface(
-        blur: 12,
-        radius: 24,
-        shadow: false,
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            _PlaylistCover(trackCount: playlist.displayTrackCount, size: 92),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final empty = playlist.tracks.isEmpty;
+    return LayoutBuilder(builder: (context, constraints) {
+      final wide = constraints.maxWidth >= 600;
+      final align = wide ? CrossAxisAlignment.start : CrossAxisAlignment.center;
+      final textAlign = wide ? TextAlign.start : TextAlign.center;
+      final eyebrow =
+          playlist.isCollaborative ? 'فهرست پخش مشترک' : 'فهرست پخش';
+      final details = Column(
+        crossAxisAlignment: align,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            eyebrow,
+            style: theme.textTheme.labelLarge?.copyWith(color: colors.primary),
+          ),
+          const SizedBox(height: RhythmoSpace.xs),
+          Text(
+            playlist.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: textAlign,
+            style: (wide
+                    ? theme.textTheme.displaySmall
+                    : theme.textTheme.headlineMedium)
+                ?.copyWith(fontWeight: FontWeight.w800, height: 1.3),
+          ),
+          const SizedBox(height: RhythmoSpace.sm),
+          Text(
+            [
+              '${persianDigits(playlist.displayTrackCount)} قطعه موسیقی',
+              if (!playlist.isOwner && playlist.owner != null)
+                'از ${playlist.owner}'
+              else if (playlist.members.isNotEmpty)
+                'مشترک با ${persianDigits(playlist.members.length)} نفر',
+            ].join(' · '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: textAlign,
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: colors.onSurfaceVariant),
+          ),
+          const SizedBox(height: RhythmoSpace.xl),
+          Wrap(
+            alignment: wide ? WrapAlignment.start : WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: RhythmoSpace.sm,
+            runSpacing: RhythmoSpace.sm,
+            children: [
+              FilledButton.icon(
+                onPressed: empty ? null : onPlay,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(112, RhythmoSpace.target),
+                ),
+                icon: const Icon(RhythmoIcons.playFill, size: 20),
+                label: const Text('پخش'),
+              ),
+              IconButton.filledTonal(
+                tooltip: 'پخش تصادفی',
+                onPressed: empty ? null : onShuffle,
+                icon: const Icon(RhythmoIcons.shuffle),
+              ),
+              if (onCollab != null)
+                IconButton.outlined(
+                  tooltip: 'دعوت دوستان و مدیریت اعضا',
+                  onPressed: onCollab,
+                  icon: Icon(playlist.collabToken == null
+                      ? RhythmoIcons.userPlus
+                      : RhythmoIcons.users),
+                ),
+              if (onShare != null)
+                IconButton.outlined(
+                  tooltip: 'اشتراک‌گذاری',
+                  onPressed: onShare,
+                  icon: Icon(playlist.shareToken == null
+                      ? RhythmoIcons.shareNetwork
+                      : RhythmoIcons.link),
+                ),
+            ],
+          ),
+        ],
+      );
+      final cover = _PlaylistCover(
+        trackCount: playlist.displayTrackCount,
+        size: wide ? 184 : 152,
+        showCount: false,
+      );
+      return Container(
+        padding: EdgeInsets.all(wide ? RhythmoSpace.xxl : RhythmoSpace.xl),
+        decoration: BoxDecoration(
+          borderRadius: RhythmoRadii.panel,
+          border: Border.all(color: RhythmoColors.softBorder),
+          gradient: LinearGradient(
+            begin: AlignmentDirectional.topStart
+                .resolve(Directionality.of(context)),
+            end: AlignmentDirectional.bottomEnd
+                .resolve(Directionality.of(context)),
+            colors: [
+              colors.primary.withValues(alpha: 0.16),
+              colors.secondary.withValues(alpha: 0.08),
+              colors.surface.withValues(alpha: 0.35),
+            ],
+            stops: const [0, 0.5, 1],
+          ),
+        ),
+        child: wide
+            ? Row(
                 children: [
-                  Text(
-                    playlist.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    [
-                      '${persianDigits(playlist.displayTrackCount)} قطعه موسیقی',
-                      if (!playlist.isOwner && playlist.owner != null)
-                        'از ${playlist.owner}'
-                      else if (playlist.members.isNotEmpty)
-                        'مشترک با ${persianDigits(playlist.members.length)} نفر',
-                    ].join(' · '),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      FilledButton.icon(
-                        onPressed: playlist.tracks.isEmpty ? null : onPlay,
-                        icon: const Icon(RhythmoIcons.playFill),
-                        label: const Text('پخش'),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        tooltip: 'پخش تصادفی',
-                        onPressed: playlist.tracks.isEmpty ? null : onShuffle,
-                        icon: const Icon(RhythmoIcons.shuffle),
-                      ),
-                    ],
-                  ),
+                  cover,
+                  const SizedBox(width: RhythmoSpace.xxl),
+                  Expanded(child: details),
+                ],
+              )
+            : Column(
+                children: [
+                  cover,
+                  const SizedBox(height: RhythmoSpace.xl),
+                  details,
                 ],
               ),
-            ),
-          ],
-        ),
-      ),
-    );
+      );
+    });
   }
 }
 
 class _PlaylistCover extends StatelessWidget {
-  const _PlaylistCover({required this.trackCount, required this.size});
+  const _PlaylistCover({
+    required this.trackCount,
+    required this.size,
+    this.showCount = true,
+  });
 
   final int trackCount;
   final double size;
+
+  /// Off where the count is written beside the cover.
+  final bool showCount;
 
   @override
   Widget build(BuildContext context) {
@@ -857,41 +1032,149 @@ class _PlaylistCover extends StatelessWidget {
             size: size * 0.36,
             color: RhythmoColors.onBrand,
           ),
-          PositionedDirectional(
-            end: 10,
-            bottom: 10,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: colors.surface.withValues(alpha: 0.66),
-                borderRadius: BorderRadius.circular(RhythmoRadii.pill),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                child: Text(
-                  persianDigits(trackCount),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: colors.onSurface,
-                        fontWeight: FontWeight.w700,
-                      ),
+          if (showCount)
+            PositionedDirectional(
+              end: 10,
+              bottom: 10,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.surface.withValues(alpha: 0.66),
+                  borderRadius: BorderRadius.circular(RhythmoRadii.pill),
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  child: Text(
+                    persianDigits(trackCount),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: colors.onSurface,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _PlaylistTrackHandle extends StatelessWidget {
-  const _PlaylistTrackHandle();
+/// One track on the playlist page: its number, artwork, title and artist,
+/// then a quiet remove button and the handle that drags it to a new place.
+class _PlaylistTrackRow extends StatelessWidget {
+  const _PlaylistTrackRow({
+    super.key,
+    required this.index,
+    required this.track,
+    required this.playing,
+    required this.onTap,
+    required this.onRemove,
+    required this.canRemove,
+  });
+
+  final int index;
+  final Track track;
+  final bool playing;
+  final VoidCallback onTap;
+  final VoidCallback? onRemove;
+  final bool canRemove;
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
-      width: 40,
-      height: 40,
-      child: Icon(RhythmoIcons.dotsSixVertical),
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final artist = track.artist?.trim().isNotEmpty == true
+        ? track.artist!
+        : 'خواننده نامشخص';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: RhythmoSpace.xxs),
+      child: Material(
+        color: playing
+            ? colors.primaryContainer.withValues(alpha: 0.45)
+            : RhythmoColors.transparent,
+        borderRadius: RhythmoRadii.control,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 64),
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(RhythmoSpace.sm,
+                  RhythmoSpace.sm, RhythmoSpace.xs, RhythmoSpace.sm),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 28,
+                    child: Text(
+                      persianDigits(index + 1),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color:
+                            playing ? colors.primary : colors.onSurfaceVariant,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: RhythmoSpace.sm),
+                  RhythmoArtworkTile(seed: track.id, active: playing),
+                  const SizedBox(width: RhythmoSpace.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          track.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: playing ? colors.primary : null,
+                          ),
+                        ),
+                        Text(
+                          [
+                            artist,
+                            if (track.addedBy case final who?) 'افزوده‌ی $who',
+                          ].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: colors.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (canRemove)
+                    IconButton(
+                      tooltip: 'حذف از فهرست پخش',
+                      onPressed: onRemove,
+                      color: colors.onSurfaceVariant,
+                      icon: const Icon(RhythmoIcons.x, size: 20),
+                    ),
+                  ReorderableDragStartListener(
+                    index: index,
+                    child: Tooltip(
+                      message: 'برای جابه‌جایی بکش',
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.grab,
+                        child: SizedBox.square(
+                          dimension: RhythmoSpace.target,
+                          child: Icon(
+                            RhythmoIcons.dotsSixVertical,
+                            size: 22,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

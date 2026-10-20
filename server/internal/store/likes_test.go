@@ -16,14 +16,14 @@ func TestPublishingOneTrackListsItInTheStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := f.tracks.SetPublished(f.ctx, bob.ID, solo.ID, true); !errors.Is(err, ErrNotFound) {
+	if _, err := f.tracks.SetPublished(f.ctx, bob.ID, solo.ID, true, true); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("bob publishing alice's track = %v", err)
 	}
-	published, err := f.tracks.SetPublished(f.ctx, alice.ID, solo.ID, true)
+	published, err := f.tracks.SetPublished(f.ctx, alice.ID, solo.ID, true, true)
 	if err != nil || published.PublishedAt == nil {
 		t.Fatalf("publish = %+v, %v", published.PublishedAt, err)
 	}
-	again, _ := f.tracks.SetPublished(f.ctx, alice.ID, solo.ID, true)
+	again, _ := f.tracks.SetPublished(f.ctx, alice.ID, solo.ID, true, true)
 	if !again.PublishedAt.Equal(*published.PublishedAt) {
 		t.Fatal("publishing again moved the publish time")
 	}
@@ -35,11 +35,11 @@ func TestPublishingOneTrackListsItInTheStore(t *testing.T) {
 	// Unpublishing takes the solo track out at once; a track still in a
 	// public playlist stays.
 	for _, track := range []Track{solo, inPlaylist} {
-		if _, err := f.tracks.SetPublished(f.ctx, alice.ID, track.ID, track.ID == inPlaylist.ID); err != nil {
+		if _, err := f.tracks.SetPublished(f.ctx, alice.ID, track.ID, track.ID == inPlaylist.ID, true); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := f.tracks.SetPublished(f.ctx, alice.ID, inPlaylist.ID, false); err != nil {
+	if _, err := f.tracks.SetPublished(f.ctx, alice.ID, inPlaylist.ID, false, true); err != nil {
 		t.Fatal(err)
 	}
 	if got := titles(f.listed(StoreQuery{})); got != "in playlist" {
