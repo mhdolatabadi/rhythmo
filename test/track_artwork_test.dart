@@ -90,7 +90,7 @@ void main() {
   testWidgets('cover replaces placeholder at narrow width; no cover falls back',
       (tester) async {
     final picture = base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
     );
     final pending = Completer<Uint8List?>();
     final controller = TrackArtworkController((_) => pending.future);

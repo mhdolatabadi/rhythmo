@@ -96,3 +96,48 @@ func TestArtworkRejectsInvalidImage(t *testing.T) {
 		}
 	}
 }
+
+func TestPublicArtworkRechecksVisibilityAndDoesNotCountPlays(t *testing.T) {
+	api := newTestAPI(t)
+	file := artworkMP3(t)
+	track := store.Track{ID: "public-cover", OwnerID: "alice", Status: store.TrackReady,
+		StorageKey: "artwork-test/public", SizeBytes: int64(len(file))}
+	objects := &fakeObjects{objects: map[string][]byte{track.StorageKey: file}}
+	catalog := &fakeCatalog{entry: store.StoreEntry{ID: storeEntryID, Track: track}}
+	token, err := newShareToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := &sharingStore{token: &token, public: true, tracks: []store.Track{track}}
+	handler := NewHandler(Config{
+		Store: NewCatalogHandlers(catalog, api.tokens, objects, AnonymousLimits{}),
+		Playlists: NewPlaylistHandlers(shared, api.tokens).
+			WithSharing(shared, objects, SavePolicy{}).
+			WithAnonymous(AnonymousLimits{}),
+	})
+	get := func(path string) int {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		return response.Code
+	}
+	storePath := "/api/v1/store/tracks/" + storeEntryID + "/artwork"
+	sharePath := "/api/v1/shared-playlists/" + token + "/tracks/public-cover/artwork"
+	for _, path := range []string{storePath, sharePath} {
+		if code := get(path); code != http.StatusOK {
+			t.Fatalf("%s = %d", path, code)
+		}
+	}
+	if len(catalog.plays) != 0 {
+		t.Fatal("loading covers counted as listening")
+	}
+	if code := get("/api/v1/shared-playlists/" + token + "/tracks/outside/artwork"); code != http.StatusNotFound {
+		t.Fatalf("unshared track = %d", code)
+	}
+	catalog.hidden = true
+	shared.token = nil
+	for _, path := range []string{storePath, sharePath} {
+		if code := get(path); code != http.StatusNotFound {
+			t.Fatalf("revoked/hidden cached cover = %d", code)
+		}
+	}
+}
