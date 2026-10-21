@@ -122,16 +122,21 @@ void main() {
     await tester.tap(find.text('جست‌وجو'));
     await tester.pumpAndSettle();
     expect(api.query, 'member');
+    await tester.ensureVisible(find.text('تأیید حساب'));
     await tester.tap(find.text('تأیید حساب'));
     await tester.pumpAndSettle();
     expect(api.verified, isFalse);
-    await tester.tap(find.text('تأیید حساب').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'تأیید حساب'));
     await tester.pumpAndSettle();
     expect(api.verified, isTrue);
     expect(find.text('حساب تأییدشده'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    expect(find.text('حساب تأیید شد.'), findsNothing);
+    await tester.ensureVisible(find.text('لغو تأیید'));
     await tester.tap(find.text('لغو تأیید'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('لغو تأیید').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'لغو تأیید'));
     await tester.pumpAndSettle();
     expect(api.verified, isFalse);
   });
@@ -139,9 +144,10 @@ void main() {
   testWidgets('failed verification preserves displayed state', (tester) async {
     final api = FakeAdminApi()..fail = true;
     await pump(tester, api);
+    await tester.ensureVisible(find.text('تأیید حساب'));
     await tester.tap(find.text('تأیید حساب'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('تأیید حساب').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'تأیید حساب'));
     await tester.pumpAndSettle();
     expect(api.verified, isFalse);
     expect(find.text('تأیید نشده'), findsOneWidget);
