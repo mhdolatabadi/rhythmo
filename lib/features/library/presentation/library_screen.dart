@@ -1844,7 +1844,11 @@ class _TabScrollView extends StatelessWidget {
                     NestedScrollView.sliverOverlapAbsorberHandleFor(context),
               ),
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(side, 12, side, 128),
+              // With extendBody, Scaffold exposes the measured mini-player
+              // height through MediaQuery.padding. Also clear the 56px FAB,
+              // its 16px margin and a 24px gap above its touch target.
+              padding: EdgeInsets.fromLTRB(
+                  side, 12, side, MediaQuery.paddingOf(context).bottom + 96),
               sliver: SliverMainAxisGroup(slivers: slivers),
             ),
           ],

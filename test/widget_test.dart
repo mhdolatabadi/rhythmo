@@ -1229,7 +1229,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the last track can scroll clear of the mini player',
+    testWidgets('the last track menu clears the mini player and add button',
         (tester) async {
       await pumpPhone(tester);
       await tester.tap(find.text('Track number 0'));
@@ -1244,6 +1244,16 @@ void main() {
           of: find.text('Track number 29'), matching: find.byType(ListTile)));
       final miniPlayerTop = tester.getTopLeft(find.byTooltip('توقف')).dy - 16;
       expect(lastRow.bottom, lessThan(miniPlayerTop));
+      final add = tester.getRect(find.byTooltip('افزودن موسیقی'));
+      expect(lastRow.bottom, lessThan(add.top));
+      final row = find.ancestor(
+          of: find.text('Track number 29'), matching: find.byType(ListTile));
+      final menu =
+          find.descendant(of: row, matching: find.byTooltip('اقدامات آهنگ'));
+      expect(menu, findsOneWidget);
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+      expect(find.text('ویرایش اطلاعات آهنگ'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });
