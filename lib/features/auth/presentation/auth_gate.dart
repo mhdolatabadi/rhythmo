@@ -1,6 +1,8 @@
+import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/presentation/admin_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:rhythmo/features/feedback/feedback_screen.dart';
 import 'package:rhythmo/features/identify/application/identify_controller.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
@@ -197,6 +199,12 @@ class _AuthGateState extends State<AuthGate> {
               : _guestHome(widget.playlists!),
           AuthStatus.signedIn => LibraryScreen(
               email: controller.user!.email,
+              onFeedback: widget.adminApi is FeedbackApi
+                  ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => FeedbackScreen(
+                          api: widget.adminApi as FeedbackApi,
+                          token: () => controller.token)))
+                  : null,
               verified: controller.user!.verified,
               onVerifyEmail: controller.user!.emailVerified
                   ? null

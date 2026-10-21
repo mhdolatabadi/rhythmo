@@ -232,6 +232,7 @@ class FakeUploader implements StorageUploader {
 
   /// When set, the upload stalls halfway until it is cancelled.
   bool stall = false;
+  int burstSize = 0;
 
   @override
   Future<void> upload(
@@ -243,6 +244,9 @@ class FakeUploader implements StorageUploader {
   }) async {
     this.contentType = contentType;
     onProgress(2, 4);
+    for (var i = 0; i < burstSize; i++) {
+      onProgress(i, burstSize + 1);
+    }
     if (stall) {
       await cancelled;
       throw const UploadCancelled();
@@ -298,6 +302,15 @@ void main() {
     expect(released, isTrue,
         reason: 'the temporary picker copy must be released');
     expect(api.deleted, isEmpty);
+  });
+
+  test('a burst of upload chunks does not flood UI listeners', () async {
+    uploader.burstSize = 10000;
+    await controller.upload(_file('song.mp3'));
+    final progress = seen.where((s) => s.$1 == UploadPhase.uploading);
+    expect(progress.length, lessThan(20));
+    expect(progress.last.$2, 1);
+    expect(controller.phase, UploadPhase.done);
   });
 
   test('uploads a selected batch sequentially and reports its summary',

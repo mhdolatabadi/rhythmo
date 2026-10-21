@@ -4,6 +4,7 @@ import 'package:rhythmo/features/settings/presentation/settings_screen.dart';
 import 'package:flutter/gestures.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
@@ -243,6 +244,7 @@ class FakeLinkImportsApi implements LinkImportsApi {
 }
 
 void main() {
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   testWidgets('shows setup instructions without API configuration', (
     tester,
   ) async {
@@ -1150,7 +1152,8 @@ void main() {
 
       await tester.tap(find.widgetWithText(Tab, 'فهرست‌های پخش'));
       await tester.pumpAndSettle();
-      expect(find.text('فهرست پخش جدید'), findsOneWidget);
+      expect(find.byTooltip('فهرست پخش جدید'), findsOneWidget);
+      expect(find.text('فهرست پخش جدید'), findsNothing);
       expect(find.text('mix'), findsWidgets);
       // Adding music belongs to the tracks tab only.
       expect(find.byTooltip('افزودن موسیقی'), findsNothing);
@@ -1229,7 +1232,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the last track can scroll clear of the mini player',
+    testWidgets('the last track menu clears the mini player and add button',
         (tester) async {
       await pumpPhone(tester);
       await tester.tap(find.text('Track number 0'));
@@ -1244,6 +1247,16 @@ void main() {
           of: find.text('Track number 29'), matching: find.byType(ListTile)));
       final miniPlayerTop = tester.getTopLeft(find.byTooltip('توقف')).dy - 16;
       expect(lastRow.bottom, lessThan(miniPlayerTop));
+      final add = tester.getRect(find.byTooltip('افزودن موسیقی'));
+      expect(lastRow.bottom, lessThan(add.top));
+      final row = find.ancestor(
+          of: find.text('Track number 29'), matching: find.byType(ListTile));
+      final menu =
+          find.descendant(of: row, matching: find.byTooltip('اقدامات آهنگ'));
+      expect(menu, findsOneWidget);
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+      expect(find.text('ویرایش اطلاعات آهنگ'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

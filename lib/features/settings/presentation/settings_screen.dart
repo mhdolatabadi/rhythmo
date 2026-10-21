@@ -24,6 +24,7 @@ import 'package:rhythmo/features/settings/presentation/storage_usage_card.dart';
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
+    this.onFeedback,
     required this.cache,
     this.botLinks,
     this.library,
@@ -37,6 +38,7 @@ class SettingsScreen extends StatefulWidget {
   });
 
   /// The signed-in account; null hides the account section.
+  final VoidCallback? onFeedback;
   final String? email;
 
   /// Deletes the account; null hides the option.
@@ -144,6 +146,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               bottom: 24 + MediaQuery.paddingOf(context).bottom,
             ),
             children: [
+              if (widget.onFeedback != null)
+                ListTile(
+                    leading: const Icon(Icons.feedback_outlined),
+                    title: const Text('ارتباط با مدیر'),
+                    subtitle: const Text('گزارش باگ، درخواست قابلیت و پیام'),
+                    onTap: widget.onFeedback),
               if (widget.player?.journey case final journey?)
                 JourneySetting(journey: journey),
               if (widget.player case final player?)

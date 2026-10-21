@@ -70,8 +70,8 @@ func scanPlaylist(row pgx.Row) (Playlist, error) {
 // or a member's. Tracks of someone who left are removed when they leave;
 // this checks it again.
 func trackBelongs(tracks, pl string) string {
-	return `(` + tracks + `.owner_id = ` + pl + `.owner_id OR EXISTS (
-		SELECT 1 FROM playlist_members m WHERE m.playlist_id = ` + pl + `.id AND m.user_id = ` + tracks + `.owner_id))`
+	return `(` + tracks + `.moderated_at IS NULL AND (` + tracks + `.owner_id = ` + pl + `.owner_id OR EXISTS (
+		SELECT 1 FROM playlist_members m WHERE m.playlist_id = ` + pl + `.id AND m.user_id = ` + tracks + `.owner_id)))`
 }
 
 // canEdit is true when user $N owns playlist pl or is one of its members.
@@ -283,7 +283,7 @@ func (p *Playlists) ReplaceTracks(ctx context.Context, userID, playlistID string
 				INSERT INTO playlist_tracks (playlist_id, track_id, position)
 				SELECT $1::uuid, id, $4
 				FROM tracks
-				WHERE id::text = $2 AND status = 'ready'
+				WHERE id::text = $2 AND status = 'ready' AND moderated_at IS NULL
 				  AND (owner_id::text = $3 OR (owner_id::text = $5 AND $6))
 			`, playlistID, trackID, userID, position, current[trackID], current[trackID] != "")
 			if err != nil {
@@ -433,6 +433,11 @@ func (p *Playlists) SaveShared(
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, userID); err != nil {
 			return err
 		}
+		quota, quotaErr := effectiveQuota(ctx, tx, userID, maxOwnerBytes)
+		if quotaErr != nil {
+			return quotaErr
+		}
+		maxOwnerBytes = quota
 		var used, needed int64
 		if err := tx.QueryRow(ctx, `
 			SELECT COALESCE(SUM(size_bytes), 0)::bigint FROM tracks WHERE owner_id::text = $1

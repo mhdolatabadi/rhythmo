@@ -1,4 +1,6 @@
+import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
+import 'package:rhythmo/features/admin/data/admin_song_reports.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
@@ -339,9 +341,55 @@ class ApiClient
         IdentifyApi,
         StoreApi,
         LikesApi,
-        AdminApi {
+        AdminApi,
+        AdminSongReportsApi,
+        FeedbackApi,
+        AdminQuotaApi {
   ApiClient(this.baseUri, {http.Client? httpClient})
       : _httpClient = httpClient ?? http.Client();
+
+  @override
+  Future<void> submitFeedback(
+          String token, String kind, String subject, String body) =>
+      _send('POST', '/api/v1/feedback',
+          token: token,
+          body: {'kind': kind, 'subject': subject, 'body': body},
+          expectBody: false);
+  @override
+  Future<List<Map<String, dynamic>>> feedbackInbox(String token) async {
+    final body = await _send('GET', '/api/v1/admin/feedback', token: token);
+    return (body['feedback'] as List).cast<Map<String, dynamic>>();
+  }
+
+  @override
+  Future<void> resolveFeedback(String token, String id) =>
+      _send('POST', '/api/v1/admin/feedback/${Uri.encodeComponent(id)}/resolve',
+          token: token, expectBody: false);
+  @override
+  Future<List<AdminSongReport>> songReports(String token) async {
+    final body = await _send('GET', '/api/v1/admin/store/reports?limit=100',
+        token: token);
+    return [
+      for (final item in body['reports'] as List<dynamic>)
+        AdminSongReport.fromJson(item as Map<String, dynamic>)
+    ];
+  }
+
+  @override
+  Future<void> moderateSong(String token, String entryId,
+          {required bool remove}) =>
+      _send(remove ? 'DELETE' : 'POST',
+          '/api/v1/admin/store/tracks/${Uri.encodeComponent(entryId)}${remove ? '' : '/dismiss-reports'}',
+          token: token, expectBody: false);
+
+  @override
+  Future<AdminAccount> increaseStorageQuota(
+      String token, String accountId, int bytes) async {
+    final body = await _send('PATCH',
+        '/api/v1/admin/accounts/${Uri.encodeComponent(accountId)}/storage-quota',
+        token: token, body: {'bytes': bytes});
+    return AdminAccount.fromJson(body);
+  }
 
   static const _timeout = Duration(seconds: 15);
 

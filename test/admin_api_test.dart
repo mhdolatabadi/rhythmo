@@ -36,6 +36,44 @@ void main() {
     expect(page.hasMore, isTrue);
   });
 
+  test('song moderation uses protected admin routes', () async {
+    final calls = <String>[];
+    final client = ApiClient(uri, httpClient: MockClient((request) async {
+      expect(request.headers['Authorization'], 'Bearer admin');
+      calls.add('${request.method} ${request.url.path}');
+      if (request.method == 'GET') return http.Response('{"reports":[]}', 200);
+      return http.Response('', 204);
+    }));
+    expect(await client.songReports('admin'), isEmpty);
+    await client.moderateSong('admin', 'entry', remove: true);
+    await client.moderateSong('admin', 'entry', remove: false);
+    expect(calls, [
+      'GET /api/v1/admin/store/reports',
+      'DELETE /api/v1/admin/store/tracks/entry',
+      'POST /api/v1/admin/store/tracks/entry/dismiss-reports'
+    ]);
+  });
+
+  test('admin capacity increase uses byte quota and parses effective capacity',
+      () async {
+    final client = ApiClient(uri, httpClient: MockClient((request) async {
+      expect(request.method, 'PATCH');
+      expect(request.url.path, '/api/v1/admin/accounts/u1/storage-quota');
+      expect(jsonDecode(request.body), {'bytes': 5 * (1 << 30)});
+      return http.Response(
+          jsonEncode({
+            'id': 'u1',
+            'email': 'member@example.com',
+            'createdAt': '2026-01-01T00:00:00Z',
+            'storageQuotaBytes': 5 * (1 << 30)
+          }),
+          200);
+    }));
+    final account =
+        await client.increaseStorageQuota('admin', 'u1', 5 * (1 << 30));
+    expect(account.storageQuotaBytes, 5 * (1 << 30));
+  });
+
   test('verification patch uses server result and propagates denied access',
       () async {
     final client = ApiClient(uri, httpClient: MockClient((request) async {

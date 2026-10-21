@@ -160,6 +160,8 @@ class _PopularPlaylistsScreenState extends State<PopularPlaylistsScreen> {
     final saved = await widget.controller.setPopularHidden(playlist);
     if (!mounted) return;
     messenger.showSnackBar(SnackBar(
+      persist: false,
+      duration: const Duration(seconds: 4),
       content: Text(saved
           ? '«${playlist.name}» از فهرست‌های محبوب حذف شد.'
           : 'حذف انجام نشد. دوباره تلاش کن.'),
