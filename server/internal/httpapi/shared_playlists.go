@@ -88,6 +88,7 @@ func (h *PlaylistHandlers) registerSharing(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/playlists/{id}/share", h.handleUnshare)
 	mux.HandleFunc("GET /api/v1/shared-playlists/{token}", h.handleShared)
 	mux.HandleFunc("GET /api/v1/shared-playlists/{token}/tracks/{trackId}/stream", h.handleSharedStream)
+	mux.HandleFunc("GET /api/v1/shared-playlists/{token}/tracks/{trackId}/artwork", h.handleSharedStreamArtwork)
 	mux.HandleFunc("POST /api/v1/shared-playlists/{token}/save", h.handleSaveShared)
 	mux.HandleFunc("PUT /api/v1/shared-playlists/{token}/like", h.handleLike(true))
 	mux.HandleFunc("DELETE /api/v1/shared-playlists/{token}/like", h.handleLike(false))
@@ -381,4 +382,26 @@ func newShareToken() (string, error) {
 func validShareToken(token string) bool {
 	b, err := base64.RawURLEncoding.DecodeString(token)
 	return err == nil && len(b) == shareTokenBytes
+}
+
+func (h *PlaylistHandlers) handleSharedStreamArtwork(w http.ResponseWriter, r *http.Request) {
+	userID, ok := h.viewer(w, r, func(l AnonymousLimits) *RateLimiter { return l.View })
+	if !ok {
+		return
+	}
+	token := r.PathValue("token")
+	if !validShareToken(token) {
+		writeError(w, http.StatusNotFound, "not_found")
+		return
+	}
+	track, err := h.shared.SharedTrack(r.Context(), token, r.PathValue("trackId"), userID == "")
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		internalError(w, "load shared track", err)
+		return
+	}
+	serveTrackArtwork(w, r, h.streams, track)
 }

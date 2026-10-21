@@ -128,6 +128,7 @@ class _Card extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 RhythmoArtworkTile(
+                  track: song,
                   seed: song.id,
                   size: storeCarouselCardWidth - RhythmoSpace.xs * 2,
                   active: playing,
