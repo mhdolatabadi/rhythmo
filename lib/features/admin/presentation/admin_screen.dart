@@ -1,4 +1,6 @@
+import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:flutter/material.dart';
+import 'package:rhythmo/features/feedback/feedback_screen.dart';
 import 'package:rhythmo/core/persian_digits.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/widgets/glass_surface.dart';
@@ -122,6 +124,18 @@ class _AdminScreenState extends State<AdminScreen> {
                           return null;
                         })),
                 actions: [
+                  if (widget.api is FeedbackApi)
+                    IconButton(
+                        tooltip: 'پیام‌های کاربران',
+                        icon: const Icon(Icons.inbox_outlined),
+                        onPressed: _forbidden
+                            ? null
+                            : () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                    builder: (_) => FeedbackScreen(
+                                        api: widget.api as FeedbackApi,
+                                        token: widget.token,
+                                        admin: true)))),
                   TextButton(
                       onPressed: () => Navigator.pop(context),
                       child: const Text('انصراف')),

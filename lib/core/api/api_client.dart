@@ -1,3 +1,4 @@
+import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/data/admin_song_reports.dart';
 import 'dart:convert';
@@ -342,10 +343,28 @@ class ApiClient
         LikesApi,
         AdminApi,
         AdminSongReportsApi,
+        FeedbackApi,
         AdminQuotaApi {
   ApiClient(this.baseUri, {http.Client? httpClient})
       : _httpClient = httpClient ?? http.Client();
 
+  @override
+  Future<void> submitFeedback(
+          String token, String kind, String subject, String body) =>
+      _send('POST', '/api/v1/feedback',
+          token: token,
+          body: {'kind': kind, 'subject': subject, 'body': body},
+          expectBody: false);
+  @override
+  Future<List<Map<String, dynamic>>> feedbackInbox(String token) async {
+    final body = await _send('GET', '/api/v1/admin/feedback', token: token);
+    return (body['feedback'] as List).cast<Map<String, dynamic>>();
+  }
+
+  @override
+  Future<void> resolveFeedback(String token, String id) =>
+      _send('POST', '/api/v1/admin/feedback/${Uri.encodeComponent(id)}/resolve',
+          token: token, expectBody: false);
   @override
   Future<List<AdminSongReport>> songReports(String token) async {
     final body = await _send('GET', '/api/v1/admin/store/reports?limit=100',

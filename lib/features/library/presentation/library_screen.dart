@@ -49,6 +49,7 @@ import 'package:rhythmo/features/store/application/store_controller.dart';
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
     super.key,
+    this.onFeedback,
     required this.email,
     this.verified = false,
     this.onVerifyEmail,
@@ -72,6 +73,7 @@ class LibraryScreen extends StatefulWidget {
     this.recentSearches,
   });
 
+  final VoidCallback? onFeedback;
   final String email;
   final bool verified;
 
@@ -532,6 +534,7 @@ class _LibraryScreenState extends State<LibraryScreen>
         .push(MaterialPageRoute<void>(
           builder: (_) => SettingsScreen(
             email: widget.email,
+            onFeedback: widget.onFeedback,
             onDeleteAccount: widget.onDeleteAccount,
             onSignOutEverywhere: widget.onSignOutEverywhere,
             cache: widget.cache,

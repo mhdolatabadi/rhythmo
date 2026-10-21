@@ -67,6 +67,7 @@ func (h *AdminHandlers) WithPublications(publications AdminPublicationStore, str
 func (h *AdminHandlers) WithQuota(bytes int64) *AdminHandlers { h.defaultQuota = bytes; return h }
 
 func (h *AdminHandlers) register(mux *http.ServeMux) {
+	h.registerFeedback(mux)
 	mux.HandleFunc("GET /api/v1/admin/accounts", h.list)
 	mux.HandleFunc("PATCH /api/v1/admin/accounts/{id}/storage-quota", h.setStorageQuota)
 	mux.HandleFunc("PATCH /api/v1/admin/accounts/{id}/verification", h.verify)
