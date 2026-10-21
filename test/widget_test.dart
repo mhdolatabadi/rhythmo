@@ -656,7 +656,7 @@ void main() {
     expect(tester.takeException(), isNull);
 
     final popular = find.byTooltip('فهرست‌های پخش محبوب');
-    final store = find.byTooltip('استور');
+    final store = find.byTooltip('گنجینه');
     for (final button in [popular, store]) {
       expect(find.descendant(of: find.byType(AppBar), matching: button),
           findsOneWidget);
