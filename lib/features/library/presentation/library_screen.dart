@@ -390,12 +390,26 @@ class _LibraryScreenState extends State<LibraryScreen>
   }
 
   Future<void> _editTrackMetadata(Track track) async {
+    if (track.id.startsWith('device:')) {
+      final original = await widget.localAudio.metadataForEditing(track);
+      if (!mounted) return;
+      if (original == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('خواندن اطلاعات فایل ناموفق بود؛ فایل تغییر نکرد.')));
+        return;
+      }
+      track = original;
+    }
     final saved = await showTrackMetadataEditor(
       context,
       track: track,
-      suggestions: MetadataSuggestions.fromTracks(widget.library.tracks),
-      onSave: (draft, version) =>
-          widget.library.saveTrackMetadata(track.id, draft, version: version),
+      suggestions: MetadataSuggestions.fromTracks(_unifiedTracks()),
+      onSave: (draft, version) => track.id.startsWith('device:')
+          ? widget.player.whileEditingLocalFile(
+              track,
+              () => widget.localAudio
+                  .saveTrackMetadata(track, draft, version: version))
+          : widget.library.saveTrackMetadata(track.id, draft, version: version),
     );
     if (saved == null) return;
     // The library already shows the saved copy; bring the player queue and
@@ -403,13 +417,15 @@ class _LibraryScreenState extends State<LibraryScreen>
     widget.player.updateTrack(saved);
     widget.playlists?.updateTrack(saved);
     if (!mounted) return;
-    final message = switch (saved.embeddedTags.status) {
-      EmbeddedTagStatus.pending =>
-        'ذخیره شد؛ اطلاعات تا چند لحظهٔ دیگر در خود فایل هم نوشته می‌شود.',
-      EmbeddedTagStatus.unsupported =>
-        'ذخیره شد؛ این قالب فایل برچسب داخلی قابل ویرایش ندارد.',
-      _ => 'اطلاعات «${saved.title}» ذخیره شد.',
-    };
+    final message = saved.id.startsWith('device:')
+        ? 'اطلاعات در فایل «${saved.fileName}» ذخیره شد.'
+        : switch (saved.embeddedTags.status) {
+            EmbeddedTagStatus.pending =>
+              'ذخیره شد؛ اطلاعات تا چند لحظهٔ دیگر در خود فایل هم نوشته می‌شود.',
+            EmbeddedTagStatus.unsupported =>
+              'ذخیره شد؛ این قالب فایل برچسب داخلی قابل ویرایش ندارد.',
+            _ => 'اطلاعات «${saved.title}» ذخیره شد.',
+          };
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
   }
@@ -1554,9 +1570,10 @@ class _TrackListState extends State<_TrackList> {
             : RhythmoIcons.heart,
         widget.player.favorites.contains(track.id) ? 'نپسندیدن' : 'پسندیدن',
       ),
-      if (onServer) ...[
+      if (widget.onEditMetadata != null)
         item(_TrackAction.editMetadata, RhythmoIcons.pencilSimple,
             'ویرایش اطلاعات آهنگ'),
+      if (onServer) ...[
         if (widget.onSetPublished != null)
           item(
             _TrackAction.publish,
