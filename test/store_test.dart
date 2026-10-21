@@ -10,6 +10,7 @@ import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/format_size.dart';
+import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/lyrics/application/lyrics_controller.dart';
@@ -411,7 +412,7 @@ void main() {
           song(i, title: '$long $i', artist: 'خواننده‌ای با نام بسیار بلند $i'),
       ]);
       expect(tester.takeException(), isNull);
-      expect(find.text('استور'), findsOneWidget);
+      expect(find.text('گنجینه'), findsOneWidget);
       for (final tab in ['آهنگ‌ها', 'خواننده‌ها', 'آلبوم‌ها']) {
         expect(tester.getSize(find.text(tab)).height, lessThan(48));
         expect(
@@ -618,7 +619,7 @@ void main() {
 
     testWidgets('says when the linked song left the store', (tester) async {
       await pump(tester, openSongId: 'gone');
-      expect(find.text('این آهنگ دیگر در استور نیست.'), findsOneWidget);
+      expect(find.text('این آهنگ دیگر در گنجینه نیست.'), findsOneWidget);
     });
 
     testWidgets('an unreachable store offers a retry', (tester) async {
@@ -633,7 +634,7 @@ void main() {
         home: StoreScreen(controller: store, player: player),
       ));
       await tester.pumpAndSettle();
-      expect(find.text('استور بارگذاری نشد'), findsOneWidget);
+      expect(find.text('گنجینه بارگذاری نشد'), findsOneWidget);
       api.error = null;
       await tester.tap(find.text('تلاش دوباره'));
       await tester.pumpAndSettle();
@@ -663,7 +664,14 @@ void main() {
         store: store,
       )));
       await tester.pumpAndSettle();
-      final entry = find.byTooltip('استور');
+      final entry = find.byTooltip('گنجینه');
+      expect(
+        find.descendant(
+          of: entry,
+          matching: find.byIcon(RhythmoIcons.vinylRecord),
+        ),
+        findsOneWidget,
+      );
       expect(tester.getSize(entry).height, greaterThanOrEqualTo(48));
       await tester.tap(entry);
       await tester.pumpAndSettle();

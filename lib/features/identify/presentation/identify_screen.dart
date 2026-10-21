@@ -169,7 +169,7 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
           detail: _controller.signedIn
               ? 'فقط آهنگ‌هایی شناخته می‌شوند که در کتابخانهٔ شما، '
                   'فهرست‌های پخش مشترک شما یا فهرست‌های پخش عمومی ریتمو هستند.'
-              : 'فقط آهنگ‌های استور ریتمو شناخته می‌شوند. با ورود به حساب، '
+              : 'فقط آهنگ‌های گنجینه ریتمو شناخته می‌شوند. با ورود به حساب، '
                   'کتابخانه و فهرست‌های پخش شما هم جستجو می‌شوند.',
           action: retry,
         );
@@ -227,7 +227,7 @@ class _Intro extends StatelessWidget {
                   'میکروفون گوش می‌دهد و صدا را با آهنگ‌های کتابخانهٔ شما و '
                   'فهرست‌های پخشی که به آن‌ها دسترسی دارید مقایسه می‌کند.'
               : 'ریتمو ${persianDigits(snippetLength.inSeconds)} ثانیه با '
-                  'میکروفون گوش می‌دهد و صدا را با آهنگ‌های استور ریتمو '
+                  'میکروفون گوش می‌دهد و صدا را با آهنگ‌های گنجینه ریتمو '
                   'مقایسه می‌کند.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(
@@ -373,7 +373,7 @@ class _Result extends StatelessWidget {
       SongMatchSource.library => 'در کتابخانهٔ شما',
       SongMatchSource.playlist => 'در یک فهرست پخش مشترک',
       SongMatchSource.public => 'در یک فهرست پخش عمومی',
-      SongMatchSource.store => 'در استور ریتمو',
+      SongMatchSource.store => 'در گنجینه ریتمو',
     };
     final percent = (match.confidence * 100).round().clamp(0, 100);
     return Column(

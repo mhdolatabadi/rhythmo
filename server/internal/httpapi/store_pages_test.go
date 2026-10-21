@@ -35,7 +35,7 @@ func TestStorePagesListSongsWithoutTheirOwners(t *testing.T) {
 		"/store/artists", "/store/artists/AC%2FDC", "/store/albums", "/store/albums/Seasons?artist=AC%2FDC"} {
 		response := get(site, path)
 		page := response.Body.String()
-		if response.Code != http.StatusOK || !strings.Contains(page, "استور") {
+		if response.Code != http.StatusOK || !strings.Contains(page, "گنجینه") {
 			t.Fatalf("%s = %d", path, response.Code)
 		}
 		for _, leak := range []string{"alice", "track-of-alice", "my note", "a.flac"} {
@@ -106,7 +106,7 @@ func TestStoreSongPagesFollowTheCatalog(t *testing.T) {
 	if response := get(site, "/store/t/"+storeEntryID+"/stream"); response.Code != http.StatusNotFound {
 		t.Fatalf("hidden song stream = %d", response.Code)
 	}
-	if listing := get(site, "/store").Body.String(); !strings.Contains(listing, "هنوز آهنگی در استور نیست") {
+	if listing := get(site, "/store").Body.String(); !strings.Contains(listing, "هنوز آهنگی در گنجینه نیست") {
 		t.Fatal("the empty store says nothing")
 	}
 }
@@ -157,10 +157,10 @@ func TestStorePagesNeedNoScript(t *testing.T) {
 func TestLegalTextMentionsTheStore(t *testing.T) {
 	site, _ := storeSite(t, AnonymousLimits{})
 	privacy := get(site, "/privacy").Body.String()
-	if !strings.Contains(privacy, "استور ریتمو") || !strings.Contains(privacy, "نشانی از صاحب آهنگ نمایش داده نمی‌شود") {
+	if !strings.Contains(privacy, "گنجینه ریتمو") || !strings.Contains(privacy, "نشانی از صاحب آهنگ نمایش داده نمی‌شود") {
 		t.Error("the privacy page doesn't say public playlists are listed in the store")
 	}
-	if home := get(site, "/").Body.String(); !strings.Contains(home, "استور ریتمو چیست؟") || !strings.Contains(home, `href="/store"`) {
+	if home := get(site, "/").Body.String(); !strings.Contains(home, "گنجینه ریتمو چیست؟") || !strings.Contains(home, `href="/store"`) {
 		t.Error("the front page doesn't explain or link the store")
 	}
 }
@@ -238,14 +238,14 @@ func TestPlaylistPageLinksItsSongsToTheStore(t *testing.T) {
 func TestStorePagesHaveBreadcrumbs(t *testing.T) {
 	site, _ := storeSite(t, AnonymousLimits{})
 	for path, want := range map[string]string{
-		"/store": "ریتمو|https://rhythmo.example.com/,استور|",
-		storeSongPath: "ریتمو|https://rhythmo.example.com/,استور|https://rhythmo.example.com/store," +
+		"/store": "ریتمو|https://rhythmo.example.com/,گنجینه|",
+		storeSongPath: "ریتمو|https://rhythmo.example.com/,گنجینه|https://rhythmo.example.com/store," +
 			"AC/DC|https://rhythmo.example.com/store/artists/AC%2FDC,باران|",
-		"/store/artists/AC%2FDC": "ریتمو|https://rhythmo.example.com/,استور|https://rhythmo.example.com/store," +
+		"/store/artists/AC%2FDC": "ریتمو|https://rhythmo.example.com/,گنجینه|https://rhythmo.example.com/store," +
 			"خواننده‌ها|https://rhythmo.example.com/store/artists,AC/DC|",
-		"/store/albums/Seasons": "ریتمو|https://rhythmo.example.com/,استور|https://rhythmo.example.com/store," +
+		"/store/albums/Seasons": "ریتمو|https://rhythmo.example.com/,گنجینه|https://rhythmo.example.com/store," +
 			"آلبوم‌ها|https://rhythmo.example.com/store/albums,Seasons|",
-		"/store/albums": "ریتمو|https://rhythmo.example.com/,استور|https://rhythmo.example.com/store,آلبوم‌ها|",
+		"/store/albums": "ریتمو|https://rhythmo.example.com/,گنجینه|https://rhythmo.example.com/store,آلبوم‌ها|",
 	} {
 		page := get(site, path).Body.String()
 		if got := strings.Join(breadcrumbNames(t, page), ","); got != want {
@@ -260,12 +260,12 @@ func TestStorePagesHaveBreadcrumbs(t *testing.T) {
 func TestFrontPageLinksToStoreSongs(t *testing.T) {
 	site, catalog := storeSite(t, AnonymousLimits{})
 	page := get(site, "/").Body.String()
-	if !strings.Contains(page, "آهنگ‌های محبوب استور") || !strings.Contains(page, `href="`+storeSongPath+`"`) ||
+	if !strings.Contains(page, "آهنگ‌های محبوب گنجینه") || !strings.Contains(page, `href="`+storeSongPath+`"`) ||
 		catalog.ranked != store.RankPopular {
 		t.Error("the front page does not link to popular store songs")
 	}
 	catalog.hidden = true
-	if page := get(site, "/").Body.String(); strings.Contains(page, "آهنگ‌های محبوب استور") {
+	if page := get(site, "/").Body.String(); strings.Contains(page, "آهنگ‌های محبوب گنجینه") {
 		t.Error("an empty store still has a front page section")
 	}
 }
@@ -331,7 +331,7 @@ func TestStorePageTitlesFollowPersianSearches(t *testing.T) {
 		storeSongPath:                          "<title>آهنگ باران از AC/DC | پخش آنلاین در ریتمو</title>",
 		"/store/artists/AC%2FDC":               "<title>آهنگ‌های AC/DC | پخش آنلاین در ریتمو</title>",
 		"/store/albums/Seasons?artist=AC%2FDC": "<title>آلبوم Seasons از AC/DC | پخش آنلاین در ریتمو</title>",
-		"/store":                               "<title>استور ریتمو | پخش آنلاین آهنگ با کیفیت اصلی</title>",
+		"/store":                               "<title>گنجینه ریتمو | پخش آنلاین آهنگ با کیفیت اصلی</title>",
 	} {
 		if page := get(site, path).Body.String(); !strings.Contains(page, want) {
 			t.Errorf("%s lacks %s", path, want)
@@ -430,7 +430,7 @@ func TestArtistPagesSayWhatTheStoreHas(t *testing.T) {
 		t.Errorf("albums were asked for %q", catalog.albumArtist)
 	}
 	for _, want := range []string{
-		"<p>۲ آهنگ و ۱ آلبوم از kayhan در استور ریتمو؛ آنلاین، با کیفیت اصلی و بدون ثبت‌نام بشنو.</p>",
+		"<p>۲ آهنگ و ۱ آلبوم از kayhan در گنجینه ریتمو؛ آنلاین، با کیفیت اصلی و بدون ثبت‌نام بشنو.</p>",
 		`href="/store/albums/Seasons?artist=kayhan"`,
 		`<meta name="description" content="۲ آهنگ و ۱ آلبوم از kayhan`,
 	} {
@@ -449,7 +449,7 @@ func TestArtistPagesSayWhatTheStoreHas(t *testing.T) {
 	// a plain page.
 	catalog.noAlbums = true
 	page = get(site, "/store/artists/Someone%20Else").Body.String()
-	if !strings.Contains(page, "<p>آهنگ‌های Someone Else در استور ریتمو؛ آنلاین") || strings.Contains(page, "آلبوم‌های Someone Else") {
+	if !strings.Contains(page, "<p>آهنگ‌های Someone Else در گنجینه ریتمو؛ آنلاین") || strings.Contains(page, "آلبوم‌های Someone Else") {
 		t.Error("an artist without counts or albums is not a plain page")
 	}
 	if group := graphNode(t, jsonLD(t, page), "MusicGroup"); group["album"] != nil {

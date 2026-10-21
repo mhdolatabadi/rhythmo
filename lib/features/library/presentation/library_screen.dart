@@ -49,6 +49,7 @@ import 'package:rhythmo/features/store/application/store_controller.dart';
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
     super.key,
+    this.onFeedback,
     required this.email,
     this.verified = false,
     this.onVerifyEmail,
@@ -72,6 +73,7 @@ class LibraryScreen extends StatefulWidget {
     this.recentSearches,
   });
 
+  final VoidCallback? onFeedback;
   final String email;
   final bool verified;
 
@@ -379,9 +381,9 @@ class _LibraryScreenState extends State<LibraryScreen>
         content: Text(switch (state) {
           null => 'تغییر انتشار ثبت نشد. دوباره تلاش کن.',
           PublishState.published =>
-            '«${track.title}» در استور منتشر شد. بدون نام تو نمایش داده می‌شود.',
+            '«${track.title}» در گنجینه منتشر شد. بدون نام تو نمایش داده می‌شود.',
           PublishState.pending =>
-            'درخواست انتشار «${track.title}» برای مدیر فرستاده شد. بعد از تأیید در استور می‌آید.',
+            'درخواست انتشار «${track.title}» برای مدیر فرستاده شد. بعد از تأیید در گنجینه می‌آید.',
           _ => published
               ? 'انتشار «${track.title}» ثبت نشد.'
               : '«${track.title}» دیگر منتشر نمی‌شود، مگر در یک فهرست پخش عمومی باشد.',
@@ -488,9 +490,9 @@ class _LibraryScreenState extends State<LibraryScreen>
                 actions: [
                   if (widget.store != null)
                     IconButton(
-                      tooltip: 'استور',
+                      tooltip: 'گنجینه',
                       onPressed: _openStore,
-                      icon: const Icon(RhythmoIcons.storefront),
+                      icon: const Icon(RhythmoIcons.vinylRecord),
                     ),
                   PopularPlaylistsButton(onOpen: _openPopular),
                 ],
@@ -532,6 +534,7 @@ class _LibraryScreenState extends State<LibraryScreen>
         .push(MaterialPageRoute<void>(
           builder: (_) => SettingsScreen(
             email: widget.email,
+            onFeedback: widget.onFeedback,
             onDeleteAccount: widget.onDeleteAccount,
             onSignOutEverywhere: widget.onSignOutEverywhere,
             cache: widget.cache,
@@ -606,9 +609,9 @@ class _LibraryScreenState extends State<LibraryScreen>
     final storeButton = widget.store == null
         ? null
         : IconButton(
-            tooltip: 'استور',
+            tooltip: 'گنجینه',
             onPressed: _openStore,
-            icon: const Icon(RhythmoIcons.storefront),
+            icon: const Icon(RhythmoIcons.vinylRecord),
           );
     if (MediaQuery.sizeOf(context).width >= wideActions) {
       return [
@@ -1580,10 +1583,10 @@ class _TrackListState extends State<_TrackList> {
             _TrackAction.publish,
             RhythmoIcons.globe,
             switch (track.publishState) {
-              PublishState.published => 'لغو انتشار در استور',
+              PublishState.published => 'لغو انتشار در گنجینه',
               PublishState.pending => 'لغو درخواست انتشار',
               PublishState.rejected => 'درخواست دوباره‌ی انتشار',
-              PublishState.private => 'انتشار در استور',
+              PublishState.private => 'انتشار در گنجینه',
             },
           ),
         for (final bot in widget.linkedBots)

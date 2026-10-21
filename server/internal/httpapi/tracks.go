@@ -32,6 +32,7 @@ const (
 
 // TrackStore reads and writes tracks for one owner; *store.Tracks implements it.
 type TrackStore interface {
+	QuotaForOwner(context.Context, string, int64) (int64, error)
 	ListForOwner(ctx context.Context, ownerID string) ([]store.Track, error)
 	UsageForOwner(ctx context.Context, ownerID string) (int64, error)
 	ForOwner(ctx context.Context, ownerID, trackID string) (store.Track, error)
@@ -273,10 +274,15 @@ func (h *TrackHandlers) handleList(w http.ResponseWriter, r *http.Request) {
 		internalError(w, "read storage usage", err)
 		return
 	}
+	quota, err := h.tracks.QuotaForOwner(r.Context(), userID, h.limits.MaxOwnerBytes)
+	if err != nil {
+		internalError(w, "load account quota", err)
+		return
+	}
 	response := trackListResponse{
 		Tracks: make([]trackResponse, 0, len(tracks)),
 		Storage: storageUsageResponse{
-			UsedBytes: usedBytes, LimitBytes: h.limits.MaxOwnerBytes,
+			UsedBytes: usedBytes, LimitBytes: quota,
 		},
 	}
 	likes := map[string]store.LikeState{}

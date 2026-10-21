@@ -228,8 +228,8 @@ class _PopularPlaylistsScreenState extends State<PopularPlaylistsScreen> {
                   ),
                 ),
               ),
-              tooltip: 'استور',
-              icon: const Icon(RhythmoIcons.storefront),
+              tooltip: 'گنجینه',
+              icon: const Icon(RhythmoIcons.vinylRecord),
             ),
           // Readable before signing up, as the stores expect.
           if (widget.onSignIn != null && !controller.signedIn)

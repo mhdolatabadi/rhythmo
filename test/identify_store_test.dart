@@ -115,7 +115,7 @@ void main() {
     expect(tester.getSize(entry).height, greaterThanOrEqualTo(48));
     await tester.tap(entry);
     await tester.pumpAndSettle();
-    expect(find.textContaining('با آهنگ‌های استور ریتمو مقایسه می‌کند'),
+    expect(find.textContaining('با آهنگ‌های گنجینه ریتمو مقایسه می‌کند'),
         findsOneWidget);
     await tester.tap(find.text('گوش بده'));
     await tester.pump();
@@ -123,7 +123,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('باران'), findsOneWidget);
-    expect(find.textContaining('در استور ریتمو'), findsOneWidget);
+    expect(find.textContaining('در گنجینه ریتمو'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.text('افزودن به کتابخانه'), 100);
     await tester.tap(find.text('افزودن به کتابخانه'));
@@ -161,7 +161,7 @@ void main() {
     await tester.pump();
     recorder.finish();
     await tester.pumpAndSettle();
-    expect(find.textContaining('فقط آهنگ‌های استور ریتمو شناخته می‌شوند'),
+    expect(find.textContaining('فقط آهنگ‌های گنجینه ریتمو شناخته می‌شوند'),
         findsOneWidget);
   });
 }

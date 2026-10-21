@@ -106,6 +106,10 @@ func (m *memoryTracks) ReservePending(
 	return track, nil
 }
 
+func (m *memoryTracks) QuotaForOwner(_ context.Context, _ string, fallback int64) (int64, error) {
+	return fallback, nil
+}
+
 func (m *memoryTracks) ImportUploadMetadata(_ context.Context, ownerID, trackID string, metadata store.TrackMetadata) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

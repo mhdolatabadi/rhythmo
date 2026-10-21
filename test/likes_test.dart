@@ -469,14 +469,14 @@ void main() {
 
       await tester.tap(find.byTooltip('اقدامات آهنگ').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('انتشار در استور'));
+      await tester.tap(find.text('انتشار در گنجینه'));
       await tester.pumpAndSettle();
       expect(likes.calls, contains('publish:t2'));
-      expect(find.textContaining('در استور منتشر شد'), findsOneWidget);
+      expect(find.textContaining('در گنجینه منتشر شد'), findsOneWidget);
 
       await tester.tap(find.byTooltip('اقدامات آهنگ').first);
       await tester.pumpAndSettle();
-      expect(find.text('لغو انتشار در استور'), findsOneWidget);
+      expect(find.text('لغو انتشار در گنجینه'), findsOneWidget);
       await tester.tap(find.text('پسندیدن'));
       await tester.pumpAndSettle();
       expect(likes.calls, contains('like:t1'));
@@ -497,7 +497,7 @@ void main() {
 
       await tester.tap(find.byTooltip('اقدامات آهنگ').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('انتشار در استور'));
+      await tester.tap(find.text('انتشار در گنجینه'));
       await tester.pumpAndSettle();
       expect(likes.calls, contains('publish:t2'));
       expect(find.textContaining('برای مدیر فرستاده شد'), findsOneWidget);

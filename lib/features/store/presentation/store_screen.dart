@@ -17,7 +17,7 @@ import 'package:rhythmo/features/store/presentation/store_carousel.dart';
 /// song's actions stay near its title instead of across the window.
 const storeContentWidth = RhythmoSpace.listWidth;
 
-/// «استور»: every song in rhythmo's public playlists, once, by title,
+/// «گنجینه»: every song in rhythmo's public playlists, once, by title,
 /// artist and album. Anyone can search and play; adding a song to the
 /// library and reporting one need an account. Whose copy a song is is
 /// never shown.
@@ -95,7 +95,7 @@ class _StoreScreenState extends State<StoreScreen>
     }
     if (!mounted) return;
     if (song == null) {
-      _say('این آهنگ دیگر در استور نیست.');
+      _say('این آهنگ دیگر در گنجینه نیست.');
       return;
     }
     final found = song;
@@ -207,7 +207,7 @@ class _StoreScreenState extends State<StoreScreen>
     return Scaffold(
       extendBody: true,
       appBar: AppBar(
-        title: const Text('استور'),
+        title: const Text('گنجینه'),
         actions: [
           if (widget.identify != null)
             Padding(
@@ -288,8 +288,8 @@ class _StoreScreenState extends State<StoreScreen>
               player: widget.player,
               empty: () => controller.query.isEmpty
                   ? const _Empty(
-                      icon: RhythmoIcons.storefront,
-                      title: 'استور هنوز خالی است',
+                      icon: RhythmoIcons.vinylRecord,
+                      title: 'گنجینه هنوز خالی است',
                       message: 'وقتی کسی فهرست پخشی را عمومی کند، '
                           'آهنگ‌هایش اینجا می‌آیند.',
                     )
@@ -441,7 +441,7 @@ class _StoreSongsScreenState extends State<StoreSongsScreen> {
           player: widget.player,
           empty: () => const _Empty(
             icon: RhythmoIcons.musicNotesMinus,
-            title: 'آهنگی در استور نمانده',
+            title: 'آهنگی در گنجینه نمانده',
             message: 'ممکن است از فهرست‌های پخش عمومی برداشته شده باشد.',
           ),
           onSave: (song) => saveStoreSong(context, widget.controller, song,
@@ -477,7 +477,7 @@ Future<void> saveStoreSong(
           'فضای کافی در حسابت نیست. چند آهنگ را حذف کن و دوباره امتحان کن.',
         StoreSaveResult.uploadsDisabled =>
           'افزودن آهنگ فعلاً غیرفعال است. کمی بعد دوباره امتحان کن.',
-        StoreSaveResult.gone => 'این آهنگ دیگر در استور نیست.',
+        StoreSaveResult.gone => 'این آهنگ دیگر در گنجینه نیست.',
         StoreSaveResult.failed => 'افزودن ناموفق بود. دوباره تلاش کن.',
       }),
     ));
@@ -507,7 +507,7 @@ Future<void> reportStoreSong(
       content: Text(switch (result) {
         StoreReportResult.sent =>
           'گزارشت فرستاده شد. مدیران ریتمو آن را بررسی می‌کنند.',
-        StoreReportResult.gone => 'این آهنگ دیگر در استور نیست.',
+        StoreReportResult.gone => 'این آهنگ دیگر در گنجینه نیست.',
         StoreReportResult.tooMany =>
           'امروز گزارش زیادی فرستاده‌ای. فردا دوباره امتحان کن.',
         StoreReportResult.failed => 'گزارش فرستاده نشد. دوباره تلاش کن.',
@@ -557,7 +557,7 @@ class _ReportSheetState extends State<_ReportSheet> {
                 horizontal: RhythmoSpace.sm, vertical: RhythmoSpace.sm),
             child: Text(
               'چه مشکلی در این آهنگ هست؟ مدیران ریتمو گزارش را می‌بینند و '
-              'ممکن است آهنگ را از استور پنهان کنند. نامت به کسی نشان داده '
+              'ممکن است آهنگ را از گنجینه پنهان کنند. نامت به کسی نشان داده '
               'نمی‌شود.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
@@ -844,10 +844,10 @@ class _Listing<T> extends StatelessWidget {
         return switch (listing.status) {
           StoreStatus.idle ||
           StoreStatus.loading when items.isEmpty =>
-            const RhythmoStateView.loading(title: 'در حال بارگذاری استور…'),
+            const RhythmoStateView.loading(title: 'در حال بارگذاری گنجینه…'),
           StoreStatus.error when items.isEmpty => RhythmoStateView.error(
               icon: RhythmoIcons.cloudSlash,
-              title: 'استور بارگذاری نشد',
+              title: 'گنجینه بارگذاری نشد',
               message: 'اتصال اینترنت را بررسی کن و دوباره تلاش کن.',
               action: FilledButton.icon(
                 onPressed: listing.refresh,
