@@ -18,7 +18,9 @@ class H(http.server.BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", 0)); data = self.rfile.read(n)
         if not self.check(): return self.reply({"type":"error"}, 401)
         if self.path == "/v1/apps/releases/upload/":
-            ok = b'name="apk"' in data and b"APKDATA" in data
+            ok = (b'name="apk"' in data and b"APKDATA" in data
+                  and b"Content-Type: application/vnd.android.package-archive\r\n" in data
+                  and b'name="architecture"\r\n\r\nall\r\n' in data)
             if state["fail_upload"]: return self.reply({"type":"error","message":"version code must increase"})
             return self.reply({"type":"success" if ok else "error","message":"uploaded"})
         if self.path == "/v1/apps/releases/commit/":
