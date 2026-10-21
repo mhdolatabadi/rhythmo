@@ -11,6 +11,7 @@ import 'package:rhythmo/features/library/data/local_audio_library.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/library/presentation/library_screen.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
+import 'package:rhythmo/features/player/presentation/mini_player.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/main.dart';
 
@@ -139,7 +140,9 @@ void main() {
       await tester.tap(find.text(_longPersian));
       await tester.pumpAndSettle();
       expect(find.byTooltip('توقف'), findsOneWidget);
-      final progress = find.byType(LinearProgressIndicator);
+      final progress = find.descendant(
+          of: find.byType(MiniPlayer),
+          matching: find.byType(LinearProgressIndicator));
       expect(progress, findsOneWidget);
       expect(Directionality.of(tester.element(progress)), TextDirection.ltr);
 
