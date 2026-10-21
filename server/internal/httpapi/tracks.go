@@ -126,6 +126,7 @@ func (h *TrackHandlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/tracks/{id}", h.handleDelete)
 	mux.HandleFunc("POST /api/v1/tracks/{id}/complete", h.handleComplete)
 	mux.HandleFunc("GET /api/v1/tracks/{id}/stream", h.handleStream)
+	mux.HandleFunc("GET /api/v1/tracks/{id}/artwork", h.handleArtwork)
 	mux.HandleFunc("GET /api/v1/tracks/{id}/download", h.handleDownload)
 }
 
