@@ -86,10 +86,10 @@ class Playlist {
       tracks.length > trackCount ? tracks.length : trackCount;
 
   /// The same playlist with [tracks] in this order.
-  Playlist withTracks(List<Track> tracks) => Playlist(
+  Playlist withTracks(List<Track> tracks, {int? trackCount}) => Playlist(
         id: id,
         name: name,
-        trackCount: tracks.length,
+        trackCount: trackCount ?? tracks.length,
         tracks: tracks,
         createdAt: createdAt,
         updatedAt: updatedAt,

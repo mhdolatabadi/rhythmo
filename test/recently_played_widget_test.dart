@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
@@ -10,6 +11,7 @@ import 'package:rhythmo/features/library/data/local_audio_library.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/library/presentation/library_screen.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
+import 'package:rhythmo/features/player/presentation/mini_player.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/main.dart';
 
@@ -93,6 +95,7 @@ void _expectTouchTarget(WidgetTester tester, Finder finder) {
 }
 
 void main() {
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   group('recently played', () {
     testWidgets(
         'on a 360 px phone the compact library truncates long titles, '
@@ -137,7 +140,9 @@ void main() {
       await tester.tap(find.text(_longPersian));
       await tester.pumpAndSettle();
       expect(find.byTooltip('توقف'), findsOneWidget);
-      final progress = find.byType(LinearProgressIndicator);
+      final progress = find.descendant(
+          of: find.byType(MiniPlayer),
+          matching: find.byType(LinearProgressIndicator));
       expect(progress, findsOneWidget);
       expect(Directionality.of(tester.element(progress)), TextDirection.ltr);
 
