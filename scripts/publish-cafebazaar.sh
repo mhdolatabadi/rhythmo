@@ -49,7 +49,7 @@ else
   echo "Reusing the release that is not submitted yet"
 fi
 
-expect_success "$(call POST /apps/releases/upload/ -F "apk=@${apk}" -F architecture=0)" "upload $(basename "$apk")"
+expect_success "$(call POST /apps/releases/upload/ -F "apk=@${apk};type=application/vnd.android.package-archive" -F architecture=all)" "upload $(basename "$apk")"
 
 body="$(jq -n --arg v "$version" --argjson auto "$auto_publish" --argjson rollout "$rollout" '{
   changelog_fa: ("نسخه‌ی " + $v + ": بهبودها و رفع اشکال‌ها."),
