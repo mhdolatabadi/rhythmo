@@ -224,11 +224,15 @@ void main() {
     expect(find.textContaining('از o***@example.com'), findsOneWidget);
     expect(find.text('خواننده نامشخص · افزوده‌ی f***@example.com'),
         findsOneWidget);
-    // Only their own track can be taken out.
+    expect(find.byTooltip('حذف از فهرست پخش'), findsNothing);
+    expect(find.byTooltip('برای جابه‌جایی بکش'), findsNothing);
+    await tester.tap(find.byTooltip('مدیریت آهنگ‌ها'));
+    await tester.pumpAndSettle();
+    // Only their own track can be taken out in edit mode.
     expect(find.byTooltip('حذف از فهرست پخش'), findsOneWidget);
 
     // Picking tracks keeps the ones others added.
-    await tester.tap(find.text('مدیریت آهنگ‌ها'));
+    await tester.tap(find.byTooltip('انتخاب آهنگ‌ها'));
     await tester.pumpAndSettle();
     final picker = find.byType(AlertDialog);
     Finder pickerText(String text) =>
@@ -338,6 +342,10 @@ void main() {
             ),
           ]);
     expect(tester.takeException(), isNull);
+    expect(find.text('مدیریت آهنگ‌ها'), findsNothing);
+    expect(find.byTooltip('حذف از فهرست پخش'), findsNothing);
+    await tester.tap(find.byTooltip('مدیریت آهنگ‌ها'));
+    await tester.pumpAndSettle();
     for (final tooltip in [
       'گزینه‌های فهرست پخش',
       'پخش تصادفی',
@@ -359,12 +367,12 @@ void main() {
     // The add action sits in the list's heading, clear of the screen edge,
     // and nothing floats over the tracks.
     final add = tester.getRect(find.ancestor(
-        of: find.text('مدیریت آهنگ‌ها'), matching: find.byType(FilledButton)));
+        of: find.byTooltip('پایان ویرایش'), matching: find.byType(IconButton)));
     expect(add.left, greaterThanOrEqualTo(16));
     expect(add.right, lessThanOrEqualTo(360 - 16));
     expect(find.byType(FloatingActionButton), findsNothing);
 
-    await tester.tap(find.text('مدیریت آهنگ‌ها'));
+    await tester.tap(find.byTooltip('انتخاب آهنگ‌ها'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     final dialog = tester.getRect(find.byType(AlertDialog));
@@ -372,6 +380,11 @@ void main() {
     expect(dialog.right, lessThanOrEqualTo(360));
     await tester.tap(find.text('انصراف'));
     await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('پایان ویرایش'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('حذف از فهرست پخش'), findsNothing);
+    expect(find.byTooltip('برای جابه‌جایی بکش'), findsNothing);
 
     await tester.tap(find.byTooltip('دعوت دوستان و مدیریت اعضا'));
     await tester.pumpAndSettle();
@@ -397,7 +410,7 @@ void main() {
 
     // One centred column: equal room on both sides, never past 960 px.
     final add = tester.getRect(find.ancestor(
-        of: find.text('مدیریت آهنگ‌ها'), matching: find.byType(FilledButton)));
+        of: find.byTooltip('مدیریت آهنگ‌ها'), matching: find.byType(IconButton)));
     final row = tester.getRect(find.ancestor(
         of: find.text('My song'), matching: find.byType(InkWell)));
     expect(row.width, lessThanOrEqualTo(960));
@@ -413,6 +426,8 @@ void main() {
     await tester.tapAt(const Offset(4, 500));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byTooltip('مدیریت آهنگ‌ها'));
+    await tester.pumpAndSettle();
     // Dragging the handle moves a track and keeps the page on screen.
     final handle = find.byTooltip('برای جابه‌جایی بکش');
     final gesture = await tester.startGesture(tester.getCenter(handle.first));
