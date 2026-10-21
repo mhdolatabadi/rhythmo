@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +17,7 @@ import (
 	"github.com/mhdolatabadi/rhythmo/server/internal/auth"
 	"github.com/mhdolatabadi/rhythmo/server/internal/storage"
 	"github.com/mhdolatabadi/rhythmo/server/internal/store"
+	"github.com/mhdolatabadi/rhythmo/server/internal/tags"
 )
 
 const (
@@ -103,6 +106,20 @@ func (m *memoryTracks) ReservePending(
 	return track, nil
 }
 
+func (m *memoryTracks) ImportUploadMetadata(_ context.Context, ownerID, trackID string, metadata store.TrackMetadata) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, track := range m.tracks {
+		if track.ID == trackID && track.OwnerID == ownerID && track.Status == store.TrackPending {
+			track.Title, track.Artist, track.Album = metadata.Title, metadata.Artist, metadata.Album
+			track.AlbumArtist, track.Composer, track.Genre = metadata.AlbumArtist, metadata.Composer, metadata.Genre
+			track.Year, track.TrackNumber, track.DiscNumber, track.Comment = metadata.Year, metadata.TrackNumber, metadata.DiscNumber, metadata.Comment
+			m.tracks[i] = track
+		}
+	}
+	return nil
+}
+
 func (m *memoryTracks) MarkReady(_ context.Context, ownerID, trackID string) (store.Track, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -189,6 +206,10 @@ func (f *fakeObjects) Size(_ context.Context, key string) (int64, error) {
 		return 0, storage.ErrObjectMissing
 	}
 	return int64(len(data)), nil
+}
+
+func (f *fakeObjects) Open(_ context.Context, key string) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(f.objects[key])), nil
 }
 
 func (f *fakeObjects) Head(_ context.Context, key string, n int64) ([]byte, error) {
@@ -811,4 +832,46 @@ func TestDownloadUsesEditedNameAndNeverServesStaleTags(t *testing.T) {
 	}
 	expectError(t, api.get(t, "/api/v1/tracks/p1/download", api.alice), http.StatusNotFound, "not_found")
 	expectError(t, api.get(t, "/api/v1/tracks/a1/download", ""), http.StatusUnauthorized, "unauthorized")
+}
+
+func TestUploadImportsOriginalEmbeddedMetadata(t *testing.T) {
+	original, err := os.ReadFile("../tags/testdata/v23-cover-id3v1.mp3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tagged bytes.Buffer
+	_, err = tags.Rewrite(&tagged, bytes.NewReader(original), "song.mp3", tags.Metadata{
+		Title: "عنوان اصلی", Artist: "خواننده", Album: "آلبوم", AlbumArtist: "گروه",
+		Composer: "آهنگساز", Genre: "ژانر", Year: 2024, TrackNumber: 3, DiscNumber: 2, Comment: "توضیحات",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := newTracksAPI(t, &memoryTracks{})
+	track := store.Track{ID: "tagged", OwnerID: "alice", Status: store.TrackPending,
+		Title: "filename", FileName: "song.mp3", StorageKey: "tagged.mp3", SizeBytes: int64(tagged.Len()), MetadataVersion: 1}
+	api.tracks.tracks = append(api.tracks.tracks, track)
+	api.objects.objects[track.StorageKey] = append([]byte(nil), tagged.Bytes()...)
+	response := api.do(t, http.MethodPost, "/api/v1/tracks/tagged/complete", "", api.alice)
+	if response.Code != http.StatusOK {
+		t.Fatalf("complete: %d %s", response.Code, response.Body.String())
+	}
+	got := decode[trackResponse](t, response)
+	if got.Title != "عنوان اصلی" || got.Artist == nil || *got.Artist != "خواننده" || got.Album == nil || *got.Album != "آلبوم" {
+		t.Fatalf("metadata lost: %+v", got)
+	}
+	if !bytes.Equal(api.objects.objects[track.StorageKey], tagged.Bytes()) {
+		t.Fatal("original file changed")
+	}
+}
+
+func TestUploadMetadataFallback(t *testing.T) {
+	got := uploadMetadata(store.Track{Title: "filename"}, tags.Metadata{})
+	if got.Title != "filename" {
+		t.Fatalf("fallback title: %q", got.Title)
+	}
+	got = uploadMetadata(store.Track{Title: "filename"}, tags.Metadata{Title: "bad\nvalue", Year: 100000})
+	if got.Title != "filename" || got.Year != nil {
+		t.Fatalf("invalid tags imported: %+v", got)
+	}
 }

@@ -33,6 +33,9 @@ class MainActivity : AudioServiceActivity() {
     private val permissionRequest = 4102
     private val writePermissionRequest = 4103
     private val deleteRequest = 4104
+    private val metadataWriteRequest = 4105
+    private var pendingMetadataWrite: ((Boolean) -> Unit)? = null
+    private var editingMetadata = false
 
     /// Where downloaded tracks are saved, relative to shared storage.
     private val musicFolder = "${Environment.DIRECTORY_MUSIC}/rhythmo"
@@ -72,6 +75,39 @@ class MainActivity : AudioServiceActivity() {
                 "copyAudioToCache" -> handleCopyAudioToCache(
                     call.argument<String>("uri"),
                     call.argument<String>("fileName"),
+                    result,
+                )
+                "recoverAudioMetadata" -> {
+                    val journal = metadataJournal()
+                    val uri = journal.getString("uri", null)
+                    val name = journal.getString("name", null)
+                    if (uri == null || name == null) result.success(true)
+                    else handleWriteAudioMetadata(uri, name, mapOf("__recover" to true), result)
+                }
+                "readAudioMetadata" -> {
+                    val uri = call.argument<String>("uri")
+                    val name = call.argument<String>("fileName") ?: "audio.mp3"
+                    if (uri == null) {
+                        result.error("INVALID_ARGUMENT", "Audio URI is required.", null)
+                    } else Thread {
+                        var copy: File? = null
+                        try {
+                            val temp = File.createTempFile("rhythmo-tags-", "."+name.substringAfterLast('.'), cacheDir)
+                            copy = temp
+                            contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
+                                temp.outputStream().use { input.copyTo(it) }
+                            } ?: throw IOException("Audio could not be read.")
+                            val values = AudioMetadataTags.read(temp)
+                            runOnUiThread { result.success(values) }
+                        } catch (error: Exception) {
+                            runOnUiThread { result.error("METADATA_READ_FAILED", error.message, null) }
+                        } finally { copy?.delete() }
+                    }.start()
+                }
+                "writeAudioMetadata" -> handleWriteAudioMetadata(
+                    call.argument<String>("uri"),
+                    call.argument<String>("fileName"),
+                    call.argument<Map<String, Any?>>("metadata"),
                     result,
                 )
                 "deleteAudio" -> handleDeleteAudio(call.argument<String>("uri"), result)
@@ -297,7 +333,7 @@ class MainActivity : AudioServiceActivity() {
             result.error("INVALID_ARGUMENT", "Audio uri is required.", null)
             return
         }
-        if (pendingDelete != null || pendingWrite != null) {
+        if (pendingDelete != null || pendingWrite != null || editingMetadata) {
             result.error("BUSY", "Another storage request is active.", null)
             return
         }
@@ -342,9 +378,193 @@ class MainActivity : AudioServiceActivity() {
         }
     }
 
+    private fun handleWriteAudioMetadata(
+        rawUri: String?,
+        fileName: String?,
+        metadata: Map<String, Any?>?,
+        result: MethodChannel.Result,
+    ) {
+        if (rawUri == null || fileName == null || metadata == null ||
+            fileName.isBlank() || fileName.any { it in "/\\:*?\"<>|" }) {
+            result.error("INVALID_ARGUMENT", "A valid audio file and metadata are required.", null)
+            return
+        }
+        if (editingMetadata || pendingDelete != null || pendingWrite != null) {
+            result.error("BUSY", "Another storage request is active.", null)
+            return
+        }
+        editingMetadata = true
+        val uri = Uri.parse(rawUri)
+        fun finishError(code: String, message: String?) {
+            editingMetadata = false
+            result.error(code, message, null)
+        }
+        fun start(askUser: Boolean) {
+            Thread {
+                try {
+                    // Probe without truncation before making any changes.
+                    contentResolver.openFileDescriptor(uri, "rw")?.use { }
+                        ?: throw IOException("Audio file could not be opened for writing.")
+                    val size = if (metadata["__recover"] == true) {
+                        restoreMetadataBackup()
+                        1L
+                    } else rewriteAudioMetadata(uri, fileName, metadata)
+                    runOnUiThread {
+                        editingMetadata = false
+                        result.success(mapOf("sizeBytes" to size))
+                    }
+                } catch (error: SecurityException) {
+                    runOnUiThread {
+                        val sender = try { when {
+                            !askUser -> null
+                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
+                                MediaStore.createWriteRequest(contentResolver, listOf(uri)).intentSender
+                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && error is RecoverableSecurityException ->
+                                error.userAction.actionIntent.intentSender
+                            else -> null
+                        } } catch (_: Exception) { null }
+                        if (sender == null) {
+                            finishError("PERMISSION_DENIED", "Audio write access was denied.")
+                        } else {
+                            pendingMetadataWrite = { granted ->
+                                if (granted) start(false)
+                                else finishError("PERMISSION_DENIED", "Audio write access was declined.")
+                            }
+                            try {
+                                startIntentSenderForResult(sender, metadataWriteRequest, null, 0, 0, 0)
+                            } catch (failure: Exception) {
+                                pendingMetadataWrite = null
+                                finishError("PERMISSION_DENIED", failure.message)
+                            }
+                        }
+                    }
+                } catch (error: Exception) {
+                    runOnUiThread { finishError("METADATA_WRITE_FAILED", error.message) }
+                }
+            }.start()
+        }
+        withWritePermission { granted ->
+            if (granted) start(true)
+            else finishError("PERMISSION_DENIED", "Storage write access was denied.")
+        }
+    }
+
+    // Content providers cannot atomically replace an audio URI. Keep an exact
+    // backup until the rewritten bytes have been read back and verified.
+    private fun rewriteAudioMetadata(uri: Uri, fileName: String, metadata: Map<String, Any?>): Long {
+        val originalName = contentResolver.query(uri, arrayOf(MediaStore.Audio.Media.DISPLAY_NAME), null, null, null)
+            ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            ?: throw IOException("Audio filename is unavailable.")
+        val extension = originalName.substringAfterLast('.', "").lowercase()
+        require(extension == fileName.substringAfterLast('.', "").lowercase()) { "Audio format cannot change." }
+        if (metadataJournal().contains("uri")) throw IOException("An interrupted audio edit must be recovered first.")
+        val backup = File.createTempFile("rhythmo-original-", ".$extension", filesDir)
+        val edited = File.createTempFile("rhythmo-edited-", ".$extension", cacheDir)
+        var changed = false
+        var restored = true
+        try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                backup.outputStream().use { output -> input.copyTo(output); output.fd.sync() }
+            } ?: throw IOException("Audio file could not be read.")
+            backup.copyTo(edited, overwrite = true)
+            @Suppress("UNCHECKED_CAST")
+            AudioMetadataTags.rewrite(edited, metadata as Map<String, Any>)
+            // Tag writing and verification finish on the copy before touching
+            // the user's original URI. No decoder or encoder is involved.
+            if (!metadataJournal().edit().putString("uri", uri.toString())
+                    .putString("backup", backup.absolutePath).putString("name", originalName).commit()) {
+                throw IOException("Audio recovery journal could not be saved.")
+            }
+            changed = true
+            replaceAudioBytes(uri, edited)
+            val expected = java.security.MessageDigest.getInstance("SHA-256")
+            val actual = java.security.MessageDigest.getInstance("SHA-256")
+            edited.inputStream().use { input ->
+                val bytes = ByteArray(65536)
+                while (true) { val count = input.read(bytes); if (count < 0) break; expected.update(bytes, 0, count) }
+            }
+            contentResolver.openInputStream(uri)?.use { input ->
+                val bytes = ByteArray(65536)
+                while (true) { val count = input.read(bytes); if (count < 0) break; actual.update(bytes, 0, count) }
+            } ?: throw IOException("Audio could not be verified.")
+            if (!expected.digest().contentEquals(actual.digest())) throw IOException("Audio write verification failed.")
+            val values = ContentValues().apply { put(MediaStore.Audio.Media.DISPLAY_NAME, fileName) }
+            if (contentResolver.update(uri, values, null, null) != 1) throw IOException("Audio rename failed.")
+            val path = runCatching {
+                contentResolver.query(uri, arrayOf(MediaStore.Audio.Media.DATA), null, null, null)
+                    ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            }.getOrNull()
+            if (path != null) MediaScannerConnection.scanFile(this, arrayOf(path), null, null)
+            if (!metadataJournal().edit().clear().commit()) throw IOException("Audio recovery journal could not be cleared.")
+            return edited.length()
+        } catch (error: Exception) {
+            if (changed) {
+                try {
+                    restoreMetadataBackup()
+                } catch (rollback: Exception) {
+                    restored = false
+                    throw IOException("Original audio backup retained at "+backup.absolutePath, rollback)
+                }
+            }
+            throw error
+        } finally {
+            edited.delete()
+            if (restored) backup.delete()
+        }
+    }
+
+    private fun metadataJournal() = getSharedPreferences("rhythmo_metadata_recovery", MODE_PRIVATE)
+
+    // A durable original in filesDir survives process death and cache eviction.
+    // Dart invokes recovery before reading an editor, requesting write consent
+    // through the same path as an ordinary edit when Android requires it.
+    private fun restoreMetadataBackup() {
+        val journal = metadataJournal()
+        val rawUri = journal.getString("uri", null) ?: return
+        val originalName = journal.getString("name", null) ?: throw IOException("Recovery filename missing.")
+        val path = journal.getString("backup", null) ?: throw IOException("Recovery backup missing.")
+        val backup = File(path)
+        if (!backup.isFile || backup.length() == 0L) throw IOException("Original audio backup unavailable.")
+        val uri = Uri.parse(rawUri)
+        replaceAudioBytes(uri, backup)
+        val expected = java.security.MessageDigest.getInstance("SHA-256")
+        val actual = java.security.MessageDigest.getInstance("SHA-256")
+        backup.inputStream().use { input ->
+            val bytes = ByteArray(65536)
+            while (true) { val count = input.read(bytes); if (count < 0) break; expected.update(bytes, 0, count) }
+        }
+        contentResolver.openInputStream(uri)?.use { input ->
+            val bytes = ByteArray(65536)
+            while (true) { val count = input.read(bytes); if (count < 0) break; actual.update(bytes, 0, count) }
+        } ?: throw IOException("Restored audio could not be read.")
+        if (!expected.digest().contentEquals(actual.digest())) throw IOException("Original audio restore verification failed.")
+        if (contentResolver.update(uri, ContentValues().apply {
+                put(MediaStore.Audio.Media.DISPLAY_NAME, originalName)
+            }, null, null) != 1) throw IOException("Original filename could not be restored.")
+        if (!journal.edit().clear().commit()) throw IOException("Audio recovery state could not be cleared.")
+        backup.delete()
+    }
+
+    private fun replaceAudioBytes(uri: Uri, source: File) {
+        val descriptor = contentResolver.openFileDescriptor(uri, "rw")
+            ?: throw IOException("Audio file could not be written.")
+        android.os.ParcelFileDescriptor.AutoCloseOutputStream(descriptor).use { output ->
+            output.channel.truncate(0)
+            output.channel.position(0)
+            source.inputStream().use { it.copyTo(output) }
+            output.fd.sync()
+        }
+    }
+
     @Deprecated("Needed for MediaStore delete confirmation on API 29+.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == metadataWriteRequest) {
+            val callback = pendingMetadataWrite ?: return
+            pendingMetadataWrite = null
+            callback(resultCode == Activity.RESULT_OK)
+            return
+        }
         if (requestCode != deleteRequest) return
         val callback = pendingDelete ?: return
         pendingDelete = null
