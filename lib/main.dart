@@ -34,6 +34,7 @@ import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/data/audio_cache.dart';
 import 'package:rhythmo/features/player/data/audio_engine.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
+import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/features/settings/application/cache_controller.dart';
 import 'package:rhythmo/features/upload/application/upload_controller.dart';
 import 'package:rhythmo/features/upload/data/audio_picker.dart';
@@ -131,6 +132,8 @@ class _RhythmoAppState extends State<RhythmoApp> {
       ? null
       : PlaylistsController(
           api: _playlistsApi,
+          accountId: () => _auth?.user?.id,
+          deviceStore: SecureDevicePlaylistStore(),
           token: () => _auth?.token,
           isAdmin: () => _auth?.user?.isAdmin ?? false);
 

@@ -79,6 +79,8 @@ class FavoriteTracks extends ChangeNotifier {
 
   /// The listener's server likes, most recently liked first: their own
   /// cloud tracks and store songs.
+  final Map<String, Set<String>> _aliases = {};
+
   List<Track> get songs => _songs;
 
   /// «پسندیده‌ها» as the listener sees it: server likes newest first (the
@@ -143,7 +145,16 @@ class FavoriteTracks extends ChangeNotifier {
       }
       final liked = await api.likedSongs(token);
       _songs = [for (final song in liked) song.track];
-      _remote = {for (final track in _songs) track.id};
+      _aliases.clear();
+      for (final song in liked) {
+        final ids = {song.track.id, ...song.trackIds};
+        for (final id in ids) {
+          _aliases[id] = ids;
+        }
+      }
+      _remote = {
+        for (final song in liked) ...{song.track.id, ...song.trackIds}
+      };
       notifyListeners();
     } catch (error) {
       debugPrint('Server likes unavailable: $error');
@@ -154,6 +165,7 @@ class FavoriteTracks extends ChangeNotifier {
   /// on this device stay.
   void clearAccount() {
     _remote = {};
+    _aliases.clear();
     _songs = const [];
     notifyListeners();
   }
@@ -162,12 +174,15 @@ class FavoriteTracks extends ChangeNotifier {
   /// that fails flips it back. A store song needs an account.
   Future<TrackLikeResult> toggleTrack(Track track) async {
     final api = _api, token = _token();
-    if (!_onServer(track) || (api == null && !track.fromStore)) {
+    if (!_onServer(track) ||
+        (api == null && !track.fromStore && track.sharedVia == null)) {
       await toggle(track.id);
       return TrackLikeResult.done;
     }
     if (api == null || token == null) {
-      if (track.fromStore) return TrackLikeResult.needsAccount;
+      if (track.fromStore || track.sharedVia != null) {
+        return TrackLikeResult.needsAccount;
+      }
       await toggle(track.id);
       return TrackLikeResult.done;
     }
@@ -200,8 +215,9 @@ class FavoriteTracks extends ChangeNotifier {
       _remote = {..._remote, track.id};
       _songs = [track, ..._songs.where((t) => t.id != track.id)];
     } else {
-      _remote = {..._remote}..remove(track.id);
-      _songs = [..._songs.where((t) => t.id != track.id)];
+      final ids = _aliases[track.id] ?? {track.id};
+      _remote = {..._remote}..removeAll(ids);
+      _songs = [..._songs.where((t) => !ids.contains(t.id))];
     }
   }
 

@@ -274,7 +274,7 @@ class _LibraryScreenState extends State<LibraryScreen>
         joinCollabPlaylist(context,
             collabToken: collabToken,
             controller: playlists,
-            libraryTracks: widget.library.tracks,
+            libraryTracks: _unifiedTracks(),
             player: widget.player);
       });
     }
@@ -499,9 +499,8 @@ class _LibraryScreenState extends State<LibraryScreen>
               body: RhythmoBackdrop(
                   child: PlaylistsView(
                       controller: playlists,
-                      libraryTracks: widget.library.tracks,
+                      libraryTracks: _unifiedTracks(),
                       player: widget.player,
-                      store: widget.store,
                       onSharedSaved: widget.library.load)),
             )));
   }
@@ -794,10 +793,9 @@ class _LibraryScreenState extends State<LibraryScreen>
         LibraryTab.tracks => _unifiedLibrary(),
         LibraryTab.playlists => PlaylistsView(
             controller: widget.playlists!,
-            libraryTracks: widget.library.tracks,
+            libraryTracks: _unifiedTracks(),
             player: widget.player,
             onSharedSaved: widget.library.load,
-            store: widget.store,
             underHeader: true),
         LibraryTab.albums => _groupsTab(albums: true),
         LibraryTab.artists => _groupsTab(albums: false),
@@ -879,7 +877,7 @@ class _LibraryScreenState extends State<LibraryScreen>
       builder: (_) => LibrarySearchScreen(
         changes: _libraryChanges,
         tracks: _unifiedTracks,
-        libraryTracks: () => widget.library.tracks,
+        libraryTracks: _unifiedTracks,
         playlists: widget.playlists,
         player: widget.player,
         onSharedSaved: widget.library.load,
@@ -1570,6 +1568,9 @@ class _TrackListState extends State<_TrackList> {
             : RhythmoIcons.heart,
         widget.player.favorites.contains(track.id) ? 'نپسندیدن' : 'پسندیدن',
       ),
+      if (widget.playlists != null)
+        item(_TrackAction.addToPlaylist, RhythmoIcons.listPlus,
+            'افزودن به فهرست پخش'),
       if (widget.onEditMetadata != null)
         item(_TrackAction.editMetadata, RhythmoIcons.pencilSimple,
             'ویرایش اطلاعات آهنگ'),
@@ -1585,9 +1586,6 @@ class _TrackListState extends State<_TrackList> {
               PublishState.private => 'انتشار در استور',
             },
           ),
-        if (widget.playlists != null)
-          item(_TrackAction.addToPlaylist, RhythmoIcons.listPlus,
-              'افزودن به فهرست پخش'),
         for (final bot in widget.linkedBots)
           PopupMenuItem(
             value: (_TrackAction.sendToBot, bot),
@@ -1710,7 +1708,7 @@ class _TrackListState extends State<_TrackList> {
       if (!context.mounted || playlistId == null) return;
     }
 
-    final result = await controller.addTrack(playlistId, track.id);
+    final result = await controller.addDeviceTrack(playlistId, track);
     if (!context.mounted) return;
     switch (result) {
       case AddTrackResult.added:
@@ -1862,7 +1860,11 @@ class _TabScrollView extends StatelessWidget {
                     NestedScrollView.sliverOverlapAbsorberHandleFor(context),
               ),
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(side, 12, side, 128),
+              // With extendBody, Scaffold exposes the measured mini-player
+              // height through MediaQuery.padding. Also clear the 56px FAB,
+              // its 16px margin and a 24px gap above its touch target.
+              padding: EdgeInsets.fromLTRB(
+                  side, 12, side, MediaQuery.paddingOf(context).bottom + 96),
               sliver: SliverMainAxisGroup(slivers: slivers),
             ),
           ],
