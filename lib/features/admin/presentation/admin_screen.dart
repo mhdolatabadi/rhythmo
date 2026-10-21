@@ -56,8 +56,11 @@ class _AdminScreenState extends State<AdminScreen> {
       _error = null;
     });
     try {
-      final page =
-          await widget.api.listAccounts(token, query: query, offset: offset);
+      final page = await widget.api.listAccounts(
+        token,
+        query: query,
+        offset: offset,
+      );
       if (!mounted || request != _request) return;
       setState(() {
         _accounts = next ? [..._accounts, ...page.accounts] : page.accounts;
@@ -207,8 +210,11 @@ class _AdminScreenState extends State<AdminScreen> {
     if (token == null) return;
     setState(() => _saving = account.user.id);
     try {
-      final updated = await widget.api
-          .setAccountVerification(token, account.user.id, verified);
+      final updated = await widget.api.setAccountVerification(
+        token,
+        account.user.id,
+        verified,
+      );
       if (!mounted) return;
       setState(() {
         _accounts = [
@@ -216,9 +222,11 @@ class _AdminScreenState extends State<AdminScreen> {
             if (item.user.id == updated.user.id) updated else item,
         ];
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(verified ? 'حساب تأیید شد.' : 'تأیید حساب لغو شد.'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(verified ? 'حساب تأیید شد.' : 'تأیید حساب لغو شد.'),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       final denied = error is ApiException &&
@@ -230,11 +238,15 @@ class _AdminScreenState extends State<AdminScreen> {
           _error = 'دسترسی مدیریت نداری. دوباره وارد حساب مدیر شو.';
         });
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(denied
-            ? 'دسترسی مدیریت نداری.'
-            : 'تغییر ذخیره نشد. دوباره تلاش کن.'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            denied
+                ? 'دسترسی مدیریت نداری.'
+                : 'تغییر ذخیره نشد. دوباره تلاش کن.',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = null);
     }
@@ -264,7 +276,9 @@ class _AdminScreenState extends State<AdminScreen> {
                 : () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => PublicationReviewScreen(
-                            api: widget.api, token: widget.token),
+                          api: widget.api,
+                          token: widget.token,
+                        ),
                       ),
                     ),
           ),
@@ -276,19 +290,22 @@ class _AdminScreenState extends State<AdminScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 960),
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                 children: [
                   GlassSurface(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('حساب‌های ریتمو',
-                            style: Theme.of(context).textTheme.titleLarge),
+                        Text(
+                          'حساب‌های ریتمو',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
                         const SizedBox(height: 8),
                         const Text(
-                            'حساب‌ها را پیدا کن و نشان تأییدشان را مدیریت کن. حساب‌های تأییدشده بدون تأیید مدیر فهرست پخش و آهنگ عمومی می‌کنند.'),
-                        const SizedBox(height: 20),
+                          'حساب‌ها را پیدا کن و نشان تأییدشان را مدیریت کن. حساب‌های تأییدشده بدون تأیید مدیر فهرست پخش و آهنگ عمومی می‌کنند.',
+                        ),
+                        const SizedBox(height: 12),
                         TextField(
                           controller: _search,
                           enabled: !_forbidden && _saving == null,
@@ -326,50 +343,87 @@ class _AdminScreenState extends State<AdminScreen> {
                   if (!_loading && _error == null && _accounts.isEmpty)
                     const Padding(
                       padding: EdgeInsets.all(32),
-                      child:
-                          Text('حسابی پیدا نشد.', textAlign: TextAlign.center),
+                      child: Text(
+                        'حسابی پیدا نشد.',
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   const SizedBox(height: 16),
                   for (final account in _accounts)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.only(bottom: 8),
                       child: GlassSurface(
                         blur: 0,
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        shadow: false,
+                        radius: 16,
+                        child: Row(
                           children: [
-                            Text(account.user.email,
-                                textDirection: TextDirection.ltr,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 8),
-                            Text(account.user.verified
-                                ? 'حساب تأییدشده'
-                                : 'تأیید نشده'),
-                            const SizedBox(height: 8),
-                            Text(
-                                'ظرفیت آپلود: ${persianDigits((account.storageQuotaBytes / (1 << 30)).toStringAsFixed(2))} گیگابایت'),
-                            if (widget.api is AdminQuotaApi)
-                              OutlinedButton.icon(
-                                  onPressed: _saving != null || _loading
-                                      ? null
-                                      : () => _increaseQuota(account),
-                                  icon: const Icon(RhythmoIcons.cloudArrowUp),
-                                  label: const Text('افزایش ظرفیت آپلود')),
-                            const SizedBox(height: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    account.user.email,
+                                    textDirection: TextDirection.ltr,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    account.user.verified
+                                        ? 'حساب تأییدشده'
+                                        : 'تأیید نشده',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: account.user.verified
+                                              ? Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                              : Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                        ),
+                                  ),
+                                  Text(
+                                    'ظرفیت آپلود: ${persianDigits((account.storageQuotaBytes / (1 << 30)).toStringAsFixed(2))} گیگابایت',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (widget.api is AdminQuotaApi)
+                                    TextButton.icon(
+                                      onPressed: _saving != null || _loading
+                                          ? null
+                                          : () => _increaseQuota(account),
+                                      icon:
+                                          const Icon(RhythmoIcons.cloudArrowUp),
+                                      label: const Text('افزایش ظرفیت آپلود'),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
                             OutlinedButton.icon(
                               onPressed: _saving != null || _loading
                                   ? null
                                   : () => _verify(account),
-                              icon: Icon(account.user.verified
-                                  ? RhythmoIcons.checkCircle
-                                  : RhythmoIcons.check),
-                              label: Text(_saving == account.user.id
-                                  ? 'در حال ذخیره…'
-                                  : account.user.verified
-                                      ? 'لغو تأیید'
-                                      : 'تأیید حساب'),
+                              icon: Icon(
+                                account.user.verified
+                                    ? RhythmoIcons.checkCircle
+                                    : RhythmoIcons.check,
+                              ),
+                              label: Text(
+                                _saving == account.user.id
+                                    ? 'در حال ذخیره…'
+                                    : account.user.verified
+                                        ? 'لغو تأیید'
+                                        : 'تأیید حساب',
+                              ),
                             ),
                           ],
                         ),

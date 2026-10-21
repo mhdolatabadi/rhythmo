@@ -20,14 +20,13 @@ class LoudnessSetting extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Divider(),
+            const Divider(height: 1),
             SwitchListTile(
               secondary: const Icon(RhythmoIcons.speakerHigh),
               title: const Text('یکسان‌سازی بلندی صدا'),
               subtitle: Text(
                 on
-                    ? 'آهنگ‌ها با بلندی یکسان پخش می‌شوند؛ خود فایل‌ها '
-                        'دست نمی‌خورند.'
+                    ? 'بلندی یکسان، بدون تغییر فایل'
                     : 'هر آهنگ با همان بلندی که ضبط شده پخش می‌شود.',
               ),
               value: on,
