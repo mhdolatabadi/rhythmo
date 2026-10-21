@@ -410,7 +410,8 @@ void main() {
 
     // One centred column: equal room on both sides, never past 960 px.
     final add = tester.getRect(find.ancestor(
-        of: find.byTooltip('مدیریت آهنگ‌ها'), matching: find.byType(IconButton)));
+        of: find.byTooltip('مدیریت آهنگ‌ها'),
+        matching: find.byType(IconButton)));
     final row = tester.getRect(find.ancestor(
         of: find.text('My song'), matching: find.byType(InkWell)));
     expect(row.width, lessThanOrEqualTo(960));

@@ -554,7 +554,8 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
 
   Future<void> _save(List<String> ids) async {
     setState(() => saving = true);
-    final saved = await widget.controller.replaceTracks(widget.playlistId, ids);
+    final saved = await widget.controller.replaceTracks(widget.playlistId, ids,
+        deviceTracks: widget.libraryTracks);
     if (!mounted) return;
     setState(() {
       playlist = saved ?? playlist;
@@ -807,15 +808,15 @@ class _PlaylistBody extends StatelessWidget {
                       IconButton(
                         tooltip: 'انتخاب آهنگ‌ها',
                         onPressed: saving ? null : onSelectTracks,
-                        constraints: const BoxConstraints(
-                            minWidth: 48, minHeight: 48),
+                        constraints:
+                            const BoxConstraints(minWidth: 48, minHeight: 48),
                         icon: const Icon(RhythmoIcons.plus, size: 20),
                       ),
                     IconButton(
                       tooltip: editing ? 'پایان ویرایش' : 'مدیریت آهنگ‌ها',
                       onPressed: saving ? null : onToggleEditing,
-                      constraints: const BoxConstraints(
-                          minWidth: 48, minHeight: 48),
+                      constraints:
+                          const BoxConstraints(minWidth: 48, minHeight: 48),
                       icon: Icon(
                           editing ? Icons.check_rounded : Icons.edit_outlined,
                           size: 20),
@@ -1145,7 +1146,8 @@ class _PlaylistTrackRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: RhythmoSpace.sm),
-                  RhythmoArtworkTile(seed: track.id, active: playing),
+                  RhythmoArtworkTile(
+                      seed: track.id, active: playing, track: track),
                   const SizedBox(width: RhythmoSpace.md),
                   Expanded(
                     child: Column(
@@ -1178,8 +1180,8 @@ class _PlaylistTrackRow extends StatelessWidget {
                       tooltip: 'حذف از فهرست پخش',
                       onPressed: onRemove,
                       color: colors.onSurfaceVariant.withValues(alpha: 0.65),
-                      constraints: const BoxConstraints(
-                          minWidth: 48, minHeight: 48),
+                      constraints:
+                          const BoxConstraints(minWidth: 48, minHeight: 48),
                       icon: const Icon(Icons.remove_circle_outline, size: 18),
                     ),
                   if (editing)
@@ -1237,6 +1239,9 @@ class _TrackPickerState extends State<_TrackPicker> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Text(
+                'آهنگ‌های محلی فقط روی این دستگاه در دسترس‌اند و به اشتراک گذاشته نمی‌شوند.'),
+            const SizedBox(height: 8),
             TextField(
               decoration: const InputDecoration(
                 labelText: 'جست‌وجوی عنوان یا هنرمند',

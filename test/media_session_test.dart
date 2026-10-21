@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rhythmo/features/library/data/track.dart';
@@ -31,6 +32,24 @@ void main() {
     player = PlayerController(
         api: FakeTracksApi(), engine: engine, token: () => 'tok');
     handler = RhythmoAudioHandler(artwork: _artwork)..attach(player);
+  });
+
+  test('embedded cover wins; stale results cannot overwrite the next song',
+      () async {
+    final first = Completer<Uri?>();
+    final second = Uri.parse('https://example.com/second.jpg');
+    handler.attach(player, artworkFor: (track) {
+      if (track.id == 'a') return first.future;
+      return Future.value(second);
+    });
+    await player.playFrom(_tracks, 0);
+    await player.playFrom(_tracks, 1);
+    await pumpEventQueue();
+    expect(handler.mediaItem.value?.artUri, second);
+    first.complete(Uri.parse('https://example.com/first.jpg'));
+    await pumpEventQueue();
+    expect(handler.mediaItem.value?.id, 'b');
+    expect(handler.mediaItem.value?.artUri, second);
   });
 
   test('the system shows the current track and its duration', () async {
