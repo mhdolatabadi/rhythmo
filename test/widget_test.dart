@@ -1150,7 +1150,8 @@ void main() {
 
       await tester.tap(find.widgetWithText(Tab, 'فهرست‌های پخش'));
       await tester.pumpAndSettle();
-      expect(find.text('فهرست پخش جدید'), findsOneWidget);
+      expect(find.byTooltip('فهرست پخش جدید'), findsOneWidget);
+      expect(find.text('فهرست پخش جدید'), findsNothing);
       expect(find.text('mix'), findsWidgets);
       // Adding music belongs to the tracks tab only.
       expect(find.byTooltip('افزودن موسیقی'), findsNothing);

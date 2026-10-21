@@ -1,3 +1,4 @@
+import 'package:rhythmo/features/library/data/track_artwork.dart';
 import 'package:flutter/material.dart';
 import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
@@ -148,15 +149,18 @@ class _RecentCard extends StatelessWidget {
                               ],
                       ),
                     ),
-                    child: Icon(
-                      current
-                          ? RhythmoIcons.waveformFill
-                          : RhythmoIcons.musicNote,
-                      size: 36,
-                      color: current
-                          ? colors.onPrimaryContainer
-                          : colors.onSurfaceVariant,
-                    ),
+                    child: TrackCover(
+                        track: track,
+                        radius: 16,
+                        child: Icon(
+                          current
+                              ? RhythmoIcons.waveformFill
+                              : RhythmoIcons.musicNote,
+                          size: 36,
+                          color: current
+                              ? colors.onPrimaryContainer
+                              : colors.onSurfaceVariant,
+                        )),
                   ),
                 ),
                 const SizedBox(height: 8),

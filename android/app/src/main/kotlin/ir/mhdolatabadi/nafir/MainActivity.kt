@@ -8,6 +8,10 @@ import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.media.MediaMetadataRetriever
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import java.io.ByteArrayOutputStream
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
@@ -64,6 +68,7 @@ class MainActivity : AudioServiceActivity() {
                     result.success(mapOf("version" to info.versionName, "build_number" to build.toString()))
                 }
                 "queryAudio" -> handleQueryAudio(result)
+                "readArtwork" -> handleReadArtwork(call.argument<String>("uri"), result)
                 "copyAudioToCache" -> handleCopyAudioToCache(
                     call.argument<String>("uri"),
                     call.argument<String>("fileName"),
@@ -79,6 +84,44 @@ class MainActivity : AudioServiceActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun handleReadArtwork(value: String?, result: MethodChannel.Result) {
+        val uri = value?.let { Uri.parse(it) }
+        if (uri == null || uri.scheme != "content" || uri.authority != MediaStore.AUTHORITY || !hasAudioPermission()) {
+            result.success(null)
+            return
+        }
+        Thread {
+            val retriever = MediaMetadataRetriever()
+            var output: ByteArray? = null
+            try {
+                retriever.setDataSource(this, uri)
+                val picture = retriever.embeddedPicture
+                if (picture != null && picture.size <= 16 * 1024 * 1024) {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(picture, 0, picture.size, bounds)
+                    if (bounds.outWidth > 0 && bounds.outHeight > 0 &&
+                        bounds.outWidth.toLong() * bounds.outHeight <= 16 * 1024 * 1024) {
+                        var sample = 1
+                        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 512) sample *= 2
+                        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+                        val bitmap = BitmapFactory.decodeByteArray(picture, 0, picture.size, options)
+                        if (bitmap != null) {
+                            val buffer = ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 88, buffer)
+                            bitmap.recycle()
+                            output = buffer.toByteArray().takeIf { it.size <= 512 * 1024 }
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // A corrupt or absent picture must not prevent playback.
+            } finally {
+                try { retriever.release() } catch (_: Exception) {}
+            }
+            runOnUiThread { result.success(output) }
+        }.start()
     }
 
     private fun handleQueryAudio(result: MethodChannel.Result) {
@@ -109,20 +152,29 @@ class MainActivity : AudioServiceActivity() {
             result.error("PERMISSION_DENIED", "Audio access was denied.", null)
             return
         }
-        try {
-            val safeName = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-            val output = File.createTempFile("nafir-upload-", "-$safeName", cacheDir)
-            contentResolver.openInputStream(Uri.parse(uri)).use { input ->
+        Thread {
+            var output: File? = null
+            try {
+                val safeName = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val target = File.createTempFile("rhythmo-upload-", "-$safeName", cacheDir)
+                output = target
+                val input = contentResolver.openInputStream(Uri.parse(uri))
                 if (input == null) {
-                    result.error("NOT_FOUND", "Audio file could not be opened.", null)
-                    return
+                    target.delete()
+                    runOnUiThread {
+                        result.error("NOT_FOUND", "Audio file could not be opened.", null)
+                    }
+                } else {
+                    input.use { source ->
+                        target.outputStream().use { destination -> source.copyTo(destination) }
+                    }
+                    runOnUiThread { result.success(target.absolutePath) }
                 }
-                output.outputStream().use { outputStream -> input.copyTo(outputStream) }
+            } catch (error: Exception) {
+                output?.delete()
+                runOnUiThread { result.error("READ_FAILED", error.message, null) }
             }
-            result.success(output.absolutePath)
-        } catch (error: Exception) {
-            result.error("READ_FAILED", error.message, null)
-        }
+        }.start()
     }
 
     /// Adds a downloaded file to the device's music (Music/rhythmo), where
