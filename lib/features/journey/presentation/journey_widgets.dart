@@ -132,6 +132,8 @@ class _CollapsedJourney extends StatelessWidget {
     messenger
       ?..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
+        persist: false,
+        duration: const Duration(seconds: 4),
         content: const Text(
           'سفر شنیداری پنهان شد. از تنظیمات می‌توانی دوباره نشانش بدهی.',
         ),

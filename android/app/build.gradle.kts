@@ -44,6 +44,7 @@ android {
 
     buildTypes {
         release {
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Local release builds keep working with the debug key. CI provides
             // key.properties and always selects the private production key.
             signingConfig = if (keystorePropertiesFile.exists()) {
@@ -64,3 +65,10 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    implementation("net.jthink:jaudiotagger:3.0.1")
+    testImplementation("junit:junit:4.13.2")
+}
+
+android.sourceSets.getByName("test").resources.srcDir("../../server/internal/tags/testdata")

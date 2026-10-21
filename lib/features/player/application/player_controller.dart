@@ -701,6 +701,33 @@ class PlayerController extends ChangeNotifier {
     await _replanPreload();
   }
 
+  /// Release a local file while its tags are rewritten, then reopen it at the
+  /// same position. The queue and repeat/shuffle choices stay intact.
+  Future<T> whileEditingLocalFile<T>(
+      Track edited, Future<T> Function() edit) async {
+    final current = _track;
+    if (current == null ||
+        current.sourceUri == null ||
+        current.sourceUri != edited.sourceUri) {
+      return edit();
+    }
+    final position = _position;
+    final wasPlaying =
+        _status == PlayerStatus.playing || _status == PlayerStatus.buffering;
+    final request = _request;
+    await _engine.stop();
+    try {
+      return await edit();
+    } finally {
+      // Do not replace a different song the listener selected meanwhile.
+      if (request == _request && _track?.id == current.id) {
+        await _start(current, autoplay: false);
+        await seek(position);
+        if (wasPlaying) await resume();
+      }
+    }
+  }
+
   /// Shows edited metadata for a queued or playing track without
   /// interrupting playback; the audio itself does not change.
   void updateTrack(Track track) {
