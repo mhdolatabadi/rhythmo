@@ -708,7 +708,9 @@ class PlayerController extends ChangeNotifier {
     final current = _track;
     if (current == null ||
         current.sourceUri == null ||
-        current.sourceUri != edited.sourceUri) return edit();
+        current.sourceUri != edited.sourceUri) {
+      return edit();
+    }
     final position = _position;
     final wasPlaying =
         _status == PlayerStatus.playing || _status == PlayerStatus.buffering;

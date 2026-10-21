@@ -41,8 +41,9 @@ class AndroidLocalAudioMetadataWriter implements LocalAudioMetadataWriter {
       },
     );
     final size = result?['sizeBytes'] as num?;
-    if (size == null || size <= 0)
+    if (size == null || size <= 0) {
       throw StateError('Audio write was not verified.');
+    }
     return size.toInt();
   }
 }
