@@ -1220,14 +1220,25 @@ void main() {
         return box.localToGlobal(Offset.zero).dy + box.size.height;
       }).where((bottom) => bottom > tabsBottom);
       expect(firstVisibleRow, isNotEmpty);
-      expect(find.text('Track number 0'), findsNothing);
+      final tracksScroll = find
+          .descendant(
+              of: find.byType(TabBarView), matching: find.byType(Scrollable))
+          .last;
+      final offset =
+          tester.state<ScrollableState>(tracksScroll).position.pixels;
+      expect(offset, greaterThan(0));
 
       await tester.tap(find.widgetWithText(Tab, 'آلبوم‌ها'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(Tab, 'آهنگ‌ها'));
       await tester.pumpAndSettle();
       // Coming back, the tracks list is where it was left.
-      expect(find.text('Track number 0'), findsNothing);
+      final restoredScroll = find
+          .descendant(
+              of: find.byType(TabBarView), matching: find.byType(Scrollable))
+          .last;
+      expect(tester.state<ScrollableState>(restoredScroll).position.pixels,
+          closeTo(offset, 1));
       expect(tester.takeException(), isNull);
     });
 
