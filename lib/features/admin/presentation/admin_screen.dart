@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:rhythmo/core/persian_digits.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/widgets/glass_surface.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/presentation/publication_review_screen.dart';
+import 'package:rhythmo/features/admin/data/admin_song_reports.dart';
+import 'package:rhythmo/features/admin/presentation/song_reports_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key, required this.api, required this.token});
@@ -66,8 +69,7 @@ class _AdminScreenState extends State<AdminScreen> {
     } catch (error) {
       if (!mounted || request != _request) return;
       setState(() {
-        _forbidden =
-            error is ApiException &&
+        _forbidden = error is ApiException &&
             (error.statusCode == 401 || error.statusCode == 403);
         _error = _forbidden
             ? 'دسترسی مدیریت نداری. دوباره وارد حساب مدیر شو.'
@@ -76,6 +78,97 @@ class _AdminScreenState extends State<AdminScreen> {
       });
     } finally {
       if (mounted && request == _request) setState(() => _loading = false);
+    }
+  }
+
+  static int? _quotaBytes(String input) {
+    const persian = '۰۱۲۳۴۵۶۷۸۹';
+    const arabic = '٠١٢٣٤٥٦٧٨٩';
+    final latin = input.trim().split('').map((c) {
+      final p = persian.indexOf(c), a = arabic.indexOf(c);
+      return p >= 0
+          ? '$p'
+          : a >= 0
+              ? '$a'
+              : c;
+    }).join();
+    final gib = int.tryParse(latin);
+    return gib == null || gib < 1 || gib > 1024 ? null : gib * (1 << 30);
+  }
+
+  Future<void> _increaseQuota(AdminAccount account) async {
+    final api = widget.api;
+    if (api is! AdminQuotaApi) return;
+    final field = TextEditingController(
+        text: '${(account.storageQuotaBytes / (1 << 30)).ceil() + 1}');
+    final form = GlobalKey<FormState>();
+    final bytes = await showDialog<int>(
+        context: context,
+        builder: (context) => AlertDialog(
+                title: const Text('افزایش ظرفیت آپلود'),
+                content: Form(
+                    key: form,
+                    child: TextFormField(
+                        controller: field,
+                        keyboardType: TextInputType.number,
+                        textDirection: TextDirection.ltr,
+                        decoration: const InputDecoration(
+                            labelText: 'ظرفیت جدید (گیگابایت)'),
+                        validator: (text) {
+                          final bytes = _quotaBytes(text ?? '');
+                          if (bytes == null) {
+                            return 'عددی بین ۱ تا ۱۰۲۴ وارد کن.';
+                          }
+                          if (bytes <= account.storageQuotaBytes) {
+                            return 'ظرفیت جدید باید بیشتر از ظرفیت فعلی باشد.';
+                          }
+                          return null;
+                        })),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('انصراف')),
+                  FilledButton(
+                      onPressed: () {
+                        if (form.currentState!.validate()) {
+                          Navigator.pop(context, _quotaBytes(field.text));
+                        }
+                      },
+                      child: const Text('افزایش ظرفیت'))
+                ]));
+    field.dispose();
+    if (bytes == null || !mounted) return;
+    final token = widget.token();
+    if (token == null) return;
+    setState(() => _saving = account.user.id);
+    try {
+      final updated = await (api as AdminQuotaApi)
+          .increaseStorageQuota(token, account.user.id, bytes);
+      if (mounted) {
+        setState(() => _accounts = [
+              for (final item in _accounts)
+                if (item.user.id == updated.user.id) updated else item
+            ]);
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('ظرفیت آپلود افزایش یافت.')));
+      }
+    } catch (error) {
+      if (mounted) {
+        final denied = error is ApiException &&
+            (error.statusCode == 401 || error.statusCode == 403);
+        if (denied) {
+          setState(() {
+            _forbidden = true;
+            _accounts = [];
+          });
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(denied
+                ? 'دسترسی مدیریت نداری.'
+                : 'افزایش ظرفیت ذخیره نشد. دوباره تلاش کن.')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = null);
     }
   }
 
@@ -122,8 +215,7 @@ class _AdminScreenState extends State<AdminScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      final denied =
-          error is ApiException &&
+      final denied = error is ApiException &&
           (error.statusCode == 401 || error.statusCode == 403);
       if (denied) {
         setState(() {
@@ -152,19 +244,29 @@ class _AdminScreenState extends State<AdminScreen> {
       appBar: AppBar(
         title: const Text('مدیریت حساب‌ها'),
         actions: [
+          if (widget.api is AdminSongReportsApi)
+            IconButton(
+                tooltip: 'گزارش آهنگ‌ها',
+                icon: const Icon(RhythmoIcons.flag),
+                onPressed: _forbidden
+                    ? null
+                    : () => Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => SongReportsScreen(
+                            api: widget.api as AdminSongReportsApi,
+                            token: widget.token)))),
           IconButton(
             tooltip: 'درخواست‌های انتشار',
             icon: const Icon(RhythmoIcons.shieldCheck),
             onPressed: _forbidden
                 ? null
                 : () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => PublicationReviewScreen(
-                        api: widget.api,
-                        token: widget.token,
+                      MaterialPageRoute<void>(
+                        builder: (_) => PublicationReviewScreen(
+                          api: widget.api,
+                          token: widget.token,
+                        ),
                       ),
                     ),
-                  ),
           ),
         ],
       ),
@@ -261,17 +363,33 @@ class _AdminScreenState extends State<AdminScreen> {
                                     account.user.verified
                                         ? 'حساب تأییدشده'
                                         : 'تأیید نشده',
-                                    style: Theme.of(context).textTheme.bodySmall
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
                                         ?.copyWith(
                                           color: account.user.verified
                                               ? Theme.of(context)
-                                                    .colorScheme
-                                                    .primary
+                                                  .colorScheme
+                                                  .primary
                                               : Theme.of(context)
-                                                    .colorScheme
-                                                    .onSurfaceVariant,
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
                                         ),
                                   ),
+                                  Text(
+                                    'ظرفیت آپلود: ${persianDigits((account.storageQuotaBytes / (1 << 30)).toStringAsFixed(2))} گیگابایت',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (widget.api is AdminQuotaApi)
+                                    TextButton.icon(
+                                      onPressed: _saving != null || _loading
+                                          ? null
+                                          : () => _increaseQuota(account),
+                                      icon:
+                                          const Icon(RhythmoIcons.cloudArrowUp),
+                                      label: const Text('افزایش ظرفیت آپلود'),
+                                    ),
                                 ],
                               ),
                             ),
@@ -289,8 +407,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                 _saving == account.user.id
                                     ? 'در حال ذخیره…'
                                     : account.user.verified
-                                    ? 'لغو تأیید'
-                                    : 'تأیید حساب',
+                                        ? 'لغو تأیید'
+                                        : 'تأیید حساب',
                               ),
                             ),
                           ],

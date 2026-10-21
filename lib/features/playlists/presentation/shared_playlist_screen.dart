@@ -7,6 +7,7 @@ import 'package:rhythmo/app/app_configuration.dart';
 import 'package:rhythmo/features/auth/presentation/sign_in_prompt.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/presentation/mini_player.dart';
+import 'package:rhythmo/features/likes/presentation/liked_songs_screen.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 
@@ -139,33 +140,35 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
       body: RhythmoBackdrop(
         child: switch (_state) {
           _Load.loading => const RhythmoStateView.loading(
-            title: 'در حال بارگذاری فهرست پخش…',
-          ),
+              title: 'در حال بارگذاری فهرست پخش…',
+            ),
           _Load.unavailable => const _Message(
-            icon: RhythmoIcons.linkBreak,
-            text: 'این لینک اشتباه است یا صاحبش اشتراک‌گذاری را لغو کرده است.',
-          ),
+              icon: RhythmoIcons.linkBreak,
+              text:
+                  'این لینک اشتباه است یا صاحبش اشتراک‌گذاری را لغو کرده است.',
+            ),
           _Load.failed => _Message(
-            icon: RhythmoIcons.cloudSlash,
-            text: 'بارگذاری فهرست پخش ناموفق بود.',
-            action: FilledButton.icon(
-              onPressed: _load,
-              icon: const Icon(RhythmoIcons.arrowsClockwise),
-              label: const Text('تلاش دوباره'),
+              icon: RhythmoIcons.cloudSlash,
+              text: 'بارگذاری فهرست پخش ناموفق بود.',
+              action: FilledButton.icon(
+                onPressed: _load,
+                icon: const Icon(RhythmoIcons.arrowsClockwise),
+                label: const Text('تلاش دوباره'),
+              ),
             ),
-          ),
           _Load.loaded => ListenableBuilder(
-            listenable: widget.controller,
-            builder: (context, _) => _Contents(
-              playlist: playlist!,
-              player: widget.player,
-              saving: _saving,
-              onSave: playlist.isOwner ? null : _save,
-              onLike: widget.controller.isLiking(widget.shareToken)
-                  ? null
-                  : _like,
+              listenable: widget.controller,
+              builder: (context, _) => _Contents(
+                playlist: playlist!,
+                player: widget.player,
+                saving: _saving,
+                onSignIn: widget.onSignIn,
+                onSave: playlist.isOwner ? null : _save,
+                onLike: widget.controller.isLiking(widget.shareToken)
+                    ? null
+                    : _like,
+              ),
             ),
-          ),
         },
       ),
     );
@@ -179,8 +182,10 @@ class _Contents extends StatelessWidget {
     required this.saving,
     this.onSave,
     this.onLike,
+    this.onSignIn,
   });
 
+  final VoidCallback? onSignIn;
   final SharedPlaylist playlist;
   final PlayerController player;
   final bool saving;
@@ -234,7 +239,9 @@ class _Contents extends StatelessWidget {
                               : 'اشتراک‌گذاری‌شده توسط ${playlist.owner}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 4),
@@ -296,7 +303,9 @@ class _Contents extends StatelessWidget {
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2),
                       child: Material(
-                        color: Theme.of(context).colorScheme.surface
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surface
                             .withValues(alpha: 0.55),
                         borderRadius: BorderRadius.circular(12),
                         clipBehavior: Clip.antiAlias,
@@ -318,11 +327,14 @@ class _Contents extends StatelessWidget {
                           ),
                           subtitle: track.artist == null
                               ? null
-                              : Text(
-                                  track.artist!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                              : Text(track.artist!,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: playlist.isPublic
+                              ? LikeButton(
+                                  track: track,
+                                  favorites: player.favorites,
+                                  onSignIn: onSignIn)
+                              : null,
                           onTap: () => player.playTapped(tracks, index),
                         ),
                       ),
@@ -509,8 +521,8 @@ class _ShareSheetState extends State<_ShareSheet> {
     final link = token == null
         ? null
         : origin == null
-        ? token
-        : sharedPlaylistLink(origin, token, public: _public).toString();
+            ? token
+            : sharedPlaylistLink(origin, token, public: _public).toString();
     final theme = Theme.of(context);
     return SafeArea(
       child: SingleChildScrollView(
@@ -546,9 +558,8 @@ class _ShareSheetState extends State<_ShareSheet> {
                 ),
               ],
               selected: {_public || _pending},
-              onSelectionChanged: _busy
-                  ? null
-                  : (selected) => _choose(selected.single),
+              onSelectionChanged:
+                  _busy ? null : (selected) => _choose(selected.single),
               style: const ButtonStyle(
                 minimumSize: WidgetStatePropertyAll(Size(0, 48)),
               ),
@@ -558,10 +569,10 @@ class _ShareSheetState extends State<_ShareSheet> {
               _pending
                   ? 'در انتظار تأیید مدیر است. تا تأیید نشود، در هیچ فهرستی نمی‌آید و فقط کسی که لینک را دارد پیدایش می‌کند.'
                   : _public
-                  ? 'در «فهرست‌های پخش محبوب» به همه‌ی کاربران ریتمو نشان داده می‌شود و می‌توانند آن را بپسندند.'
-                  : _rejected
-                  ? 'مدیر درخواست قبلی عمومی شدن را نپذیرفت. می‌توانی دوباره درخواست بدهی.'
-                  : 'در هیچ فهرستی نمی‌آید؛ فقط کسی که لینک را دارد پیدایش می‌کند. عمومی شدن حساب‌های تأییدنشده با تأیید مدیر است.',
+                      ? 'در «فهرست‌های پخش محبوب» به همه‌ی کاربران ریتمو نشان داده می‌شود و می‌توانند آن را بپسندند.'
+                      : _rejected
+                          ? 'مدیر درخواست قبلی عمومی شدن را نپذیرفت. می‌توانی دوباره درخواست بدهی.'
+                          : 'در هیچ فهرستی نمی‌آید؛ فقط کسی که لینک را دارد پیدایش می‌کند. عمومی شدن حساب‌های تأییدنشده با تأیید مدیر است.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -595,9 +606,9 @@ class _ShareSheetState extends State<_ShareSheet> {
                 onPressed: _busy
                     ? null
                     : () => _share(
-                        public: _public,
-                        failure: 'ساخت لینک ناموفق بود. دوباره تلاش کن.',
-                      ),
+                          public: _public,
+                          failure: 'ساخت لینک ناموفق بود. دوباره تلاش کن.',
+                        ),
                 icon: const Icon(RhythmoIcons.linkSimple),
                 label: const Text('ساخت لینک اشتراک'),
               ),

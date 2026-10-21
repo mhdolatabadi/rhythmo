@@ -34,7 +34,7 @@ class CrossfadeSetting extends StatelessWidget {
                 seconds == 0
                     ? 'پخش بی‌فاصله، بدون هم‌پوشانی'
                     : 'پایان هر آهنگ ${formatCrossfade(player.crossfade)} '
-                          'با شروع آهنگ بعدی درهم می‌آمیزد.',
+                        'با شروع آهنگ بعدی درهم می‌آمیزد.',
               ),
               trailing: Text(
                 formatCrossfade(player.crossfade),
