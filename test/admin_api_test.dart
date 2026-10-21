@@ -36,6 +36,24 @@ void main() {
     expect(page.hasMore, isTrue);
   });
 
+  test('song moderation uses protected admin routes', () async {
+    final calls = <String>[];
+    final client = ApiClient(uri, httpClient: MockClient((request) async {
+      expect(request.headers['Authorization'], 'Bearer admin');
+      calls.add('${request.method} ${request.url.path}');
+      if (request.method == 'GET') return http.Response('{"reports":[]}', 200);
+      return http.Response('', 204);
+    }));
+    expect(await client.songReports('admin'), isEmpty);
+    await client.moderateSong('admin', 'entry', remove: true);
+    await client.moderateSong('admin', 'entry', remove: false);
+    expect(calls, [
+      'GET /api/v1/admin/store/reports',
+      'DELETE /api/v1/admin/store/tracks/entry',
+      'POST /api/v1/admin/store/tracks/entry/dismiss-reports'
+    ]);
+  });
+
   test('verification patch uses server result and propagates denied access',
       () async {
     final client = ApiClient(uri, httpClient: MockClient((request) async {
