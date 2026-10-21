@@ -212,6 +212,11 @@ void main() {
 
     await tester.tap(find.byTooltip('پنهان کردن از کتابخانه'));
     await tester.pumpAndSettle();
+    expect(find.text('بازگردانی'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('بازگردانی'), findsNothing);
+    expect(journey.hiddenInLibrary, isTrue);
     final showSwitch =
         find.widgetWithText(SwitchListTile, 'نمایش سفر شنیداری در کتابخانه');
     expect(tester.widget<SwitchListTile>(showSwitch).value, isFalse);
