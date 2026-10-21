@@ -297,7 +297,8 @@ class _Contents extends StatelessWidget {
                         radius: 18,
                         tint: Theme.of(context).colorScheme.secondary,
                         child: ListTile(
-                          leading: const Icon(RhythmoIcons.musicNote),
+                          leading:
+                              RhythmoArtworkTile(seed: track.id, track: track),
                           title: Text(track.title,
                               maxLines: 1, overflow: TextOverflow.ellipsis),
                           subtitle: track.artist == null

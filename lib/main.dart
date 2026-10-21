@@ -1,3 +1,5 @@
+import 'package:rhythmo/features/library/data/track_artwork.dart';
+import 'package:rhythmo/features/player/data/track_notification_artwork.dart';
 import 'package:rhythmo/features/journey/application/listening_journey.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/app/app_preferences.dart';
@@ -32,6 +34,7 @@ import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/data/audio_cache.dart';
 import 'package:rhythmo/features/player/data/audio_engine.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
+import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/features/settings/application/cache_controller.dart';
 import 'package:rhythmo/features/upload/application/upload_controller.dart';
 import 'package:rhythmo/features/upload/data/audio_picker.dart';
@@ -129,6 +132,8 @@ class _RhythmoAppState extends State<RhythmoApp> {
       ? null
       : PlaylistsController(
           api: _playlistsApi,
+          accountId: () => _auth?.user?.id,
+          deviceStore: SecureDevicePlaylistStore(),
           token: () => _auth?.token,
           isAdmin: () => _auth?.user?.isAdmin ?? false);
 
@@ -194,10 +199,22 @@ class _RhythmoAppState extends State<RhythmoApp> {
           likes: widget.likesApi ?? _apiClient,
         );
 
+  late final _artwork = TrackArtworkController((track) {
+    if (track.isLocal) return TrackArtworkController.local(track);
+    return _apiClient?.trackArtwork(_auth?.token, track) ?? Future.value(null);
+  });
+
   final ListeningJourney _journey = ListeningJourney();
+
+  String? _artworkToken;
 
   void _selectJourneyAccount() {
     _journey.selectAccount(_auth?.user?.id);
+    final token = _auth?.token;
+    if (_artworkToken != token) {
+      _artworkToken = token;
+      _artwork.clear();
+    }
   }
 
   // One cache shared by playback and the Settings screen.
@@ -258,12 +275,21 @@ class _RhythmoAppState extends State<RhythmoApp> {
     _selectJourneyAccount();
     _preferences.load();
     final player = _player;
-    if (player != null) widget.mediaSession?.attach(player);
+    if (player != null) {
+      widget.mediaSession?.attach(
+        player,
+        artworkFor: (track) async {
+          final bytes = await _artwork.load(track);
+          return bytes == null ? null : trackNotificationArtwork(bytes);
+        },
+      );
+    }
   }
 
   @override
   void dispose() {
     _auth?.removeListener(_selectJourneyAccount);
+    _artwork.dispose();
     _journey.dispose();
     _preferences.dispose();
     _player?.dispose();
@@ -291,6 +317,10 @@ class _RhythmoAppState extends State<RhythmoApp> {
         listenable: _preferences,
         builder: (context, _) => MaterialApp(
           title: 'rhythmo',
+          builder: (context, child) => TrackArtworkScope(
+            controller: _artwork,
+            child: child ?? const SizedBox.shrink(),
+          ),
           debugShowCheckedModeBanner: false,
           // The UI is Persian only: right-to-left layout and Persian Material
           // strings (tooltips, dialogs), whatever the device language is.

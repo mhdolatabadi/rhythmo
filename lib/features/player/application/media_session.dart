@@ -11,17 +11,19 @@ const untitledTrack = 'آهنگ بی‌نام';
 /// Connects the system's media controls (notification, lock screen, headset
 /// buttons and, on the web, the browser's MediaSession) to [PlayerController].
 class RhythmoAudioHandler extends BaseAudioHandler with SeekHandler {
-  /// [artwork] is the rhythmo logo the system shows for every track, since
-  /// tracks carry no cover art yet; see [resolveNotificationArtwork].
+  /// [artwork] is used only when the file has no readable cover.
   RhythmoAudioHandler({this.artwork});
 
   final Uri? artwork;
+  Future<Uri?> Function(Track)? _artworkFor;
   PlayerController? _player;
   Object? _mediaKey;
   PlaybackState? _last;
 
   /// Drives [player] from the system controls and mirrors its state back.
-  void attach(PlayerController player) {
+  void attach(PlayerController player,
+      {Future<Uri?> Function(Track)? artworkFor}) {
+    _artworkFor = artworkFor;
     _player?.removeListener(_sync);
     _player = player;
     player.addListener(_sync);
@@ -93,6 +95,14 @@ class RhythmoAudioHandler extends BaseAudioHandler with SeekHandler {
       mediaItem.add(
         track == null ? null : _mediaItemFor(track, player.duration),
       );
+      if (track != null && _artworkFor != null) {
+        final duration = player.duration;
+        _artworkFor!(track).then((cover) {
+          if (_mediaKey == key && cover != null) {
+            mediaItem.add(_mediaItemFor(track, duration, cover: cover));
+          }
+        }).catchError((Object _) {});
+      }
     }
 
     final playing = player.status == PlayerStatus.playing ||
@@ -135,7 +145,7 @@ class RhythmoAudioHandler extends BaseAudioHandler with SeekHandler {
     playbackState.add(next);
   }
 
-  MediaItem _mediaItemFor(Track track, Duration? duration) {
+  MediaItem _mediaItemFor(Track track, Duration? duration, {Uri? cover}) {
     final title = notificationTitle(track);
     final album = _clean(track.album);
     final sourceLabel = track.isLocal ? 'روی دستگاه' : 'روی سرور';
@@ -146,7 +156,7 @@ class RhythmoAudioHandler extends BaseAudioHandler with SeekHandler {
       artist: subtitle,
       album: album ?? 'ریتمو',
       duration: duration,
-      artUri: artwork,
+      artUri: cover ?? artwork,
       displayTitle: title,
       displaySubtitle: subtitle,
       displayDescription: track.isLocal
