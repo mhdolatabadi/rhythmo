@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
 import 'package:rhythmo/features/library/data/local_audio_library.dart';
@@ -59,6 +60,7 @@ Future<void> _openMenu(WidgetTester tester, String title) async {
 }
 
 void main() {
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   testWidgets('device, server and synced tracks appear once with badges',
       (tester) async {
     await _pump(
@@ -110,7 +112,7 @@ void main() {
     expect(find.text('آپلود به سرور'), findsOneWidget);
     expect(find.text('حذف از دستگاه'), findsOneWidget);
     expect(find.text('حذف از سرور'), findsNothing);
-    expect(find.text('ویرایش اطلاعات آهنگ'), findsNothing);
+    expect(find.text('ویرایش اطلاعات آهنگ'), findsOneWidget);
   });
 
   testWidgets('editing from the menu saves and shows the new title',

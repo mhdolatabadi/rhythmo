@@ -111,11 +111,11 @@ a.title:hover,.sub a:hover{text-decoration:underline}
 <header class="site"><div class="wrap">
 <a class="brand" href="/" aria-label="ریتمو، صفحه‌ی اول">{{template "icon"}}<span>ریتمو</span></a>
 <span class="spacer"></span>
-<a class="button" href="/store">استور</a>
+<a class="button" href="/store">گنجینه</a>
 <a class="button primary" href="/app/">ورود / ثبت‌نام</a>
 </div></header>
 <main class="wrap">{{with .Crumbs}}<nav class="crumbs" aria-label="مسیر صفحه"><ol>{{range $i, $c := .}}<li>{{if $c.Link}}<a href="{{$c.Link}}"><bdi>{{$c.Name}}</bdi></a>{{else}}<span aria-current="page"><bdi>{{$c.Name}}</bdi></span>{{end}}</li>{{end}}</ol></nav>{{end}}{{template "content" .}}</main>
-<footer class="wrap"><span class="footer-mark">{{template "icon"}}</span>ریتمو — پخش‌کننده‌ی موسیقی ابری · <a href="/store">استور</a> · <a href="/privacy">حریم خصوصی</a> · <a href="/delete-account">حذف حساب</a></footer>
+<footer class="wrap"><span class="footer-mark">{{template "icon"}}</span>ریتمو — پخش‌کننده‌ی موسیقی ابری · <a href="/store">گنجینه</a> · <a href="/privacy">حریم خصوصی</a> · <a href="/delete-account">حذف حساب</a></footer>
 </body>
 </html>{{end}}
 

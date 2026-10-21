@@ -47,6 +47,7 @@ Track own(String id,
 
 /// Server likes in memory; it records calls and can be made to fail.
 class FakeLikesApi implements LikesApi {
+  final aliases = <String, List<String>>{};
   FakeLikesApi({List<Track>? liked}) : liked = [...?liked];
 
   final List<Track> liked;
@@ -73,7 +74,10 @@ class FakeLikesApi implements LikesApi {
     calls.add('list');
     return [
       for (final track in liked)
-        LikedSong(track: track, likedAt: DateTime(2026)),
+        LikedSong(
+            track: track,
+            likedAt: DateTime(2026),
+            trackIds: aliases[track.id] ?? const []),
     ];
   }
 
@@ -126,6 +130,40 @@ void main() {
         expect(favorites.contains(id), isTrue, reason: id);
       }
       expect(favorites.songs.map((t) => t.id), ['cloud-1', 'entry-1']);
+    });
+
+    test('public playlist likes survive refresh and share store identity',
+        () async {
+      final api = FakeLikesApi(liked: [song(1)])
+        ..aliases['entry-1'] = ['public-track'];
+      final favorites = FavoriteTracks(api: api, token: () => 'tok');
+      await favorites.load();
+      expect(favorites.contains('public-track'), isTrue);
+      const track = Track(
+          id: 'public-track',
+          title: 'Public song',
+          contentType: 'audio/mpeg',
+          sizeBytes: 1,
+          sharedVia: 'public-share');
+      expect(await favorites.toggleTrack(track), TrackLikeResult.done);
+      expect(favorites.contains('public-track'), isFalse);
+      expect(favorites.contains('entry-1'), isFalse);
+      expect(favorites.songs, isEmpty);
+      expect(api.calls, contains('unlike:public-track'));
+    });
+
+    test('a visitor must sign in to like a shared song', () async {
+      final api = FakeLikesApi();
+      final favorites = FavoriteTracks(api: api, token: () => null);
+      const track = Track(
+          id: 'public-track',
+          title: 'Public song',
+          contentType: 'audio/mpeg',
+          sizeBytes: 1,
+          sharedVia: 'public-share');
+      expect(await favorites.toggleTrack(track), TrackLikeResult.needsAccount);
+      expect(favorites.contains(track.id), isFalse);
+      expect(api.calls, isEmpty);
     });
 
     test('a like flips at once and flips back when the server says no',
@@ -431,14 +469,14 @@ void main() {
 
       await tester.tap(find.byTooltip('اقدامات آهنگ').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('انتشار در استور'));
+      await tester.tap(find.text('انتشار در گنجینه'));
       await tester.pumpAndSettle();
       expect(likes.calls, contains('publish:t2'));
-      expect(find.textContaining('در استور منتشر شد'), findsOneWidget);
+      expect(find.textContaining('در گنجینه منتشر شد'), findsOneWidget);
 
       await tester.tap(find.byTooltip('اقدامات آهنگ').first);
       await tester.pumpAndSettle();
-      expect(find.text('لغو انتشار در استور'), findsOneWidget);
+      expect(find.text('لغو انتشار در گنجینه'), findsOneWidget);
       await tester.tap(find.text('پسندیدن'));
       await tester.pumpAndSettle();
       expect(likes.calls, contains('like:t1'));
@@ -459,7 +497,7 @@ void main() {
 
       await tester.tap(find.byTooltip('اقدامات آهنگ').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('انتشار در استور'));
+      await tester.tap(find.text('انتشار در گنجینه'));
       await tester.pumpAndSettle();
       expect(likes.calls, contains('publish:t2'));
       expect(find.textContaining('برای مدیر فرستاده شد'), findsOneWidget);

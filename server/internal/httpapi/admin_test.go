@@ -41,6 +41,25 @@ func (m *fakeAdminStore) SetVerification(_ context.Context, id, actor string, ve
 	return m.user, nil
 }
 
+func (m *fakeAdminStore) SetStorageQuota(_ context.Context, id, actor string, bytes, fallback int64) (store.User, error) {
+	if m.fail {
+		return store.User{}, errors.New("unavailable")
+	}
+	if id != m.user.ID {
+		return store.User{}, store.ErrNotFound
+	}
+	current := fallback
+	if m.user.StorageQuotaBytes != nil {
+		current = *m.user.StorageQuotaBytes
+	}
+	if bytes < current {
+		return store.User{}, store.ErrQuotaDecrease
+	}
+	m.user.StorageQuotaBytes = &bytes
+	m.actor = actor
+	return m.user, nil
+}
+
 func TestAdminAuthorizationAndVerification(t *testing.T) {
 	api := newTestAPI(t)
 	admin, _ := api.users.Create(context.Background(), "admin@example.com", "hash")
@@ -183,4 +202,30 @@ func TestAdminHidesPopularPlaylist(t *testing.T) {
 		t.Fatalf("delete: %d %s", result.Code, result.Body)
 	}
 	expectError(t, api.do(t, "DELETE", path, "", adminToken), http.StatusNotFound, "playlist_not_found")
+}
+
+func TestAdminAccountQuota(t *testing.T) {
+	api := newTestAPI(t)
+	admin, _ := api.users.Create(context.Background(), "admin@example.com", "hash")
+	member, _ := api.users.Create(context.Background(), "member@example.com", "hash")
+	adminToken, _, _ := api.tokens.Issue(admin.ID)
+	memberToken, _, _ := api.tokens.Issue(member.ID)
+	handlers, err := NewAuthHandlers(api.users, auth.Passwords{Cost: bcrypt.MinCost}, api.tokens, AuthRateLimiters{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handlers.WithAdmins([]string{"admin@example.com"})
+	storage := &fakeAdminStore{user: member}
+	api.handler = NewHandler(Config{Auth: handlers, Admin: NewAdminHandlers(handlers, storage)})
+	path := "/api/v1/admin/accounts/" + member.ID + "/storage-quota"
+	expectError(t, api.do(t, "PATCH", path, `{"bytes":2147483648}`, ""), http.StatusUnauthorized, "unauthorized")
+	expectError(t, api.do(t, "PATCH", path, `{"bytes":2147483648}`, memberToken), http.StatusForbidden, "admin_required")
+	for _, body := range []string{`{"bytes":-1}`, `{"bytes":1099511627777}`, `{"bytes":0}`} {
+		expectError(t, api.do(t, "PATCH", path, body, adminToken), http.StatusBadRequest, "invalid_storage_quota")
+	}
+	response := api.do(t, "PATCH", path, `{"bytes":2147483648}`, adminToken)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"storageQuotaBytes":2147483648`) || storage.actor != admin.ID {
+		t.Fatalf("quota = %d %s", response.Code, response.Body)
+	}
+	expectError(t, api.do(t, "PATCH", path, `{"bytes":1073741824}`, adminToken), http.StatusConflict, "quota_must_increase")
 }

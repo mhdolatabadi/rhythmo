@@ -9,10 +9,6 @@ import 'package:rhythmo/features/playlists/application/playlists_controller.dart
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/features/playlists/presentation/collab_sheet.dart';
 import 'package:rhythmo/features/playlists/presentation/shared_playlist_screen.dart';
-import 'package:rhythmo/features/likes/presentation/liked_songs_screen.dart';
-import 'package:rhythmo/features/store/application/store_controller.dart';
-import 'package:rhythmo/features/store/data/store_catalog.dart';
-import 'package:rhythmo/features/store/presentation/store_carousel.dart';
 
 /// Joins the collaborative playlist with [collabToken] and opens it, or
 /// says why it couldn't.
@@ -84,15 +80,11 @@ class PlaylistsView extends StatefulWidget {
     required this.player,
     this.onSharedSaved,
     this.underHeader = false,
-    this.store,
   });
 
   final PlaylistsController controller;
   final List<Track> libraryTracks;
   final PlayerController player;
-
-  /// The public store; null hides its carousels.
-  final StoreController? store;
 
   /// Called after a shared playlist was saved, bringing its tracks along.
   final VoidCallback? onSharedSaved;
@@ -193,50 +185,24 @@ class _PlaylistsViewState extends State<PlaylistsView> {
     ));
   }
 
-  void _openLiked() {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => LikedSongsScreen(
-          player: widget.player, libraryTracks: widget.libraryTracks),
-    ));
-  }
-
   @override
   Widget build(BuildContext context) {
     final actions = Padding(
-      padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
         children: [
-          LikedSongsEntry(
-            favorites: widget.player.favorites,
-            libraryTracks: widget.libraryTracks,
-            onOpen: _openLiked,
+          IconButton.filledTonal(
+            tooltip: 'فهرست پخش جدید',
+            onPressed: _create,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(RhythmoIcons.plus),
           ),
-          if (widget.store case final store?)
-            for (final ranking in StoreRanking.values.reversed)
-              StoreCarousel(
-                controller: store,
-                ranking: ranking,
-                player: widget.player,
-                padding: EdgeInsets.zero,
-              ),
-          const SizedBox(height: RhythmoSpace.md),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              FilledButton.tonalIcon(
-                onPressed: _create,
-                icon: const Icon(RhythmoIcons.listPlus),
-                label: const Text('فهرست پخش جدید'),
-              ),
-              IconButton(
-                tooltip: 'باز کردن لینک اشتراک',
-                onPressed: _openLink,
-                icon: const Icon(RhythmoIcons.link),
-              ),
-            ],
+          const SizedBox(width: RhythmoSpace.sm),
+          IconButton(
+            tooltip: 'باز کردن لینک اشتراک',
+            onPressed: _openLink,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(RhythmoIcons.link),
           ),
         ],
       ),
@@ -468,6 +434,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
 
   /// A change is on its way to the server; the page stays in place.
   bool saving = false;
+  bool editingTracks = false;
 
   @override
   void initState() {
@@ -687,6 +654,9 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       playlist: current,
                       playingId: widget.player.track?.id,
                       saving: saving,
+                      editing: editingTracks,
+                      onToggleEditing: () =>
+                          setState(() => editingTracks = !editingTracks),
                       onPlay: () => widget.player.playFrom(current.tracks, 0),
                       onShuffle: () =>
                           widget.player.playShuffled(current.tracks),
@@ -741,6 +711,8 @@ class _PlaylistBody extends StatelessWidget {
     required this.playlist,
     required this.playingId,
     required this.saving,
+    required this.editing,
+    required this.onToggleEditing,
     required this.onPlay,
     required this.onShuffle,
     required this.onCollab,
@@ -754,6 +726,8 @@ class _PlaylistBody extends StatelessWidget {
   final Playlist playlist;
   final String? playingId;
   final bool saving;
+  final bool editing;
+  final VoidCallback onToggleEditing;
   final VoidCallback onPlay;
   final VoidCallback onShuffle;
   final VoidCallback? onCollab;
@@ -793,10 +767,27 @@ class _PlaylistBody extends StatelessWidget {
                 title: 'آهنگ‌ها',
                 padding: const EdgeInsetsDirectional.fromSTEB(RhythmoSpace.sm,
                     RhythmoSpace.xxl, RhythmoSpace.xs, RhythmoSpace.sm),
-                trailing: FilledButton.tonalIcon(
-                  onPressed: saving ? null : onSelectTracks,
-                  icon: const Icon(RhythmoIcons.plus, size: 20),
-                  label: const Text('مدیریت آهنگ‌ها'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (editing)
+                      IconButton(
+                        tooltip: 'انتخاب آهنگ‌ها',
+                        onPressed: saving ? null : onSelectTracks,
+                        constraints:
+                            const BoxConstraints(minWidth: 48, minHeight: 48),
+                        icon: const Icon(RhythmoIcons.plus, size: 20),
+                      ),
+                    IconButton(
+                      tooltip: editing ? 'پایان ویرایش' : 'مدیریت آهنگ‌ها',
+                      onPressed: saving ? null : onToggleEditing,
+                      constraints:
+                          const BoxConstraints(minWidth: 48, minHeight: 48),
+                      icon: Icon(
+                          editing ? Icons.check_rounded : Icons.edit_outlined,
+                          size: 20),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -835,7 +826,8 @@ class _PlaylistBody extends StatelessWidget {
                     onRemove: playlist.canRemove(track) && !saving
                         ? () => onRemoveTrack(track)
                         : null,
-                    canRemove: playlist.canRemove(track),
+                    canRemove: editing && playlist.canRemove(track),
+                    editing: editing && !saving,
                   );
                 },
               ),
@@ -1072,6 +1064,7 @@ class _PlaylistTrackRow extends StatelessWidget {
     required this.onTap,
     required this.onRemove,
     required this.canRemove,
+    required this.editing,
   });
 
   final int index;
@@ -1080,6 +1073,7 @@ class _PlaylistTrackRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onRemove;
   final bool canRemove;
+  final bool editing;
 
   @override
   Widget build(BuildContext context) {
@@ -1151,26 +1145,29 @@ class _PlaylistTrackRow extends StatelessWidget {
                     IconButton(
                       tooltip: 'حذف از فهرست پخش',
                       onPressed: onRemove,
-                      color: colors.onSurfaceVariant,
-                      icon: const Icon(RhythmoIcons.x, size: 20),
+                      color: colors.onSurfaceVariant.withValues(alpha: 0.65),
+                      constraints:
+                          const BoxConstraints(minWidth: 48, minHeight: 48),
+                      icon: const Icon(Icons.remove_circle_outline, size: 18),
                     ),
-                  ReorderableDragStartListener(
-                    index: index,
-                    child: Tooltip(
-                      message: 'برای جابه‌جایی بکش',
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.grab,
-                        child: SizedBox.square(
-                          dimension: RhythmoSpace.target,
-                          child: Icon(
-                            RhythmoIcons.dotsSixVertical,
-                            size: 22,
-                            color: colors.onSurfaceVariant,
+                  if (editing)
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: Tooltip(
+                        message: 'برای جابه‌جایی بکش',
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.grab,
+                          child: SizedBox.square(
+                            dimension: RhythmoSpace.target,
+                            child: Icon(
+                              RhythmoIcons.dotsSixVertical,
+                              size: 22,
+                              color: colors.onSurfaceVariant,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),

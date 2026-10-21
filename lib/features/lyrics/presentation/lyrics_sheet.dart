@@ -297,8 +297,8 @@ class _LyricsViewState extends State<LyricsView> {
         );
       case LyricsUnavailable.store:
         return const LyricsMessage(
-          icon: RhythmoIcons.storefront,
-          title: 'متن آهنگ‌های استور هنوز نمایش داده نمی‌شود',
+          icon: RhythmoIcons.vinylRecord,
+          title: 'متن آهنگ‌های گنجینه هنوز نمایش داده نمی‌شود',
           detail: 'آهنگ را به کتابخانه‌ات اضافه کن تا متنش را ببینی.',
         );
       case null:

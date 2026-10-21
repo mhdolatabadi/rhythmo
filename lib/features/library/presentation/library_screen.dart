@@ -49,6 +49,7 @@ import 'package:rhythmo/features/store/application/store_controller.dart';
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
     super.key,
+    this.onFeedback,
     required this.email,
     this.verified = false,
     this.onVerifyEmail,
@@ -72,6 +73,7 @@ class LibraryScreen extends StatefulWidget {
     this.recentSearches,
   });
 
+  final VoidCallback? onFeedback;
   final String email;
   final bool verified;
 
@@ -379,9 +381,9 @@ class _LibraryScreenState extends State<LibraryScreen>
         content: Text(switch (state) {
           null => 'تغییر انتشار ثبت نشد. دوباره تلاش کن.',
           PublishState.published =>
-            '«${track.title}» در استور منتشر شد. بدون نام تو نمایش داده می‌شود.',
+            '«${track.title}» در گنجینه منتشر شد. بدون نام تو نمایش داده می‌شود.',
           PublishState.pending =>
-            'درخواست انتشار «${track.title}» برای مدیر فرستاده شد. بعد از تأیید در استور می‌آید.',
+            'درخواست انتشار «${track.title}» برای مدیر فرستاده شد. بعد از تأیید در گنجینه می‌آید.',
           _ => published
               ? 'انتشار «${track.title}» ثبت نشد.'
               : '«${track.title}» دیگر منتشر نمی‌شود، مگر در یک فهرست پخش عمومی باشد.',
@@ -390,12 +392,26 @@ class _LibraryScreenState extends State<LibraryScreen>
   }
 
   Future<void> _editTrackMetadata(Track track) async {
+    if (track.id.startsWith('device:')) {
+      final original = await widget.localAudio.metadataForEditing(track);
+      if (!mounted) return;
+      if (original == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('خواندن اطلاعات فایل ناموفق بود؛ فایل تغییر نکرد.')));
+        return;
+      }
+      track = original;
+    }
     final saved = await showTrackMetadataEditor(
       context,
       track: track,
-      suggestions: MetadataSuggestions.fromTracks(widget.library.tracks),
-      onSave: (draft, version) =>
-          widget.library.saveTrackMetadata(track.id, draft, version: version),
+      suggestions: MetadataSuggestions.fromTracks(_unifiedTracks()),
+      onSave: (draft, version) => track.id.startsWith('device:')
+          ? widget.player.whileEditingLocalFile(
+              track,
+              () => widget.localAudio
+                  .saveTrackMetadata(track, draft, version: version))
+          : widget.library.saveTrackMetadata(track.id, draft, version: version),
     );
     if (saved == null) return;
     // The library already shows the saved copy; bring the player queue and
@@ -403,13 +419,15 @@ class _LibraryScreenState extends State<LibraryScreen>
     widget.player.updateTrack(saved);
     widget.playlists?.updateTrack(saved);
     if (!mounted) return;
-    final message = switch (saved.embeddedTags.status) {
-      EmbeddedTagStatus.pending =>
-        'ذخیره شد؛ اطلاعات تا چند لحظهٔ دیگر در خود فایل هم نوشته می‌شود.',
-      EmbeddedTagStatus.unsupported =>
-        'ذخیره شد؛ این قالب فایل برچسب داخلی قابل ویرایش ندارد.',
-      _ => 'اطلاعات «${saved.title}» ذخیره شد.',
-    };
+    final message = saved.id.startsWith('device:')
+        ? 'اطلاعات در فایل «${saved.fileName}» ذخیره شد.'
+        : switch (saved.embeddedTags.status) {
+            EmbeddedTagStatus.pending =>
+              'ذخیره شد؛ اطلاعات تا چند لحظهٔ دیگر در خود فایل هم نوشته می‌شود.',
+            EmbeddedTagStatus.unsupported =>
+              'ذخیره شد؛ این قالب فایل برچسب داخلی قابل ویرایش ندارد.',
+            _ => 'اطلاعات «${saved.title}» ذخیره شد.',
+          };
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
   }
@@ -472,9 +490,9 @@ class _LibraryScreenState extends State<LibraryScreen>
                 actions: [
                   if (widget.store != null)
                     IconButton(
-                      tooltip: 'استور',
+                      tooltip: 'گنجینه',
                       onPressed: _openStore,
-                      icon: const Icon(RhythmoIcons.storefront),
+                      icon: const Icon(RhythmoIcons.vinylRecord),
                     ),
                   PopularPlaylistsButton(onOpen: _openPopular),
                 ],
@@ -485,7 +503,6 @@ class _LibraryScreenState extends State<LibraryScreen>
                       controller: playlists,
                       libraryTracks: _unifiedTracks(),
                       player: widget.player,
-                      store: widget.store,
                       onSharedSaved: widget.library.load)),
             )));
   }
@@ -517,6 +534,7 @@ class _LibraryScreenState extends State<LibraryScreen>
         .push(MaterialPageRoute<void>(
           builder: (_) => SettingsScreen(
             email: widget.email,
+            onFeedback: widget.onFeedback,
             onDeleteAccount: widget.onDeleteAccount,
             onSignOutEverywhere: widget.onSignOutEverywhere,
             cache: widget.cache,
@@ -591,9 +609,9 @@ class _LibraryScreenState extends State<LibraryScreen>
     final storeButton = widget.store == null
         ? null
         : IconButton(
-            tooltip: 'استور',
+            tooltip: 'گنجینه',
             onPressed: _openStore,
-            icon: const Icon(RhythmoIcons.storefront),
+            icon: const Icon(RhythmoIcons.vinylRecord),
           );
     if (MediaQuery.sizeOf(context).width >= wideActions) {
       return [
@@ -781,7 +799,6 @@ class _LibraryScreenState extends State<LibraryScreen>
             libraryTracks: _unifiedTracks(),
             player: widget.player,
             onSharedSaved: widget.library.load,
-            store: widget.store,
             underHeader: true),
         LibraryTab.albums => _groupsTab(albums: true),
         LibraryTab.artists => _groupsTab(albums: false),
@@ -1557,18 +1574,19 @@ class _TrackListState extends State<_TrackList> {
       if (widget.playlists != null)
         item(_TrackAction.addToPlaylist, RhythmoIcons.listPlus,
             'افزودن به فهرست پخش'),
-      if (onServer) ...[
+      if (widget.onEditMetadata != null)
         item(_TrackAction.editMetadata, RhythmoIcons.pencilSimple,
             'ویرایش اطلاعات آهنگ'),
+      if (onServer) ...[
         if (widget.onSetPublished != null)
           item(
             _TrackAction.publish,
             RhythmoIcons.globe,
             switch (track.publishState) {
-              PublishState.published => 'لغو انتشار در استور',
+              PublishState.published => 'لغو انتشار در گنجینه',
               PublishState.pending => 'لغو درخواست انتشار',
               PublishState.rejected => 'درخواست دوباره‌ی انتشار',
-              PublishState.private => 'انتشار در استور',
+              PublishState.private => 'انتشار در گنجینه',
             },
           ),
         for (final bot in widget.linkedBots)
@@ -1845,7 +1863,11 @@ class _TabScrollView extends StatelessWidget {
                     NestedScrollView.sliverOverlapAbsorberHandleFor(context),
               ),
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(side, 12, side, 128),
+              // With extendBody, Scaffold exposes the measured mini-player
+              // height through MediaQuery.padding. Also clear the 56px FAB,
+              // its 16px margin and a 24px gap above its touch target.
+              padding: EdgeInsets.fromLTRB(
+                  side, 12, side, MediaQuery.paddingOf(context).bottom + 96),
               sliver: SliverMainAxisGroup(slivers: slivers),
             ),
           ],

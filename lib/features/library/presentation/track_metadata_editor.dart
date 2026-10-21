@@ -184,8 +184,9 @@ class _TrackMetadataEditorState extends State<TrackMetadataEditor> {
           _form.currentState?.validate();
         });
       case MetadataSaveFailed():
-        setState(() =>
-            _error = 'ذخیره نشد. اتصال اینترنت را بررسی کن و دوباره تلاش کن.');
+        setState(() => _error = _base.id.startsWith('device:')
+            ? 'ذخیره در فایل انجام نشد. دسترسی ویرایش یا پشتیبانی قالب فایل را بررسی کن.'
+            : 'ذخیره نشد. اتصال اینترنت را بررسی کن و دوباره تلاش کن.');
     }
   }
 
@@ -320,7 +321,14 @@ class _TrackMetadataEditorState extends State<TrackMetadataEditor> {
                         onUseLatest: _useLatest,
                         onKeepMine: _keepMine,
                       ),
-                    _TagStatusNotice(track: _base),
+                    if (_base.id.startsWith('device:'))
+                      const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('تغییرات در خود فایل اصلی ذخیره می‌شوند. '
+                            'در صورت نیاز، اندروید اجازهٔ ویرایش فایل را می‌پرسد.'),
+                      )
+                    else
+                      _TagStatusNotice(track: _base),
                     _Section(
                       title: 'فایل',
                       children: [
@@ -328,9 +336,10 @@ class _TrackMetadataEditorState extends State<TrackMetadataEditor> {
                           key: const ValueKey('fileName'),
                           controller: _fileName,
                           label: 'نام فایل',
-                          helper:
-                              'نام فایل هنگام دانلود؛ با عنوان آهنگ فرق دارد. '
-                              'قالب فایل ($_extension) تغییر نمی‌کند.',
+                          helper: _base.id.startsWith('device:')
+                              ? 'نام فایل اصلی روی دستگاه؛ قالب فایل تغییر نمی‌کند.'
+                              : 'نام فایل هنگام دانلود؛ با عنوان آهنگ فرق دارد. '
+                                  'قالب فایل ($_extension) تغییر نمی‌کند.',
                           suffix: _extension,
                           enabled: !_saving,
                           validator: _validateFileName,

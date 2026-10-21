@@ -658,7 +658,7 @@ void main() {
     expect(tester.takeException(), isNull);
 
     final popular = find.byTooltip('فهرست‌های پخش محبوب');
-    final store = find.byTooltip('استور');
+    final store = find.byTooltip('گنجینه');
     for (final button in [popular, store]) {
       expect(find.descendant(of: find.byType(AppBar), matching: button),
           findsOneWidget);
@@ -1152,7 +1152,8 @@ void main() {
 
       await tester.tap(find.widgetWithText(Tab, 'فهرست‌های پخش'));
       await tester.pumpAndSettle();
-      expect(find.text('فهرست پخش جدید'), findsOneWidget);
+      expect(find.byTooltip('فهرست پخش جدید'), findsOneWidget);
+      expect(find.text('فهرست پخش جدید'), findsNothing);
       expect(find.text('mix'), findsWidgets);
       // Adding music belongs to the tracks tab only.
       expect(find.byTooltip('افزودن موسیقی'), findsNothing);
@@ -1242,7 +1243,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the last track can scroll clear of the mini player',
+    testWidgets('the last track menu clears the mini player and add button',
         (tester) async {
       await pumpPhone(tester);
       await tester.tap(find.text('Track number 0'));
@@ -1257,6 +1258,16 @@ void main() {
           of: find.text('Track number 29'), matching: find.byType(ListTile)));
       final miniPlayerTop = tester.getTopLeft(find.byTooltip('توقف')).dy - 16;
       expect(lastRow.bottom, lessThan(miniPlayerTop));
+      final add = tester.getRect(find.byTooltip('افزودن موسیقی'));
+      expect(lastRow.bottom, lessThan(add.top));
+      final row = find.ancestor(
+          of: find.text('Track number 29'), matching: find.byType(ListTile));
+      final menu =
+          find.descendant(of: row, matching: find.byTooltip('اقدامات آهنگ'));
+      expect(menu, findsOneWidget);
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+      expect(find.text('ویرایش اطلاعات آهنگ'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });
