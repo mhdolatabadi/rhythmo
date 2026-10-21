@@ -4,6 +4,7 @@ import 'package:rhythmo/features/settings/presentation/settings_screen.dart';
 import 'package:flutter/gestures.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
@@ -243,6 +244,7 @@ class FakeLinkImportsApi implements LinkImportsApi {
 }
 
 void main() {
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   testWidgets('shows setup instructions without API configuration', (
     tester,
   ) async {
