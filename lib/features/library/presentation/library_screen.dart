@@ -484,7 +484,6 @@ class _LibraryScreenState extends State<LibraryScreen>
                       controller: playlists,
                       libraryTracks: widget.library.tracks,
                       player: widget.player,
-                      store: widget.store,
                       onSharedSaved: widget.library.load)),
             )));
   }
@@ -780,7 +779,6 @@ class _LibraryScreenState extends State<LibraryScreen>
             libraryTracks: widget.library.tracks,
             player: widget.player,
             onSharedSaved: widget.library.load,
-            store: widget.store,
             underHeader: true),
         LibraryTab.albums => _groupsTab(albums: true),
         LibraryTab.artists => _groupsTab(albums: false),

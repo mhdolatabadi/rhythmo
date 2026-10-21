@@ -9,10 +9,6 @@ import 'package:rhythmo/features/playlists/application/playlists_controller.dart
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/features/playlists/presentation/collab_sheet.dart';
 import 'package:rhythmo/features/playlists/presentation/shared_playlist_screen.dart';
-import 'package:rhythmo/features/likes/presentation/liked_songs_screen.dart';
-import 'package:rhythmo/features/store/application/store_controller.dart';
-import 'package:rhythmo/features/store/data/store_catalog.dart';
-import 'package:rhythmo/features/store/presentation/store_carousel.dart';
 
 /// Joins the collaborative playlist with [collabToken] and opens it, or
 /// says why it couldn't.
@@ -84,15 +80,11 @@ class PlaylistsView extends StatefulWidget {
     required this.player,
     this.onSharedSaved,
     this.underHeader = false,
-    this.store,
   });
 
   final PlaylistsController controller;
   final List<Track> libraryTracks;
   final PlayerController player;
-
-  /// The public store; null hides its carousels.
-  final StoreController? store;
 
   /// Called after a shared playlist was saved, bringing its tracks along.
   final VoidCallback? onSharedSaved;
@@ -193,50 +185,24 @@ class _PlaylistsViewState extends State<PlaylistsView> {
     ));
   }
 
-  void _openLiked() {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => LikedSongsScreen(
-          player: widget.player, libraryTracks: widget.libraryTracks),
-    ));
-  }
-
   @override
   Widget build(BuildContext context) {
     final actions = Padding(
-      padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
         children: [
-          LikedSongsEntry(
-            favorites: widget.player.favorites,
-            libraryTracks: widget.libraryTracks,
-            onOpen: _openLiked,
+          IconButton.filledTonal(
+            tooltip: 'فهرست پخش جدید',
+            onPressed: _create,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(RhythmoIcons.plus),
           ),
-          if (widget.store case final store?)
-            for (final ranking in StoreRanking.values.reversed)
-              StoreCarousel(
-                controller: store,
-                ranking: ranking,
-                player: widget.player,
-                padding: EdgeInsets.zero,
-              ),
-          const SizedBox(height: RhythmoSpace.md),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              FilledButton.tonalIcon(
-                onPressed: _create,
-                icon: const Icon(RhythmoIcons.listPlus),
-                label: const Text('فهرست پخش جدید'),
-              ),
-              IconButton(
-                tooltip: 'باز کردن لینک اشتراک',
-                onPressed: _openLink,
-                icon: const Icon(RhythmoIcons.link),
-              ),
-            ],
+          const SizedBox(width: RhythmoSpace.sm),
+          IconButton(
+            tooltip: 'باز کردن لینک اشتراک',
+            onPressed: _openLink,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(RhythmoIcons.link),
           ),
         ],
       ),
