@@ -103,6 +103,33 @@ jobs:
           python-version: "3.12"
       - run: python -m unittest discover -s server/transcriber -v
 
+  api-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Docker and module Go versions match
+        run: |
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          import re
+
+          module = re.search(r'^go (\S+)$', Path('server/go.mod').read_text(), re.M)
+          image = re.search(r'^FROM golang:([^\s-]+)-alpine AS build$',
+                            Path('server/Dockerfile').read_text(), re.M)
+          assert module and image, 'Expected explicit Go module and Docker versions'
+          assert module[1] == image[1], (
+              f'Docker Go {image[1]} must match go.mod {module[1]}')
+          PYTHON
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the production API image without publishing
+        uses: docker/build-push-action@v6
+        with:
+          context: server
+          file: server/Dockerfile
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
   api:
     runs-on: ubuntu-latest
     services:
