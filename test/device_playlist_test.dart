@@ -8,22 +8,30 @@ import 'playlist_sharing_test.dart' show FakePlaylistsApi;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  final local = Track(id: 'device:1', title: 'محلی', artist: 'هنرمند',
-      contentType: 'audio/mpeg', sizeBytes: 42,
+  final local = Track(
+      id: 'device:1',
+      title: 'محلی',
+      artist: 'هنرمند',
+      contentType: 'audio/mpeg',
+      sizeBytes: 42,
       sourceUri: Uri.parse('content://media/external/audio/1'));
-  const cloud = Track(id: 'cloud', title: 'Cloud',
-      contentType: 'audio/mpeg', sizeBytes: 9);
+  const cloud = Track(
+      id: 'cloud', title: 'Cloud', contentType: 'audio/mpeg', sizeBytes: 9);
 
-  test('device membership survives restart, deduplicates and stays off API', () async {
+  test('device membership survives restart, deduplicates and stays off API',
+      () async {
     FlutterSecureStorage.setMockInitialValues({});
     final api = FakePlaylistsApi()..tracks = [cloud];
     PlaylistsController controller() => PlaylistsController(
-      api: api, token: () => 'token', accountId: () => 'user',
-      deviceStore: SecureDevicePlaylistStore());
+        api: api,
+        token: () => 'token',
+        accountId: () => 'user',
+        deviceStore: SecureDevicePlaylistStore());
     final first = controller();
     expect(await first.addDeviceTrack('p1', local), AddTrackResult.added);
     expect(api.replacedWith, isNull);
-    expect(await first.addDeviceTrack('p1', local), AddTrackResult.alreadyPresent);
+    expect(
+        await first.addDeviceTrack('p1', local), AddTrackResult.alreadyPresent);
     final restarted = controller();
     final restored = (await restarted.loadPlaylist('p1'))!;
     expect(restored.tracks.map((t) => t.id), ['cloud', 'device:1']);
@@ -36,12 +44,16 @@ void main() {
     expect((await restarted.loadPlaylist('p1'))!.tracks, isEmpty);
   });
 
-  test('device tracks are scoped to account even in a shared playlist', () async {
+  test('device tracks are scoped to account even in a shared playlist',
+      () async {
     final api = FakePlaylistsApi();
     final store = MemoryDevicePlaylistStore();
     var account = 'one';
-    final controller = PlaylistsController(api: api, token: () => 'token',
-        accountId: () => account, deviceStore: store);
+    final controller = PlaylistsController(
+        api: api,
+        token: () => 'token',
+        accountId: () => account,
+        deviceStore: store);
     await controller.addDeviceTrack('p1', local);
     account = 'two';
     expect((await controller.loadPlaylist('p1'))!.tracks, isEmpty);

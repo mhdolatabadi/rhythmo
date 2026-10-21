@@ -1118,7 +1118,8 @@ class _PlaylistTrackRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: RhythmoSpace.sm),
-                  RhythmoArtworkTile(seed: track.id, active: playing),
+                  RhythmoArtworkTile(
+                      seed: track.id, active: playing, track: track),
                   const SizedBox(width: RhythmoSpace.md),
                   Expanded(
                     child: Column(
@@ -1207,7 +1208,8 @@ class _TrackPickerState extends State<_TrackPicker> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('آهنگ‌های محلی فقط روی این دستگاه در دسترس‌اند و به اشتراک گذاشته نمی‌شوند.'),
+            const Text(
+                'آهنگ‌های محلی فقط روی این دستگاه در دسترس‌اند و به اشتراک گذاشته نمی‌شوند.'),
             const SizedBox(height: 8),
             TextField(
               decoration: const InputDecoration(
@@ -1344,4 +1346,3 @@ class _PlaylistEmptyState extends StatelessWidget {
         ),
       );
 }
-

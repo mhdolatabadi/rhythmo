@@ -48,7 +48,9 @@ class PlaylistsController extends ChangeNotifier {
     return playlist.withTracks([
       ...playlist.tracks,
       ...local.where((t) => !ids.contains(t.id)),
-    ], trackCount: playlist.trackCount + local.where((t) => !ids.contains(t.id)).length);
+    ],
+        trackCount: playlist.trackCount +
+            local.where((t) => !ids.contains(t.id)).length);
   }
 
   final PlaylistsApi _api;
@@ -176,7 +178,8 @@ class PlaylistsController extends ChangeNotifier {
     status = PlaylistsStatus.loading;
     notifyListeners();
     try {
-      playlists = await Future.wait((await _api.listPlaylists(token)).map(_withDeviceTracks));
+      playlists = await Future.wait(
+          (await _api.listPlaylists(token)).map(_withDeviceTracks));
       status = PlaylistsStatus.loaded;
       notifyListeners();
       return true;
@@ -294,7 +297,8 @@ class PlaylistsController extends ChangeNotifier {
     if (token == null) return null;
     try {
       final available = {
-        for (final track in await _deviceStore.read(_deviceKey(id))) track.id: track,
+        for (final track in await _deviceStore.read(_deviceKey(id)))
+          track.id: track,
         for (final track in deviceTracks)
           if (track.id.startsWith('device:') && track.isLocal) track.id: track,
       };
@@ -332,8 +336,8 @@ class PlaylistsController extends ChangeNotifier {
     if (playlist.tracks.any((t) => t.id == track.id)) {
       return AddTrackResult.alreadyPresent;
     }
-    final updated = await replaceTracks(id,
-        [...playlist.tracks.map((t) => t.id), track.id],
+    final updated = await replaceTracks(
+        id, [...playlist.tracks.map((t) => t.id), track.id],
         deviceTracks: [track]);
     return updated == null ? AddTrackResult.failure : AddTrackResult.added;
   }
@@ -451,4 +455,3 @@ class PlaylistsController extends ChangeNotifier {
     notifyListeners();
   }
 }
-

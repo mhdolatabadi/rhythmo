@@ -276,4 +276,3 @@ String? shareTokenFrom(String input) {
       (segments.length == 2 && segments.first == 'p' ? segments.last : text);
   return RegExp(r'^[A-Za-z0-9_-]{22}$').hasMatch(token) ? token : null;
 }
-
