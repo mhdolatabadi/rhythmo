@@ -11,13 +11,13 @@ class AndroidLocalAudioMetadataWriter implements LocalAudioMetadataWriter {
   static const _channel = MethodChannel('ir.mhdolatabadi.nafir/local_audio');
 
   @override
-  Future<Map<String, dynamic>> read(Track track) async =>
-      Map<String, dynamic>.from(await _channel.invokeMethod<Map>(
-              'readAudioMetadata', {
-            'uri': track.sourceUri.toString(),
-            'fileName': track.fileName
-          }) ??
-          const {});
+  Future<Map<String, dynamic>> read(Track track) async {
+    await _channel.invokeMethod<Object?>('recoverAudioMetadata');
+    return Map<String, dynamic>.from(await _channel.invokeMethod<Map>(
+            'readAudioMetadata',
+            {'uri': track.sourceUri.toString(), 'fileName': track.fileName}) ??
+        const {});
+  }
 
   @override
   Future<int> write(Track track, TrackMetadataDraft draft) async {
