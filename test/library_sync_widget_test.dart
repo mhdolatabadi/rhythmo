@@ -112,7 +112,7 @@ void main() {
     expect(find.text('آپلود به سرور'), findsOneWidget);
     expect(find.text('حذف از دستگاه'), findsOneWidget);
     expect(find.text('حذف از سرور'), findsNothing);
-    expect(find.text('ویرایش اطلاعات آهنگ'), findsNothing);
+    expect(find.text('ویرایش اطلاعات آهنگ'), findsOneWidget);
   });
 
   testWidgets('editing from the menu saves and shows the new title',
