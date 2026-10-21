@@ -277,7 +277,9 @@ jobs:
           assert "X-Content-Type-Options" in front.split("location /nafir-music", 1)[1].split("}", 1)[0]
           PY
       - name: Test the Cafe Bazaar publish script
-        run: scripts/test-publish-cafebazaar.sh
+        run: |
+          scripts/test-publish-cafebazaar.sh
+          scripts/test-release-deployed-android.sh
       - name: Validate nginx configurations
         run: |
           docker run --rm -v "$PWD/deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro" nginx:1.27-alpine nginx -t
