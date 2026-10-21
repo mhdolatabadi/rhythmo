@@ -26,15 +26,15 @@ class CrossfadeSetting extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Divider(),
+            const Divider(height: 1),
             ListTile(
               leading: const Icon(RhythmoIcons.waveform),
               title: const Text('هم‌پوشانی آهنگ‌ها'),
               subtitle: Text(
                 seconds == 0
-                    ? 'خاموش؛ آهنگ‌ها بی‌فاصله پشت هم پخش می‌شوند.'
+                    ? 'پخش بی‌فاصله، بدون هم‌پوشانی'
                     : 'پایان هر آهنگ ${formatCrossfade(player.crossfade)} '
-                        'با شروع آهنگ بعدی درهم می‌آمیزد.',
+                          'با شروع آهنگ بعدی درهم می‌آمیزد.',
               ),
               trailing: Text(
                 formatCrossfade(player.crossfade),
@@ -55,9 +55,8 @@ class CrossfadeSetting extends StatelessWidget {
                   max: maxCrossfade.inSeconds.toDouble(),
                   divisions: maxCrossfade.inSeconds,
                   label: formatCrossfade(player.crossfade),
-                  semanticFormatterCallback: (value) => formatCrossfade(
-                    Duration(seconds: value.round()),
-                  ),
+                  semanticFormatterCallback: (value) =>
+                      formatCrossfade(Duration(seconds: value.round())),
                   onChanged: (value) =>
                       player.setCrossfade(Duration(seconds: value.round())),
                 ),
