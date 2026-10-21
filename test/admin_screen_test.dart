@@ -99,6 +99,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('cancelling quota editing leaves capacity unchanged',
+      (tester) async {
+    final api = FakeAdminApi();
+    await pump(tester, api);
+    await tester.ensureVisible(find.text('افزایش ظرفیت آپلود'));
+    await tester.tap(find.text('افزایش ظرفیت آپلود'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'ظرفیت جدید (گیگابایت)'), '۵');
+    await tester.tap(find.text('انصراف'));
+    await tester.pumpAndSettle();
+    expect(api.quota, 1 << 30);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('search, confirmation, verification and revoke', (tester) async {
     final api = FakeAdminApi();
     await pump(tester, api);
