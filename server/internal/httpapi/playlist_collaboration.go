@@ -17,6 +17,7 @@ func (h *PlaylistHandlers) registerCollaboration(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/playlists/{id}/members/{userId}", h.handleRemoveMember)
 	mux.HandleFunc("DELETE /api/v1/playlists/{id}/membership", h.handleLeave)
 	mux.HandleFunc("GET /api/v1/playlists/{id}/tracks/{trackId}/stream", h.handlePlaylistStream)
+	mux.HandleFunc("GET /api/v1/playlists/{id}/tracks/{trackId}/artwork", h.handlePlaylistStreamArtwork)
 }
 
 type collabResponse struct {
@@ -148,4 +149,25 @@ func (h *PlaylistHandlers) handlePlaylistStream(w http.ResponseWriter, r *http.R
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, streamResponse{URL: url, ExpiresAt: expiresAt.UTC()})
+}
+
+func (h *PlaylistHandlers) handlePlaylistStreamArtwork(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authenticate(h.tokens, w, r)
+	if !ok {
+		return
+	}
+	if h.streams == nil {
+		writeError(w, http.StatusServiceUnavailable, "streaming_disabled")
+		return
+	}
+	track, err := h.playlists.PlaylistTrack(r.Context(), userID, r.PathValue("id"), r.PathValue("trackId"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found")
+		return
+	}
+	if err != nil {
+		internalError(w, "load playlist track", err)
+		return
+	}
+	serveTrackArtwork(w, r, h.streams, track)
 }

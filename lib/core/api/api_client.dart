@@ -391,6 +391,30 @@ class ApiClient
     return AdminAccount.fromJson(body);
   }
 
+  /// Uses the same authorization context as playback, never a public
+  /// object URL. A 404 means the file has no usable embedded picture.
+  Future<Uint8List?> trackArtwork(String? token, Track track) async {
+    final id = Uri.encodeComponent(track.id);
+    final path = track.fromStore
+        ? '/api/v1/store/tracks/$id/artwork'
+        : track.sharedVia != null
+            ? '/api/v1/shared-playlists/${Uri.encodeComponent(track.sharedVia!)}/tracks/$id/artwork'
+            : track.viaPlaylist != null
+                ? '/api/v1/playlists/${Uri.encodeComponent(track.viaPlaylist!)}/tracks/$id/artwork'
+                : '/api/v1/tracks/$id/artwork';
+    if (!track.playsWithoutAccount && token == null) return null;
+    final response = await _httpClient.get(
+      baseUri.resolve(path),
+      headers: {if (token != null) 'Authorization': 'Bearer $token'},
+    ).timeout(_timeout);
+    if (response.statusCode != 200 ||
+        response.bodyBytes.length > 512 * 1024 ||
+        response.headers['content-type'] != 'image/jpeg') {
+      return null;
+    }
+    return response.bodyBytes;
+  }
+
   Future<void> checkHealth() async {
     final body = await _send('GET', '/api/v1/health');
     if (body['status'] != 'ok') {
