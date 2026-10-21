@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rhythmo/core/persian_digits.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/widgets/glass_surface.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
@@ -74,6 +75,96 @@ class _AdminScreenState extends State<AdminScreen> {
       });
     } finally {
       if (mounted && request == _request) setState(() => _loading = false);
+    }
+  }
+
+  static int? _quotaBytes(String input) {
+    const persian = '۰۱۲۳۴۵۶۷۸۹';
+    const arabic = '٠١٢٣٤٥٦٧٨٩';
+    final latin = input.trim().split('').map((c) {
+      final p = persian.indexOf(c), a = arabic.indexOf(c);
+      return p >= 0
+          ? '$p'
+          : a >= 0
+              ? '$a'
+              : c;
+    }).join();
+    final gib = int.tryParse(latin);
+    return gib == null || gib < 1 || gib > 1024 ? null : gib * (1 << 30);
+  }
+
+  Future<void> _increaseQuota(AdminAccount account) async {
+    final api = widget.api;
+    if (api is! AdminQuotaApi) return;
+    final field = TextEditingController(
+        text: '${(account.storageQuotaBytes / (1 << 30)).ceil() + 1}');
+    final form = GlobalKey<FormState>();
+    final bytes = await showDialog<int>(
+        context: context,
+        builder: (context) => AlertDialog(
+                title: const Text('افزایش ظرفیت آپلود'),
+                content: Form(
+                    key: form,
+                    child: TextFormField(
+                        controller: field,
+                        keyboardType: TextInputType.number,
+                        textDirection: TextDirection.ltr,
+                        decoration: const InputDecoration(
+                            labelText: 'ظرفیت جدید (گیگابایت)'),
+                        validator: (text) {
+                          final bytes = _quotaBytes(text ?? '');
+                          if (bytes == null) {
+                            return 'عددی بین ۱ تا ۱۰۲۴ وارد کن.';
+                          }
+                          if (bytes <= account.storageQuotaBytes) {
+                            return 'ظرفیت جدید باید بیشتر از ظرفیت فعلی باشد.';
+                          }
+                          return null;
+                        })),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('انصراف')),
+                  FilledButton(
+                      onPressed: () {
+                        if (form.currentState!.validate()) {
+                          Navigator.pop(context, _quotaBytes(field.text));
+                        }
+                      },
+                      child: const Text('افزایش ظرفیت'))
+                ]));
+    field.dispose();
+    if (bytes == null || !mounted) return;
+    final token = widget.token();
+    if (token == null) return;
+    setState(() => _saving = account.user.id);
+    try {
+      final updated =
+          await api.increaseStorageQuota(token, account.user.id, bytes);
+      if (mounted) {
+        setState(() => _accounts = [
+              for (final item in _accounts)
+                if (item.user.id == updated.user.id) updated else item
+            ]);
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('ظرفیت آپلود افزایش یافت.')));
+      }
+    } catch (error) {
+      if (mounted) {
+        final denied = error is ApiException &&
+            (error.statusCode == 401 || error.statusCode == 403);
+        if (denied)
+          setState(() {
+            _forbidden = true;
+            _accounts = [];
+          });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(denied
+                ? 'دسترسی مدیریت نداری.'
+                : 'افزایش ظرفیت ذخیره نشد. دوباره تلاش کن.')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = null);
     }
   }
 
@@ -241,6 +332,16 @@ class _AdminScreenState extends State<AdminScreen> {
                             Text(account.user.verified
                                 ? 'حساب تأییدشده'
                                 : 'تأیید نشده'),
+                            const SizedBox(height: 8),
+                            Text(
+                                'ظرفیت آپلود: ${persianDigits((account.storageQuotaBytes / (1 << 30)).toStringAsFixed(2))} گیگابایت'),
+                            if (widget.api is AdminQuotaApi)
+                              OutlinedButton.icon(
+                                  onPressed: _saving != null || _loading
+                                      ? null
+                                      : () => _increaseQuota(account),
+                                  icon: const Icon(RhythmoIcons.cloudArrowUp),
+                                  label: const Text('افزایش ظرفیت آپلود')),
                             const SizedBox(height: 12),
                             OutlinedButton.icon(
                               onPressed: _saving != null || _loading

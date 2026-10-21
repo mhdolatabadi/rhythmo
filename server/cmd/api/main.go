@@ -333,7 +333,7 @@ func run() error {
 		return err
 	}
 	trackLikes := store.NewTrackLikes(pool)
-	adminHandlers := httpapi.NewAdminHandlers(authHandlers, users).WithPlaylists(playlists).
+	adminHandlers := httpapi.NewAdminHandlers(authHandlers, users).WithQuota(ownerQuotaBytes).WithPlaylists(playlists).
 		WithPublications(store.NewPublications(pool), objects)
 	storeHandlers := httpapi.NewCatalogHandlers(storeCatalog, tokens, objects,
 		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).

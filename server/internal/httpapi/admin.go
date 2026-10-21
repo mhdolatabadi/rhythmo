@@ -14,6 +14,7 @@ import (
 )
 
 type AdminStore interface {
+	SetStorageQuota(context.Context, string, string, int64, int64) (store.User, error)
 	ListAccounts(context.Context, string, int, int) ([]store.User, bool, error)
 	SetVerification(context.Context, string, string, bool) (store.User, error)
 }
@@ -38,6 +39,7 @@ type AdminPublicationStore interface {
 const maxPendingPublications = 200
 
 type AdminHandlers struct {
+	defaultQuota int64
 	auth         *AuthHandlers
 	users        AdminStore
 	playlists    AdminPlaylistStore
@@ -46,7 +48,7 @@ type AdminHandlers struct {
 }
 
 func NewAdminHandlers(auth *AuthHandlers, users AdminStore) *AdminHandlers {
-	return &AdminHandlers{auth: auth, users: users}
+	return &AdminHandlers{auth: auth, users: users, defaultQuota: 1 << 30}
 }
 
 // WithPlaylists lets admins take playlists out of the popular list.
@@ -62,8 +64,11 @@ func (h *AdminHandlers) WithPublications(publications AdminPublicationStore, str
 	return h
 }
 
+func (h *AdminHandlers) WithQuota(bytes int64) *AdminHandlers { h.defaultQuota = bytes; return h }
+
 func (h *AdminHandlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/accounts", h.list)
+	mux.HandleFunc("PATCH /api/v1/admin/accounts/{id}/storage-quota", h.setStorageQuota)
 	mux.HandleFunc("PATCH /api/v1/admin/accounts/{id}/verification", h.verify)
 	if h.playlists != nil {
 		mux.HandleFunc("PATCH /api/v1/admin/public-playlists/{token}", h.hidePlaylist)
@@ -101,15 +106,21 @@ func (h *AdminHandlers) authorize(w http.ResponseWriter, r *http.Request) (strin
 }
 
 type adminAccountResponse struct {
+	StorageQuotaBytes int64 `json:"storageQuotaBytes"`
 	userResponse
 	CreatedAt  time.Time  `json:"createdAt"`
 	VerifiedAt *time.Time `json:"verifiedAt,omitempty"`
 }
 
 func (h *AdminHandlers) account(user store.User) adminAccountResponse {
+	quota := h.defaultQuota
+	if user.StorageQuotaBytes != nil {
+		quota = *user.StorageQuotaBytes
+	}
 	return adminAccountResponse{
-		userResponse: h.auth.userResponse(user),
-		CreatedAt:    user.CreatedAt, VerifiedAt: user.VerifiedAt,
+		StorageQuotaBytes: quota,
+		userResponse:      h.auth.userResponse(user),
+		CreatedAt:         user.CreatedAt, VerifiedAt: user.VerifiedAt,
 	}
 }
 
@@ -335,4 +346,35 @@ func (h *AdminHandlers) streamPendingTrack(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, streamResponse{URL: url, ExpiresAt: expiresAt.UTC()})
+}
+
+func (h *AdminHandlers) setStorageQuota(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.authorize(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		Bytes int64 `json:"bytes"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil || input.Bytes < 1<<20 || input.Bytes > 1<<40 {
+		writeError(w, http.StatusBadRequest, "invalid_storage_quota")
+		return
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		writeError(w, http.StatusBadRequest, "invalid_json")
+		return
+	}
+	user, err := h.users.SetStorageQuota(r.Context(), r.PathValue("id"), actor, input.Bytes, h.defaultQuota)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		writeError(w, http.StatusNotFound, "account_not_found")
+	case errors.Is(err, store.ErrQuotaDecrease):
+		writeError(w, http.StatusConflict, "quota_must_increase")
+	case err != nil:
+		internalError(w, "increase account quota", err)
+	default:
+		writeJSON(w, http.StatusOK, h.account(user))
+	}
 }

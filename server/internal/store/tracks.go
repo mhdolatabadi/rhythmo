@@ -203,6 +203,11 @@ func (t *Tracks) ReservePending(
 		); err != nil {
 			return err
 		}
+		quota, quotaErr := effectiveQuota(ctx, tx, ownerID, maxOwnerBytes)
+		if quotaErr != nil {
+			return quotaErr
+		}
+		maxOwnerBytes = quota
 		var usedBytes int64
 		var pending int
 		if err := tx.QueryRow(ctx, `

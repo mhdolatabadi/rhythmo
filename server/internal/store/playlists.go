@@ -433,6 +433,11 @@ func (p *Playlists) SaveShared(
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, userID); err != nil {
 			return err
 		}
+		quota, quotaErr := effectiveQuota(ctx, tx, userID, maxOwnerBytes)
+		if quotaErr != nil {
+			return quotaErr
+		}
+		maxOwnerBytes = quota
 		var used, needed int64
 		if err := tx.QueryRow(ctx, `
 			SELECT COALESCE(SUM(size_bytes), 0)::bigint FROM tracks WHERE owner_id::text = $1

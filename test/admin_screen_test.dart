@@ -8,7 +8,16 @@ import 'package:rhythmo/features/admin/presentation/admin_screen.dart';
 import 'package:rhythmo/features/admin/presentation/publication_review_screen.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
 
-class FakeAdminApi implements AdminApi {
+class FakeAdminApi implements AdminApi, AdminQuotaApi {
+  int quota = 1 << 30;
+  @override
+  Future<AdminAccount> increaseStorageQuota(
+      String token, String accountId, int bytes) async {
+    if (fail) throw const ApiException("unavailable");
+    quota = bytes;
+    return account;
+  }
+
   bool verified = false;
   bool fail = false;
   bool denied = false;
@@ -18,6 +27,7 @@ class FakeAdminApi implements AdminApi {
         user: AuthUser(
             id: 'account', email: 'member@example.com', verified: verified),
         createdAt: DateTime(2026),
+        storageQuotaBytes: quota,
       );
 
   @override
@@ -67,6 +77,27 @@ void main() {
     ));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('admin increases capacity with Persian digits on a narrow phone',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = FakeAdminApi();
+    await tester.pumpWidget(
+        MaterialApp(home: AdminScreen(api: api, token: () => 'admin')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('افزایش ظرفیت آپلود'));
+    await tester.tap(find.text('افزایش ظرفیت آپلود'));
+    await tester.pumpAndSettle();
+    final field = find.widgetWithText(TextFormField, 'ظرفیت جدید (گیگابایت)');
+    await tester.enterText(field, '۵');
+    await tester.tap(find.text('افزایش ظرفیت'));
+    await tester.pumpAndSettle();
+    expect(api.quota, 5 * (1 << 30));
+    expect(find.textContaining('۵.۰۰'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('search, confirmation, verification and revoke', (tester) async {
     final api = FakeAdminApi();

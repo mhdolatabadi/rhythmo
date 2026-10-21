@@ -341,7 +341,8 @@ class ApiClient
         StoreApi,
         LikesApi,
         AdminApi,
-        AdminSongReportsApi {
+        AdminSongReportsApi,
+        AdminQuotaApi {
   ApiClient(this.baseUri, {http.Client? httpClient})
       : _httpClient = httpClient ?? http.Client();
 
@@ -361,6 +362,15 @@ class ApiClient
       _send(remove ? 'DELETE' : 'POST',
           '/api/v1/admin/store/tracks/${Uri.encodeComponent(entryId)}${remove ? '' : '/dismiss-reports'}',
           token: token, expectBody: false);
+
+  @override
+  Future<AdminAccount> increaseStorageQuota(
+      String token, String accountId, int bytes) async {
+    final body = await _send('PATCH',
+        '/api/v1/admin/accounts/${Uri.encodeComponent(accountId)}/storage-quota',
+        token: token, body: {'bytes': bytes});
+    return AdminAccount.fromJson(body);
+  }
 
   static const _timeout = Duration(seconds: 15);
 
