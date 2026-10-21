@@ -29,7 +29,7 @@ func NewCatalog(pool *pgxpool.Pool) *Catalog {
 // one public playlist it belongs in. Everything the store shows or plays
 // passes it at query time.
 func storeEligible(tracks string) string {
-	return `(` + tracks + `.status = 'ready' AND (` + tracks + `.published_at IS NOT NULL OR EXISTS (
+	return `(` + tracks + `.status = 'ready' AND ` + tracks + `.moderated_at IS NULL AND (` + tracks + `.published_at IS NOT NULL OR EXISTS (
 		SELECT 1 FROM playlist_tracks spt JOIN playlists sp ON sp.id = spt.playlist_id
 		WHERE spt.track_id = ` + tracks + `.id AND sp.is_public AND sp.share_token IS NOT NULL
 		  AND ` + trackBelongs(tracks, "sp") + `)))`
@@ -480,7 +480,7 @@ type StoreReport struct {
 func (c *Catalog) OpenReports(ctx context.Context, limit int) ([]StoreReport, error) {
 	rows, err := c.pool.Query(ctx, `
 		WITH `+liveEntries+`, open AS (
-			SELECT DISTINCT ON (entry_id) id, entry_id::text AS entry_id, reason, details, created_at,
+			SELECT id, entry_id::text AS entry_id, reason, details, created_at,
 				count(*) OVER (PARTITION BY entry_id) AS reports
 			FROM store_reports WHERE resolved_at IS NULL
 			ORDER BY entry_id, created_at, id
@@ -578,4 +578,34 @@ func (c *Catalog) StoreArtistCounts(ctx context.Context, artist string) (tracks,
 		FROM live
 	`, false, artist).Scan(&tracks, &albums)
 	return
+}
+
+// ModerateEntry removes public access and playlist membership, retaining files.
+func (c *Catalog) ModerateEntry(ctx context.Context, entryID, actorID string, remove bool) error {
+	return pgx.BeginFunc(ctx, c.pool, func(tx pgx.Tx) error {
+		var id string
+		if err := tx.QueryRow(ctx, `SELECT id::text FROM store_entries WHERE id::text=$1 FOR UPDATE`, entryID).Scan(&id); errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		action := "dismiss"
+		if remove {
+			action = "remove"
+			if _, err := tx.Exec(ctx, `UPDATE tracks SET moderated_at=now(),moderated_by=$2::text::uuid,published_at=NULL,publish_review=NULL WHERE id IN (SELECT track_id FROM store_entry_tracks WHERE entry_id::text=$1)`, entryID, actorID); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `WITH removed AS (DELETE FROM playlist_tracks WHERE track_id IN (SELECT track_id FROM store_entry_tracks WHERE entry_id::text=$1) RETURNING playlist_id) UPDATE playlists SET updated_at=now() WHERE id IN (SELECT playlist_id FROM removed)`, entryID); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE store_entries SET hidden_at=now(),hidden_by=$2::text::uuid WHERE id::text=$1`, entryID, actorID); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(ctx, `UPDATE store_reports SET resolved_at=now(),resolved_by=$2::text::uuid WHERE entry_id::text=$1 AND resolved_at IS NULL`, entryID, actorID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO admin_store_actions(entry_id,actor_id,action) VALUES($1::text::uuid,$2::text::uuid,$3)`, entryID, actorID, action)
+		return err
+	})
 }

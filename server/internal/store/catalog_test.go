@@ -352,7 +352,7 @@ func TestStoreHidingAndReports(t *testing.T) {
 		t.Fatalf("reporting an unknown entry = %v", err)
 	}
 	reports, err := f.catalog.OpenReports(f.ctx, 10)
-	if err != nil || len(reports) != 1 || reports[0].Reports != 2 || reports[0].Reason != "copyright" ||
+	if err != nil || len(reports) != 2 || reports[0].Reports != 2 || reports[0].Reason != "copyright" ||
 		reports[0].Entry.Track.ID != song.ID {
 		t.Fatalf("reports = %+v, %v", reports, err)
 	}
@@ -491,5 +491,38 @@ func TestArtistCountsOnlyIncludeLivePublicCatalog(t *testing.T) {
 	tracks, albums, err = f.catalog.StoreArtistCounts(f.ctx, artist)
 	if err != nil || tracks != 0 || albums != 0 {
 		t.Fatalf("hidden counts = %d, %d, %v", tracks, albums, err)
+	}
+}
+
+func TestAdminRemovalRetainsPrivateFileAndBlocksPlaylistAccess(t *testing.T) {
+	f := newCatalogFixture(t)
+	owner, admin := f.user("owner@example.com"), f.user("admin@example.com")
+	song := f.track(owner.ID, NewTrack{Title: "reported"})
+	playlist := f.playlist(owner.ID, true, song.ID)
+	if err := f.catalog.NewEntry(f.ctx, song.ID, "reported|", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	entry := f.listed(StoreQuery{})[0]
+	if err := f.catalog.ReportEntry(f.ctx, entry.ID, admin.ID, "other", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.catalog.ModerateEntry(f.ctx, entry.ID, admin.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.listed(StoreQuery{})) != 0 {
+		t.Fatal("removed song still listed")
+	}
+	if _, err := f.tracks.ForOwner(f.ctx, owner.ID, song.ID); err != nil {
+		t.Fatalf("private original removed: %v", err)
+	}
+	var count int
+	if err := f.catalog.pool.QueryRow(f.ctx, `SELECT count(*) FROM playlist_tracks WHERE track_id=$1::uuid`, song.ID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("playlist rows: %d %v", count, err)
+	}
+	if err := f.playlists.ReplaceTracks(f.ctx, owner.ID, playlist.ID, []string{song.ID}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("re-add moderated song: %v", err)
+	}
+	if reports, err := f.catalog.OpenReports(f.ctx, 10); err != nil || len(reports) != 0 {
+		t.Fatalf("unresolved: %v %v", reports, err)
 	}
 }
