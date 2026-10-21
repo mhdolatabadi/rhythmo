@@ -13,7 +13,7 @@ class FakeAdminApi implements AdminApi, AdminQuotaApi {
   @override
   Future<AdminAccount> increaseStorageQuota(
       String token, String accountId, int bytes) async {
-    if (fail) throw const ApiException("unavailable");
+    if (fail) throw const ApiException('unavailable');
     quota = bytes;
     return account;
   }

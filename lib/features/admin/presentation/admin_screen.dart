@@ -139,8 +139,8 @@ class _AdminScreenState extends State<AdminScreen> {
     if (token == null) return;
     setState(() => _saving = account.user.id);
     try {
-      final updated =
-          await api.increaseStorageQuota(token, account.user.id, bytes);
+      final updated = await (api as AdminQuotaApi)
+          .increaseStorageQuota(token, account.user.id, bytes);
       if (mounted) {
         setState(() => _accounts = [
               for (final item in _accounts)
@@ -153,11 +153,12 @@ class _AdminScreenState extends State<AdminScreen> {
       if (mounted) {
         final denied = error is ApiException &&
             (error.statusCode == 401 || error.statusCode == 403);
-        if (denied)
+        if (denied) {
           setState(() {
             _forbidden = true;
             _accounts = [];
           });
+        }
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(denied
                 ? 'دسترسی مدیریت نداری.'

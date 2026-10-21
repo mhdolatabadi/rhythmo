@@ -308,6 +308,18 @@ func (t *Tracks) ForOwner(ctx context.Context, ownerID, trackID string) (Track, 
 	return track, err
 }
 
+// ImportUploadMetadata records original embedded tags while the track is still
+// pending. It deliberately leaves tag_status/version and the object unchanged.
+func (t *Tracks) ImportUploadMetadata(ctx context.Context, ownerID, trackID string, m TrackMetadata) error {
+	_, err := t.pool.Exec(ctx, `UPDATE tracks SET
+        title=$3, artist=$4, album=$5, album_artist=$6, composer=$7,
+        genre=$8, year=$9, track_number=$10, disc_number=$11, comment=$12
+        WHERE id::text=$1 AND owner_id::text=$2 AND status='pending'`,
+		trackID, ownerID, m.Title, m.Artist, m.Album, m.AlbumArtist,
+		m.Composer, m.Genre, m.Year, m.TrackNumber, m.DiscNumber, m.Comment)
+	return err
+}
+
 // MarkReady flips the owner's pending track to ready.
 func (t *Tracks) MarkReady(ctx context.Context, ownerID, trackID string) (Track, error) {
 	track, err := scanTrack(t.pool.QueryRow(ctx,

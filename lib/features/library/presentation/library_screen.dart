@@ -274,7 +274,7 @@ class _LibraryScreenState extends State<LibraryScreen>
         joinCollabPlaylist(context,
             collabToken: collabToken,
             controller: playlists,
-            libraryTracks: widget.library.tracks,
+            libraryTracks: _unifiedTracks(),
             player: widget.player);
       });
     }
@@ -390,12 +390,26 @@ class _LibraryScreenState extends State<LibraryScreen>
   }
 
   Future<void> _editTrackMetadata(Track track) async {
+    if (track.id.startsWith('device:')) {
+      final original = await widget.localAudio.metadataForEditing(track);
+      if (!mounted) return;
+      if (original == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('خواندن اطلاعات فایل ناموفق بود؛ فایل تغییر نکرد.')));
+        return;
+      }
+      track = original;
+    }
     final saved = await showTrackMetadataEditor(
       context,
       track: track,
-      suggestions: MetadataSuggestions.fromTracks(widget.library.tracks),
-      onSave: (draft, version) =>
-          widget.library.saveTrackMetadata(track.id, draft, version: version),
+      suggestions: MetadataSuggestions.fromTracks(_unifiedTracks()),
+      onSave: (draft, version) => track.id.startsWith('device:')
+          ? widget.player.whileEditingLocalFile(
+              track,
+              () => widget.localAudio
+                  .saveTrackMetadata(track, draft, version: version))
+          : widget.library.saveTrackMetadata(track.id, draft, version: version),
     );
     if (saved == null) return;
     // The library already shows the saved copy; bring the player queue and
@@ -403,13 +417,15 @@ class _LibraryScreenState extends State<LibraryScreen>
     widget.player.updateTrack(saved);
     widget.playlists?.updateTrack(saved);
     if (!mounted) return;
-    final message = switch (saved.embeddedTags.status) {
-      EmbeddedTagStatus.pending =>
-        'ذخیره شد؛ اطلاعات تا چند لحظهٔ دیگر در خود فایل هم نوشته می‌شود.',
-      EmbeddedTagStatus.unsupported =>
-        'ذخیره شد؛ این قالب فایل برچسب داخلی قابل ویرایش ندارد.',
-      _ => 'اطلاعات «${saved.title}» ذخیره شد.',
-    };
+    final message = saved.id.startsWith('device:')
+        ? 'اطلاعات در فایل «${saved.fileName}» ذخیره شد.'
+        : switch (saved.embeddedTags.status) {
+            EmbeddedTagStatus.pending =>
+              'ذخیره شد؛ اطلاعات تا چند لحظهٔ دیگر در خود فایل هم نوشته می‌شود.',
+            EmbeddedTagStatus.unsupported =>
+              'ذخیره شد؛ این قالب فایل برچسب داخلی قابل ویرایش ندارد.',
+            _ => 'اطلاعات «${saved.title}» ذخیره شد.',
+          };
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
   }
@@ -483,9 +499,8 @@ class _LibraryScreenState extends State<LibraryScreen>
               body: RhythmoBackdrop(
                   child: PlaylistsView(
                       controller: playlists,
-                      libraryTracks: widget.library.tracks,
+                      libraryTracks: _unifiedTracks(),
                       player: widget.player,
-                      store: widget.store,
                       onSharedSaved: widget.library.load)),
             )));
   }
@@ -778,10 +793,9 @@ class _LibraryScreenState extends State<LibraryScreen>
         LibraryTab.tracks => _unifiedLibrary(),
         LibraryTab.playlists => PlaylistsView(
             controller: widget.playlists!,
-            libraryTracks: widget.library.tracks,
+            libraryTracks: _unifiedTracks(),
             player: widget.player,
             onSharedSaved: widget.library.load,
-            store: widget.store,
             underHeader: true),
         LibraryTab.albums => _groupsTab(albums: true),
         LibraryTab.artists => _groupsTab(albums: false),
@@ -863,7 +877,7 @@ class _LibraryScreenState extends State<LibraryScreen>
       builder: (_) => LibrarySearchScreen(
         changes: _libraryChanges,
         tracks: _unifiedTracks,
-        libraryTracks: () => widget.library.tracks,
+        libraryTracks: _unifiedTracks,
         playlists: widget.playlists,
         player: widget.player,
         onSharedSaved: widget.library.load,
@@ -1554,9 +1568,13 @@ class _TrackListState extends State<_TrackList> {
             : RhythmoIcons.heart,
         widget.player.favorites.contains(track.id) ? 'نپسندیدن' : 'پسندیدن',
       ),
-      if (onServer) ...[
+      if (widget.playlists != null)
+        item(_TrackAction.addToPlaylist, RhythmoIcons.listPlus,
+            'افزودن به فهرست پخش'),
+      if (widget.onEditMetadata != null)
         item(_TrackAction.editMetadata, RhythmoIcons.pencilSimple,
             'ویرایش اطلاعات آهنگ'),
+      if (onServer) ...[
         if (widget.onSetPublished != null)
           item(
             _TrackAction.publish,
@@ -1568,9 +1586,6 @@ class _TrackListState extends State<_TrackList> {
               PublishState.private => 'انتشار در استور',
             },
           ),
-        if (widget.playlists != null)
-          item(_TrackAction.addToPlaylist, RhythmoIcons.listPlus,
-              'افزودن به فهرست پخش'),
         for (final bot in widget.linkedBots)
           PopupMenuItem(
             value: (_TrackAction.sendToBot, bot),
@@ -1693,7 +1708,7 @@ class _TrackListState extends State<_TrackList> {
       if (!context.mounted || playlistId == null) return;
     }
 
-    final result = await controller.addTrack(playlistId, track.id);
+    final result = await controller.addDeviceTrack(playlistId, track);
     if (!context.mounted) return;
     switch (result) {
       case AddTrackResult.added:
@@ -1845,7 +1860,11 @@ class _TabScrollView extends StatelessWidget {
                     NestedScrollView.sliverOverlapAbsorberHandleFor(context),
               ),
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(side, 12, side, 128),
+              // With extendBody, Scaffold exposes the measured mini-player
+              // height through MediaQuery.padding. Also clear the 56px FAB,
+              // its 16px margin and a 24px gap above its touch target.
+              padding: EdgeInsets.fromLTRB(
+                  side, 12, side, MediaQuery.paddingOf(context).bottom + 96),
               sliver: SliverMainAxisGroup(slivers: slivers),
             ),
           ],

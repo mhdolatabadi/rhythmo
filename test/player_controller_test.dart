@@ -137,6 +137,35 @@ void main() {
     player = PlayerController(api: api, engine: engine, token: () => 'tok');
   });
 
+  test('rewriting a playing device file releases it and restores its queue',
+      () async {
+    final local = _a.withDeviceCopy(Uri.parse('content://media/audio/1'));
+    await player.playFrom([local, _b], 0);
+    await player.seek(const Duration(seconds: 42));
+    final result = await player.whileEditingLocalFile(local, () async {
+      expect(engine.calls.last, 'stop');
+      return 'saved';
+    });
+    expect(result, 'saved');
+    expect(engine.loads.map((load) => load.$1), ['a', 'a']);
+    expect(engine.calls, contains('seek:42'));
+    expect(player.position, const Duration(seconds: 42));
+    expect(player.upcoming.map((track) => track.id), ['b']);
+    expect(player.status, PlayerStatus.playing);
+  });
+
+  test('a failed local rewrite still restores playback', () async {
+    final local = _a.withDeviceCopy(Uri.parse('content://media/audio/1'));
+    await player.play(local);
+    await expectLater(
+        player.whileEditingLocalFile(local, () async {
+          throw StateError('write failed');
+        }),
+        throwsStateError);
+    expect(engine.loads.length, 2);
+    expect(player.status, PlayerStatus.playing);
+  });
+
   test('an edited track shows its new metadata without restarting', () async {
     const a =
         Track(id: 'a', title: 'A', contentType: 'audio/mpeg', sizeBytes: 1);

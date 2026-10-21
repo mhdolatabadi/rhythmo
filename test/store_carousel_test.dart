@@ -9,6 +9,7 @@ import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/features/library/data/track.dart';
+import 'package:rhythmo/features/likes/presentation/liked_songs_screen.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/presentation/playlists_screen.dart';
@@ -123,7 +124,7 @@ void main() {
     expect(shelf.width, lessThanOrEqualTo(RhythmoSpace.pageWidth));
   });
 
-  testWidgets('the playlists tab shows the shelves when the store is on',
+  testWidgets('the playlists tab has only personal content and icon actions',
       (tester) async {
     setUpStore(tester);
     api.ranked = ranked();
@@ -133,13 +134,28 @@ void main() {
             PlaylistsController(api: FakePlaylistsApi(), token: () => 'tok'),
         libraryTracks: const [],
         player: player,
-        store: store,
       ),
     )));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.text(StoreRanking.trending.label), findsOneWidget);
-    expect(find.text(StoreRanking.popular.label), findsOneWidget);
+    expect(find.text(StoreRanking.trending.label), findsNothing);
+    expect(find.text(StoreRanking.popular.label), findsNothing);
+    expect(find.byType(StoreCarousel), findsNothing);
+    expect(find.byType(LikedSongsEntry), findsNothing);
+    expect(api.calls, isEmpty);
+    expect(find.text('فهرست پخش جدید'), findsNothing);
+    final create = find.byTooltip('فهرست پخش جدید');
+    expect(create, findsOneWidget);
+    final rect = tester.getRect(create);
+    expect(rect.width, greaterThanOrEqualTo(48));
+    expect(rect.height, greaterThanOrEqualTo(48));
+    expect(rect.left, greaterThanOrEqualTo(16));
+    expect(rect.right, lessThanOrEqualTo(344));
+    await tester.tap(create);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('فهرست پخش جدید'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   test('the client asks the server for each ranking', () async {
