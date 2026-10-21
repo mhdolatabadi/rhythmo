@@ -16,17 +16,21 @@ class LikeState {
 /// One of «پسندیده‌ها»: the listener's own track or a store song, and when
 /// it was liked.
 class LikedSong {
-  const LikedSong({required this.track, required this.likedAt});
+  const LikedSong(
+      {required this.track, required this.likedAt, this.trackIds = const []});
 
   factory LikedSong.fromJson(Map<String, dynamic> json) => LikedSong(
         track: json['source'] == 'store'
             ? Track.fromStoreJson(json['storeTrack'] as Map<String, dynamic>)
             : Track.fromJson(json['track'] as Map<String, dynamic>),
         likedAt: DateTime.parse(json['likedAt'] as String),
+        trackIds:
+            (json['trackIds'] as List<dynamic>? ?? const []).cast<String>(),
       );
 
   final Track track;
   final DateTime likedAt;
+  final List<String> trackIds;
 }
 
 /// Likes and single-track publishing (#284). Likes live on the server, so

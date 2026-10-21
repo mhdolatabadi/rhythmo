@@ -7,6 +7,7 @@ import 'package:rhythmo/app/app_configuration.dart';
 import 'package:rhythmo/features/auth/presentation/sign_in_prompt.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/presentation/mini_player.dart';
+import 'package:rhythmo/features/likes/presentation/liked_songs_screen.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 
@@ -150,6 +151,7 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
                 playlist: playlist!,
                 player: widget.player,
                 saving: _saving,
+                onSignIn: widget.onSignIn,
                 onSave: playlist.isOwner ? null : _save,
                 onLike: widget.controller.isLiking(widget.shareToken)
                     ? null
@@ -169,8 +171,10 @@ class _Contents extends StatelessWidget {
     required this.saving,
     this.onSave,
     this.onLike,
+    this.onSignIn,
   });
 
+  final VoidCallback? onSignIn;
   final SharedPlaylist playlist;
   final PlayerController player;
   final bool saving;
@@ -300,6 +304,12 @@ class _Contents extends StatelessWidget {
                               ? null
                               : Text(track.artist!,
                                   maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: playlist.isPublic
+                              ? LikeButton(
+                                  track: track,
+                                  favorites: player.favorites,
+                                  onSignIn: onSignIn)
+                              : null,
                           onTap: () => player.playTapped(tracks, index),
                         ),
                       ),

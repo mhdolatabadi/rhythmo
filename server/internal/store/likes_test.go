@@ -76,8 +76,11 @@ func TestLikes(t *testing.T) {
 	if _, err := likes.SetOwnLike(f.ctx, bob.ID, private.ID, true); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("liking someone else's private track = %v", err)
 	}
-	if _, err := likes.SetOwnLike(f.ctx, bob.ID, carolCopy.ID, true); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("liking someone else's track directly = %v", err)
+	if _, err := likes.SetOwnLike(f.ctx, bob.ID, carolCopy.ID, true); err != nil {
+		t.Fatalf("liking a public playlist track = %v", err)
+	}
+	if _, err := likes.SetOwnLike(f.ctx, bob.ID, carolCopy.ID, false); err != nil {
+		t.Fatal(err)
 	}
 	state, err := likes.SetOwnLike(f.ctx, alice.ID, aliceCopy.ID, true)
 	if err != nil || state != (LikeState{Count: 1, Liked: true}) {
