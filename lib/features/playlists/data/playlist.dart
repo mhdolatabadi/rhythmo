@@ -86,10 +86,10 @@ class Playlist {
       tracks.length > trackCount ? tracks.length : trackCount;
 
   /// The same playlist with [tracks] in this order.
-  Playlist withTracks(List<Track> tracks) => Playlist(
+  Playlist withTracks(List<Track> tracks, {int? trackCount}) => Playlist(
         id: id,
         name: name,
-        trackCount: tracks.length,
+        trackCount: trackCount ?? tracks.length,
         tracks: tracks,
         createdAt: createdAt,
         updatedAt: updatedAt,
@@ -276,3 +276,4 @@ String? shareTokenFrom(String input) {
       (segments.length == 2 && segments.first == 'p' ? segments.last : text);
   return RegExp(r'^[A-Za-z0-9_-]{22}$').hasMatch(token) ? token : null;
 }
+

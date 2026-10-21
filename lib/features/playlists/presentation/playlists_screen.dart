@@ -553,7 +553,8 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
 
   Future<void> _save(List<String> ids) async {
     setState(() => saving = true);
-    final saved = await widget.controller.replaceTracks(widget.playlistId, ids);
+    final saved = await widget.controller.replaceTracks(widget.playlistId, ids,
+        deviceTracks: widget.libraryTracks);
     if (!mounted) return;
     setState(() {
       playlist = saved ?? playlist;
@@ -1206,6 +1207,8 @@ class _TrackPickerState extends State<_TrackPicker> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Text('آهنگ‌های محلی فقط روی این دستگاه در دسترس‌اند و به اشتراک گذاشته نمی‌شوند.'),
+            const SizedBox(height: 8),
             TextField(
               decoration: const InputDecoration(
                 labelText: 'جست‌وجوی عنوان یا هنرمند',
@@ -1341,3 +1344,4 @@ class _PlaylistEmptyState extends StatelessWidget {
         ),
       );
 }
+

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
@@ -27,10 +28,28 @@ class PlaylistsController extends ChangeNotifier {
   PlaylistsController(
       {required PlaylistsApi api,
       required String? Function() token,
-      bool Function()? isAdmin})
+      bool Function()? isAdmin,
+      DevicePlaylistStore? deviceStore,
+      String? Function()? accountId})
       : _api = api,
         _token = token,
-        _isAdmin = isAdmin;
+        _isAdmin = isAdmin,
+        _deviceStore = deviceStore ?? MemoryDevicePlaylistStore(),
+        _accountId = accountId ?? (() => null);
+
+  final DevicePlaylistStore _deviceStore;
+  final String? Function() _accountId;
+  String _deviceKey(String id) => '${_accountId() ?? 'default'}:$id';
+
+  Future<Playlist> _withDeviceTracks(Playlist playlist) async {
+    final local = await _deviceStore.read(_deviceKey(playlist.id));
+    if (local.isEmpty) return playlist;
+    final ids = playlist.tracks.map((t) => t.id).toSet();
+    return playlist.withTracks([
+      ...playlist.tracks,
+      ...local.where((t) => !ids.contains(t.id)),
+    ], trackCount: playlist.trackCount + local.where((t) => !ids.contains(t.id)).length);
+  }
 
   final PlaylistsApi _api;
   final String? Function() _token;
@@ -157,7 +176,7 @@ class PlaylistsController extends ChangeNotifier {
     status = PlaylistsStatus.loading;
     notifyListeners();
     try {
-      playlists = await _api.listPlaylists(token);
+      playlists = await Future.wait((await _api.listPlaylists(token)).map(_withDeviceTracks));
       status = PlaylistsStatus.loaded;
       notifyListeners();
       return true;
@@ -263,22 +282,60 @@ class PlaylistsController extends ChangeNotifier {
     final token = _token();
     if (token == null) return null;
     try {
-      return await _api.getPlaylist(token, id);
+      return await _withDeviceTracks(await _api.getPlaylist(token, id));
     } catch (_) {
       return null;
     }
   }
 
-  Future<Playlist?> replaceTracks(String id, List<String> trackIds) async {
+  Future<Playlist?> replaceTracks(String id, List<String> trackIds,
+      {List<Track> deviceTracks = const []}) async {
     final token = _token();
     if (token == null) return null;
     try {
-      final playlist = await _api.replacePlaylistTracks(token, id, trackIds);
+      final available = {
+        for (final track in await _deviceStore.read(_deviceKey(id))) track.id: track,
+        for (final track in deviceTracks)
+          if (track.id.startsWith('device:') && track.isLocal) track.id: track,
+      };
+      final ids = trackIds.toSet().toList();
+      final local = <Track>[];
+      final cloud = <String>[];
+      for (final trackId in ids) {
+        if (trackId.startsWith('device:')) {
+          final track = available[trackId];
+          if (track == null) return null;
+          local.add(track);
+        } else {
+          cloud.add(trackId);
+        }
+      }
+      final remote = await _api.getPlaylist(token, id);
+      final before = remote.tracks.map((t) => t.id).toList();
+      final playlist = listEquals(before, cloud)
+          ? remote
+          : await _api.replacePlaylistTracks(token, id, cloud);
+      await _deviceStore.write(_deviceKey(id), local);
       await load();
-      return playlist;
+      return await _withDeviceTracks(playlist);
     } catch (_) {
       return null;
     }
+  }
+
+  Future<AddTrackResult> addDeviceTrack(String id, Track track) async {
+    if (!track.id.startsWith('device:') || !track.isLocal) {
+      return addTrack(id, track.id);
+    }
+    final playlist = await loadPlaylist(id);
+    if (playlist == null) return AddTrackResult.failure;
+    if (playlist.tracks.any((t) => t.id == track.id)) {
+      return AddTrackResult.alreadyPresent;
+    }
+    final updated = await replaceTracks(id,
+        [...playlist.tracks.map((t) => t.id), track.id],
+        deviceTracks: [track]);
+    return updated == null ? AddTrackResult.failure : AddTrackResult.added;
   }
 
   Future<AddTrackResult> addTrack(String id, String trackId) async {
@@ -293,8 +350,9 @@ class PlaylistsController extends ChangeNotifier {
         id,
         [...trackIds, trackId],
       );
+      final combined = await _withDeviceTracks(updated);
       playlists = playlists
-          .map((item) => item.id == id ? updated : item)
+          .map((item) => item.id == id ? combined : item)
           .toList(growable: false);
       notifyListeners();
       return AddTrackResult.added;
@@ -393,3 +451,4 @@ class PlaylistsController extends ChangeNotifier {
     notifyListeners();
   }
 }
+
