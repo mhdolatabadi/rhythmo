@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
@@ -93,6 +94,7 @@ void _expectTouchTarget(WidgetTester tester, Finder finder) {
 }
 
 void main() {
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   group('recently played', () {
     testWidgets(
         'on a 360 px phone the compact library truncates long titles, '
