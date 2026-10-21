@@ -162,6 +162,8 @@ class UploadController extends ChangeNotifier {
 
     final cancel = _cancel = Completer<void>();
     _setPhase(UploadPhase.preparing);
+    final progressClock = Stopwatch()..start();
+    int? lastProgressMs;
     UploadTicket ticket;
     try {
       ticket = await _api.createUpload(token, file.name, file.sizeBytes);
@@ -180,7 +182,15 @@ class UploadController extends ChangeNotifier {
         onProgress: (sent, total) {
           if (cancel.isCompleted) return;
           _progress = total > 0 ? sent / total : 0;
-          notifyListeners();
+          final now = progressClock.elapsedMilliseconds;
+          // A chunk can arrive thousands of times a second. Sync listeners
+          // rebuild the library too, so publish at most ten updates/second.
+          if (lastProgressMs == null ||
+              now - lastProgressMs! >= 100 ||
+              (total > 0 && sent >= total)) {
+            lastProgressMs = now;
+            notifyListeners();
+          }
         },
         cancelled: cancel.future,
       );

@@ -152,20 +152,29 @@ class MainActivity : AudioServiceActivity() {
             result.error("PERMISSION_DENIED", "Audio access was denied.", null)
             return
         }
-        try {
-            val safeName = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-            val output = File.createTempFile("nafir-upload-", "-$safeName", cacheDir)
-            contentResolver.openInputStream(Uri.parse(uri)).use { input ->
+        Thread {
+            var output: File? = null
+            try {
+                val safeName = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val target = File.createTempFile("rhythmo-upload-", "-$safeName", cacheDir)
+                output = target
+                val input = contentResolver.openInputStream(Uri.parse(uri))
                 if (input == null) {
-                    result.error("NOT_FOUND", "Audio file could not be opened.", null)
-                    return
+                    target.delete()
+                    runOnUiThread {
+                        result.error("NOT_FOUND", "Audio file could not be opened.", null)
+                    }
+                } else {
+                    input.use { source ->
+                        target.outputStream().use { destination -> source.copyTo(destination) }
+                    }
+                    runOnUiThread { result.success(target.absolutePath) }
                 }
-                output.outputStream().use { outputStream -> input.copyTo(outputStream) }
+            } catch (error: Exception) {
+                output?.delete()
+                runOnUiThread { result.error("READ_FAILED", error.message, null) }
             }
-            result.success(output.absolutePath)
-        } catch (error: Exception) {
-            result.error("READ_FAILED", error.message, null)
-        }
+        }.start()
     }
 
     /// Adds a downloaded file to the device's music (Music/rhythmo), where
