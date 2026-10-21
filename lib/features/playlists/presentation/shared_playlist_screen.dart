@@ -307,7 +307,7 @@ class _Contents extends StatelessWidget {
                             .colorScheme
                             .surface
                             .withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(RhythmoRadii.sm),
                         clipBehavior: Clip.antiAlias,
                         child: ListTile(
                           key: ValueKey(track.id),

@@ -55,9 +55,10 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           (error.statusCode == 401 || error.statusCode == 403)) {
         setState(() => _items = []);
       }
-      if (mounted)
+      if (mounted) {
         setState(() => _error =
             'انجام نشد. اتصال و دسترسی حساب را بررسی کن و دوباره تلاش کن.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -138,9 +139,10 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                                                             token,
                                                             item['id']
                                                                 as String);
-                                                    if (mounted)
+                                                    if (mounted) {
                                                       setState(() =>
                                                           _items.remove(item));
+                                                    }
                                                   }),
                                           child: const Text('رسیدگی شد'))),
                                 ])),
