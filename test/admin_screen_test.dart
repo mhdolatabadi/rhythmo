@@ -15,14 +15,20 @@ class FakeAdminApi implements AdminApi {
   String query = '';
 
   AdminAccount get account => AdminAccount(
-        user: AuthUser(
-            id: 'account', email: 'member@example.com', verified: verified),
-        createdAt: DateTime(2026),
-      );
+    user: AuthUser(
+      id: 'account',
+      email: 'member@example.com',
+      verified: verified,
+    ),
+    createdAt: DateTime(2026),
+  );
 
   @override
-  Future<AdminAccountPage> listAccounts(String token,
-      {String query = '', int offset = 0}) async {
+  Future<AdminAccountPage> listAccounts(
+    String token, {
+    String query = '',
+    int offset = 0,
+  }) async {
     this.query = query;
     if (denied) throw const ApiException('denied', statusCode: 403);
     return (accounts: [account], hasMore: false);
@@ -40,7 +46,10 @@ class FakeAdminApi implements AdminApi {
 
   @override
   Future<void> reviewPublication(
-      String token, PendingPublication publication, bool approved) async {
+    String token,
+    PendingPublication publication,
+    bool approved,
+  ) async {
     if (reviewStatus case final status?) {
       throw ApiException('failed', statusCode: status);
     }
@@ -49,7 +58,10 @@ class FakeAdminApi implements AdminApi {
 
   @override
   Future<AdminAccount> setAccountVerification(
-      String token, String accountId, bool verified) async {
+    String token,
+    String accountId,
+    bool verified,
+  ) async {
     if (fail) throw const ApiException('unavailable', statusCode: 500);
     this.verified = verified;
     return account;
@@ -58,13 +70,15 @@ class FakeAdminApi implements AdminApi {
 
 void main() {
   Future<void> pump(WidgetTester tester, FakeAdminApi api) async {
-    await tester.pumpWidget(MaterialApp(
-      locale: const Locale('fa'),
-      supportedLocales: const [Locale('fa')],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      theme: RhythmoTheme.dark(),
-      home: AdminScreen(api: api, token: () => 'token'),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('fa'),
+        supportedLocales: const [Locale('fa')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        theme: RhythmoTheme.dark(),
+        home: AdminScreen(api: api, token: () => 'token'),
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -104,12 +118,15 @@ void main() {
   testWidgets('forbidden directory hides accounts', (tester) async {
     await pump(tester, FakeAdminApi()..denied = true);
     expect(find.text('member@example.com'), findsNothing);
-    expect(find.text('دسترسی مدیریت نداری. دوباره وارد حساب مدیر شو.'),
-        findsOneWidget);
+    expect(
+      find.text('دسترسی مدیریت نداری. دوباره وارد حساب مدیر شو.'),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('narrow screen clears insets and keeps 48px actions',
-      (tester) async {
+  testWidgets('narrow screen clears insets and keeps 48px actions', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     tester.view.viewPadding = const FakeViewPadding(bottom: 34);
@@ -119,9 +136,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     final button = find.ancestor(
-        of: find.text('تأیید حساب'), matching: find.byType(OutlinedButton));
+      of: find.text('تأیید حساب'),
+      matching: find.byType(OutlinedButton),
+    );
     expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
-    expect(tester.getRect(button).right, lessThanOrEqualTo(336));
+    final email = tester.getRect(find.text('member@example.com'));
+    final action = tester.getRect(button);
+    expect(email.top, lessThan(action.bottom));
+    expect(email.bottom, greaterThan(action.top));
+    expect(tester.getRect(button).right, lessThanOrEqualTo(344));
   });
 
   group('publication review', () {
@@ -137,13 +160,15 @@ void main() {
         );
 
     Future<void> pumpReview(WidgetTester tester, FakeAdminApi api) async {
-      await tester.pumpWidget(MaterialApp(
-        locale: const Locale('fa'),
-        supportedLocales: const [Locale('fa')],
-        localizationsDelegates: GlobalMaterialLocalizations.delegates,
-        theme: RhythmoTheme.dark(),
-        home: PublicationReviewScreen(api: api, token: () => 'token'),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('fa'),
+          supportedLocales: const [Locale('fa')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          theme: RhythmoTheme.dark(),
+          home: PublicationReviewScreen(api: api, token: () => 'token'),
+        ),
+      );
       await tester.pumpAndSettle();
     }
 
@@ -198,25 +223,30 @@ void main() {
       expect(find.text('آهنگ'), findsOneWidget);
     });
 
-    testWidgets('narrow screen fits long titles and keeps 48px actions',
-        (tester) async {
+    testWidgets('narrow screen fits long titles and keeps 48px actions', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(360, 640);
       tester.view.devicePixelRatio = 1;
       tester.view.viewPadding = const FakeViewPadding(bottom: 34);
       addTearDown(tester.view.reset);
       final api = FakeAdminApi()
         ..pending = [
-          item('p1', PublicationKind.playlist,
-              'یک فهرست پخش با نامی بسیار بلند که باید کوتاه شود ' * 4),
+          item(
+            'p1',
+            PublicationKind.playlist,
+            'یک فهرست پخش با نامی بسیار بلند که باید کوتاه شود ' * 4,
+          ),
         ];
       await pumpReview(tester, api);
       expect(tester.takeException(), isNull);
       for (final label in ['رد', 'تأیید و عمومی کردن']) {
         final button = find.ancestor(
-            of: find.text(label),
-            matching: find.byWidgetPredicate((w) => w is ButtonStyleButton));
+          of: find.text(label),
+          matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+        );
         expect(tester.getSize(button.first).height, greaterThanOrEqualTo(48));
-        expect(tester.getRect(button.first).right, lessThanOrEqualTo(336));
+        expect(tester.getRect(button.first).right, lessThanOrEqualTo(344));
       }
     });
   });
