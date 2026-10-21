@@ -1,46 +1,63 @@
 name: Android release
 
 on:
-  workflow_run:
-    workflows:
-      - Quality checks
-    types:
-      - completed
-    branches:
-      - main
   workflow_dispatch:
     inputs:
+      ref:
+        description: Exact deployed commit (or a ref for a manual release)
+        default: main
+        type: string
+      deployment_run:
+        description: Production deployment correlation ID
+        default: manual
+        type: string
       cafebazaar:
         description: Also submit this release to Cafe Bazaar for review
         type: boolean
         default: false
 
+run-name: Android release for deploy ${{ inputs.deployment_run }}
+
 permissions:
+  actions: read
   contents: write
 
 concurrency:
-  group: android-release-${{ github.event.workflow_run.head_sha || github.sha }}
+  group: android-release-${{ inputs.ref || github.sha }}
   cancel-in-progress: false
 
 jobs:
   release:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-      # Cafe Bazaar gets a release when one is asked for by hand, or after
-      # every release when the CAFEBAZAAR_PUBLISH_EVERY_RELEASE variable is
-      # true; never without its API secret (#95).
-      CAFEBAZAAR_PUBLISH: >-
-        ${{ secrets.CAFEBAZAAR_API_SECRET != '' &&
-        (inputs.cafebazaar || vars.CAFEBAZAAR_PUBLISH_EVERY_RELEASE == 'true') }}
+      RELEASE_SHA: ${{ inputs.ref || github.sha }}
+      CAFEBAZAAR_PUBLISH: ${{ inputs.cafebazaar }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_SHA }}
+
+      - name: Resolve checked-out revision
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate automatic publication credentials
+        if: env.CAFEBAZAAR_PUBLISH == 'true'
+        shell: bash
+        env:
+          CAFEBAZAAR_API_SECRET: ${{ secrets.CAFEBAZAAR_API_SECRET }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          for name in CAFEBAZAAR_API_SECRET ANDROID_KEYSTORE_BASE64 ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD ANDROID_STORE_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Required publication secret is missing: $name"
+              exit 1
+            fi
+          done
 
       - name: Prepare automatic version
         id: version
@@ -120,7 +137,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          target_commitish: ${{ env.RELEASE_SHA }}
+          target_commitish: ${{ steps.revision.outputs.sha }}
           name: rhythmo ${{ steps.version.outputs.tag }}
           generate_release_notes: true
           fail_on_unmatched_files: true
@@ -132,7 +149,7 @@ jobs:
         if: steps.signing.outputs.configured == 'true' && env.CAFEBAZAAR_PUBLISH == 'true'
         env:
           CAFEBAZAAR_API_SECRET: ${{ secrets.CAFEBAZAAR_API_SECRET }}
-          CAFEBAZAAR_AUTO_PUBLISH: ${{ vars.CAFEBAZAAR_AUTO_PUBLISH || 'false' }}
+          CAFEBAZAAR_AUTO_PUBLISH: 'true'
           CAFEBAZAAR_ROLLOUT_PERCENT: ${{ vars.CAFEBAZAAR_ROLLOUT_PERCENT || '100' }}
         run: >-
           scripts/publish-cafebazaar.sh

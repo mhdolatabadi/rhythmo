@@ -26,6 +26,8 @@ run() { # name port pending|fresh ok|fail expected-exit
 run fresh 19101 fresh ok 0
 grep -q 'POST /v1/apps/releases/ ' "$work/log"
 grep -q '"auto_publish": false' "$work/log"
+CAFEBAZAAR_AUTO_PUBLISH=true run automatic 19104 fresh ok 0
+grep -q '"auto_publish": true' "$work/log"
 run pending 19102 pending ok 0
 ! grep -q 'POST /v1/apps/releases/ ' "$work/log"
 run refused 19103 fresh fail 1

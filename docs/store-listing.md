@@ -130,35 +130,36 @@ Also needed:
 
 Android's "unknown source" warning on a sideloaded APK is an OS prompt and does **not** mean the build is a debug build. Check the signature instead (step 6).
 
-## Submitting to Cafe Bazaar from CI
+## Automatic Cafe Bazaar publication after deployment
 
-The first version is uploaded by hand in the Pishkhan panel. After that,
-`.github/workflows/android-release.yml` can submit each signed release
-itself with `scripts/publish-cafebazaar.sh`. The script reuses or creates an
-unsubmitted release through the Pishkhan API, uploads the production-signed
-APK and submits it for review with a short Persian and English changelog.
+After the server deployment succeeds, Deploy dispatches Android release with
+that exact 40-character deployed commit SHA and waits for its result. Failed
+server deployments never trigger an Android/Bazaar publication. Waiting keeps
+automatic releases serialized by the production deployment concurrency group.
+The release workflow keeps its own increasing run number as the Android version
+code and tags the checked-out commit in the GitHub Release.
 
-Setup, once:
+Required repository secrets: `CAFEBAZAAR_API_SECRET`,
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`,
+`ANDROID_STORE_PASSWORD`. The keystore must match the app already in Bazaar.
+Missing automatic-publication secrets fail explicitly before the build; they
+never produce a test-signed store upload. Create the API secret in Pishkhan
+for this app; never put it in repository files or logs.
 
-1. In the Pishkhan panel, create an API key for the app and store it as the
-   `CAFEBAZAAR_API_SECRET` repository secret. It stays in GitHub secrets
-   only; the script sends it in a header and never prints it.
-2. Optional repository variables:
-   - `CAFEBAZAAR_AUTO_PUBLISH`: `true` publishes as soon as Bazaar approves;
-     the default `false` leaves the final publish click in the panel.
-   - `CAFEBAZAAR_ROLLOUT_PERCENT`: staged rollout, 1 to 100 (default 100).
-   - `CAFEBAZAAR_PUBLISH_EVERY_RELEASE`: `true` submits every release made
-     from `main`. By default a release goes to Bazaar only when the Android
-     release workflow is run by hand with «cafebazaar» ticked, so not every
-     merge lands in Bazaar's review queue.
+The signed APK is uploaded and submitted for review with `auto_publish=true`:
+it becomes available after Bazaar approves it. `CAFEBAZAAR_ROLLOUT_PERCENT`
+controls rollout (1–100, default 100). `CAFEBAZAAR_AUTO_PUBLISH` and
+`CAFEBAZAAR_PUBLISH_EVERY_RELEASE` variables are no longer used by this workflow.
 
-Each submission needs a higher version code than the last one; the workflow
-uses the run number, which always grows. If Bazaar refuses a package, the
-step fails with Bazaar's message and the GitHub Release is unaffected. To
-roll back, upload the previous release's APK in the panel or stop the
-staged rollout there.
+Manual Android release remains available, with a `ref` and optional
+`cafebazaar` submission. Avoid running a separate manual Bazaar submission
+while an automatic submission is active, because Pishkhan uses one pending
+draft per app. A failed Bazaar submission fails the Deploy workflow after the
+server has already deployed; inspect the Android release log to distinguish
+those outcomes. Retry the failed Android run to retain the same version code,
+or start a new manual release for a new version code. A rollback APK also needs
+a new version code; do not re-upload an older published version code.
 
-`scripts/test-publish-cafebazaar.sh` runs the script against a fake API in
-CI. The API calls follow Bazaar's Pishkhan release endpoints
-(`api.pishkhan.cafebazaar.ir/v1/apps/releases/…`); if Bazaar changes them,
-that test still passes, so check the first real run's log.
+The script tests exercise automatic publication, refusals, exact SHA dispatch,
+publication failure propagation and keeping secrets out of output. They do not
+call the real Bazaar API, so verify the first real submission in Pishkhan.
