@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rhythmo/app/app_theme.dart';
+import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/presentation/admin_screen.dart';
@@ -133,16 +134,21 @@ void main() {
     await tester.tap(find.text('جست‌وجو'));
     await tester.pumpAndSettle();
     expect(api.query, 'member');
+    await tester.ensureVisible(find.text('تأیید حساب'));
     await tester.tap(find.text('تأیید حساب'));
     await tester.pumpAndSettle();
     expect(api.verified, isFalse);
-    await tester.tap(find.text('تأیید حساب').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'تأیید حساب'));
     await tester.pumpAndSettle();
     expect(api.verified, isTrue);
     expect(find.text('حساب تأییدشده'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    expect(find.text('حساب تأیید شد.'), findsNothing);
+    await tester.ensureVisible(find.text('لغو تأیید'));
     await tester.tap(find.text('لغو تأیید'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('لغو تأیید').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'لغو تأیید'));
     await tester.pumpAndSettle();
     expect(api.verified, isFalse);
   });
@@ -150,9 +156,10 @@ void main() {
   testWidgets('failed verification preserves displayed state', (tester) async {
     final api = FakeAdminApi()..fail = true;
     await pump(tester, api);
+    await tester.ensureVisible(find.text('تأیید حساب'));
     await tester.tap(find.text('تأیید حساب'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('تأیید حساب').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'تأیید حساب'));
     await tester.pumpAndSettle();
     expect(api.verified, isFalse);
     expect(find.text('تأیید نشده'), findsOneWidget);
@@ -186,8 +193,15 @@ void main() {
     expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
     final email = tester.getRect(find.text('member@example.com'));
     final action = tester.getRect(button);
-    expect(email.top, lessThan(action.bottom));
-    expect(email.bottom, greaterThan(action.top));
+    final card = tester.getRect(find
+        .ancestor(
+            of: find.text('member@example.com'),
+            matching: find.byType(GlassSurface))
+        .last);
+    expect(card.contains(email.topLeft), isTrue);
+    expect(card.contains(email.bottomRight), isTrue);
+    expect(card.contains(action.topLeft), isTrue);
+    expect(card.contains(action.bottomRight), isTrue);
     expect(tester.getRect(button).right, lessThanOrEqualTo(344));
   });
 
