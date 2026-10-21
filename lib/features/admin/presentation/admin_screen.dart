@@ -99,8 +99,7 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _increaseQuota(AdminAccount account) async {
     final api = widget.api;
     if (api is! AdminQuotaApi) return;
-    final field = TextEditingController(
-        text: '${(account.storageQuotaBytes / (1 << 30)).ceil() + 1}');
+    var value = '${(account.storageQuotaBytes / (1 << 30)).ceil() + 1}';
     final form = GlobalKey<FormState>();
     final bytes = await showDialog<int>(
         context: context,
@@ -109,7 +108,8 @@ class _AdminScreenState extends State<AdminScreen> {
                 content: Form(
                     key: form,
                     child: TextFormField(
-                        controller: field,
+                        initialValue: value,
+                        onChanged: (text) => value = text,
                         keyboardType: TextInputType.number,
                         textDirection: TextDirection.ltr,
                         decoration: const InputDecoration(
@@ -131,12 +131,11 @@ class _AdminScreenState extends State<AdminScreen> {
                   FilledButton(
                       onPressed: () {
                         if (form.currentState!.validate()) {
-                          Navigator.pop(context, _quotaBytes(field.text));
+                          Navigator.pop(context, _quotaBytes(value));
                         }
                       },
                       child: const Text('افزایش ظرفیت'))
                 ]));
-    field.dispose();
     if (bytes == null || !mounted) return;
     final token = widget.token();
     if (token == null) return;
