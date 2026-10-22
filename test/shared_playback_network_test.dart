@@ -19,12 +19,12 @@ const _shared = Track(
 );
 
 http.Response _link() => http.Response(
-  jsonEncode({
-    'url': 'https://music.example.com/audio.mp3',
-    'expiresAt': DateTime.utc(2030).toIso8601String(),
-  }),
-  200,
-);
+      jsonEncode({
+        'url': 'https://music.example.com/audio.mp3',
+        'expiresAt': DateTime.utc(2030).toIso8601String(),
+      }),
+      200,
+    );
 
 void main() {
   for (final failure in [503, 'connection', 'timeout']) {
