@@ -113,8 +113,8 @@ class _Deck {
 /// the next track would not start, so crossfade is not offered on the web.
 class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
   JustAudioEngine({AudioCache? cache, bool? supportsCrossfade})
-    : _cache = cache ?? createAudioCache(),
-      supportsCrossfade = supportsCrossfade ?? !kIsWeb {
+      : _cache = cache ?? createAudioCache(),
+        supportsCrossfade = supportsCrossfade ?? !kIsWeb {
     _active = _listen(_Deck());
   }
 
@@ -226,12 +226,12 @@ class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
   }
 
   static EngineState _engineState(ProcessingState state) => switch (state) {
-    ProcessingState.idle => EngineState.idle,
-    ProcessingState.loading => EngineState.loading,
-    ProcessingState.buffering => EngineState.buffering,
-    ProcessingState.ready => EngineState.ready,
-    ProcessingState.completed => EngineState.completed,
-  };
+        ProcessingState.idle => EngineState.idle,
+        ProcessingState.loading => EngineState.loading,
+        ProcessingState.buffering => EngineState.buffering,
+        ProcessingState.ready => EngineState.ready,
+        ProcessingState.completed => EngineState.completed,
+      };
 
   @override
   Stream<Duration> get position => _position.stream;
