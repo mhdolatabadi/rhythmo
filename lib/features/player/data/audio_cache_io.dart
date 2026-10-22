@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:just_audio/just_audio.dart';
@@ -63,11 +64,11 @@ class FileAudioCache implements AudioCache {
       await _delete(file);
     }
     await evict(directory, incomingBytes: track.sizeBytes, keep: track.id);
-    // Streams the URL while writing the file (as .part until complete).
-    // Experimental in just_audio, but the only built-in way to stream and
-    // cache at once; it is isolated here so it is easy to replace.
-    // ignore: experimental_member_use
-    return LockCachingAudioSource(url, cacheFile: file, tag: track.id);
+    return FileCachingAudioSource(url,
+        cacheFile: file,
+        expectedBytes: track.sizeBytes,
+        contentType: track.contentType,
+        tag: track.id);
   }
 
   /// Deletes the cached copies of earlier revisions of track [id], and their
@@ -153,6 +154,143 @@ class FileAudioCache implements AudioCache {
       }
     }
   }
+}
+
+/// A single observed HTTP stream, optionally copied to disk. Unlike the
+/// library's experimental LockCachingAudioSource, every network Future and
+/// stream error is owned by request()/its returned stream, never detached.
+// ignore: experimental_member_use
+class FileCachingAudioSource extends StreamAudioSource {
+  FileCachingAudioSource(this.uri,
+      {required this.cacheFile,
+      required this.expectedBytes,
+      required this.contentType,
+      required String tag})
+      : super(tag: tag);
+
+  final Uri uri;
+  final File cacheFile;
+  final int expectedBytes;
+  final String contentType;
+  static int _partSequence = 0;
+  static const _timeout = Duration(seconds: 15);
+
+  @override
+  // ignore: experimental_member_use
+  Future<StreamAudioResponse> request([int? start, int? end]) async {
+    final client = HttpClient()..connectionTimeout = _timeout;
+    client.autoUncompress = false;
+    try {
+      final request = await client.getUrl(uri).timeout(_timeout);
+      if (start != null || end != null) {
+        request.headers.set(HttpHeaders.rangeHeader,
+            'bytes=${start ?? 0}-${end == null ? '' : end - 1}');
+      }
+      final response = await request.close().timeout(_timeout);
+      if (response.statusCode != 200 && response.statusCode != 206) {
+        throw AudioTransferException('http_${response.statusCode}');
+      }
+      int? offset;
+      int? total;
+      if (response.statusCode == 206) {
+        final range = RegExp(r'^bytes (\d+)-(\d+)/(\d+)$').firstMatch(
+            response.headers.value(HttpHeaders.contentRangeHeader) ?? '');
+        if (range == null) throw const AudioTransferException('invalid_range');
+        offset = int.parse(range[1]!);
+        total = int.parse(range[3]!);
+        if (offset != (start ?? 0)) {
+          throw const AudioTransferException('invalid_range');
+        }
+      }
+      final length = response.contentLength < 0 ? null : response.contentLength;
+      final wholeFile = response.statusCode == 200 ||
+          (offset == 0 && length == expectedBytes && total == expectedBytes);
+      // ignore: experimental_member_use
+      return StreamAudioResponse(
+        rangeRequestsSupported: response.statusCode == 206 ||
+            response.headers.value(HttpHeaders.acceptRangesHeader) == 'bytes',
+        sourceLength: total ?? length,
+        contentLength: length,
+        offset: offset,
+        contentType: response.headers.contentType?.mimeType ?? contentType,
+        stream: _stream(response, client, wholeFile: wholeFile),
+      );
+    } catch (error) {
+      client.close(force: true);
+      if (error is AudioTransferException) rethrow;
+      // Do not expose a signed URL through HttpClient exception messages.
+      throw const AudioTransferException('request_failed');
+    }
+  }
+
+  Stream<List<int>> _stream(HttpClientResponse response, HttpClient client,
+      {required bool wholeFile}) async* {
+    final part = File('${cacheFile.path}.${++_partSequence}.part');
+    RandomAccessFile? writer;
+    var received = 0;
+    var committed = false;
+    try {
+      if (wholeFile) {
+        try {
+          writer = await part.open(mode: FileMode.write);
+        } on FileSystemException {
+          // Disk caching is optional; the stream still works.
+        }
+      }
+      await for (final chunk in response.timeout(_timeout)) {
+        received += chunk.length;
+        if (writer != null) {
+          try {
+            if (received > expectedBytes) {
+              await _close(writer);
+              writer = null;
+            } else {
+              await writer.writeFrom(chunk);
+            }
+          } on FileSystemException {
+            await _close(writer);
+            writer = null;
+          }
+        }
+        yield chunk;
+      }
+      if (writer != null) {
+        final complete = received == expectedBytes;
+        await writer.close();
+        writer = null;
+        if (complete && !await cacheFile.exists()) {
+          await part.rename(cacheFile.path);
+          committed = true;
+        }
+      }
+    } on FileSystemException {
+      // Cache finalization failure must not turn a completed play into error.
+    } catch (_) {
+      throw const AudioTransferException('transfer_failed');
+    } finally {
+      if (writer != null) await _close(writer);
+      client.close(force: true);
+      if (!committed) {
+        try {
+          await part.delete();
+        } on FileSystemException {/* Optional cache. */}
+      }
+    }
+  }
+
+  static Future<void> _close(RandomAccessFile file) async {
+    try {
+      await file.close();
+    } on FileSystemException {/* Optional cache. */}
+  }
+}
+
+/// Safe to report without leaking a signed media URL.
+class AudioTransferException implements Exception {
+  const AudioTransferException(this.code);
+  final String code;
+  @override
+  String toString() => 'AudioTransferException($code)';
 }
 
 class _Entry {
