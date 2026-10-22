@@ -59,13 +59,13 @@ class PlayerController extends ChangeNotifier {
     this.onListened,
     this.journey,
     this.lyrics,
-  }) : _api = api,
-       _engine = engine,
-       _token = token,
-       _random = random ?? Random(),
-       _settingsStore = settingsStore ?? MemoryPlaybackSettingsStore(),
-       _now = now ?? DateTime.now,
-       favorites = favorites ?? FavoriteTracks() {
+  })  : _api = api,
+        _engine = engine,
+        _token = token,
+        _random = random ?? Random(),
+        _settingsStore = settingsStore ?? MemoryPlaybackSettingsStore(),
+        _now = now ?? DateTime.now,
+        favorites = favorites ?? FavoriteTracks() {
     _subscriptions = [
       engine.position.listen((value) {
         _countHeard(value - _position);
@@ -300,9 +300,8 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> _applySpeed(double speed) async {
-    final value = speed
-        .clamp(playbackSpeeds.first, playbackSpeeds.last)
-        .toDouble();
+    final value =
+        speed.clamp(playbackSpeeds.first, playbackSpeeds.last).toDouble();
     _settings = _settings.copyWith(speed: value);
     await _engine.setSpeed(value);
   }
@@ -692,9 +691,9 @@ class PlayerController extends ChangeNotifier {
       case PlayerStatus.error:
         if (_track != null) await _start(_track!);
       case PlayerStatus.idle ||
-          PlayerStatus.loading ||
-          PlayerStatus.playing ||
-          PlayerStatus.buffering:
+            PlayerStatus.loading ||
+            PlayerStatus.playing ||
+            PlayerStatus.buffering:
         break;
     }
   }
@@ -779,8 +778,7 @@ class PlayerController extends ChangeNotifier {
     try {
       return await _requestLink(token, track);
     } catch (error) {
-      final transient =
-          error is TimeoutException ||
+      final transient = error is TimeoutException ||
           error is http.ClientException ||
           (error is ApiException &&
               error.statusCode != null &&
@@ -880,7 +878,8 @@ class PlayerController extends ChangeNotifier {
     _setStatus(switch (_engineState) {
       EngineState.completed => PlayerStatus.completed,
       EngineState.loading ||
-      EngineState.buffering when _playing => PlayerStatus.buffering,
+      EngineState.buffering when _playing =>
+        PlayerStatus.buffering,
       _ => _playing ? PlayerStatus.playing : PlayerStatus.paused,
     });
   }
