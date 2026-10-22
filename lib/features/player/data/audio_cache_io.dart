@@ -320,7 +320,8 @@ class _CacheProxy {
       required String contentType,
       required String tag}) {
     final path = _paths.putIfAbsent(cacheFile.path, () {
-      final token = base64UrlEncode(List<int>.generate(18, (_) => _random.nextInt(256)));
+      final token =
+          base64UrlEncode(List<int>.generate(18, (_) => _random.nextInt(256)));
       return '/$token';
     });
     final source = FileCachingAudioSource(
