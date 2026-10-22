@@ -205,6 +205,7 @@ class _Harness {
         socket.add(bytes.sublist(0, 44));
         await socket.flush();
         await socket.close();
+        socket.destroy();
         return;
       }
       request.response.add(bytes);
