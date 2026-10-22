@@ -34,10 +34,28 @@ void main() {
     // The cloud identity is kept, but the device file is played.
     expect(entry.track.id, 't1');
     expect(entry.track.title, 'Song');
-    expect(entry.track.sourceUri,
-        Uri.parse('content://media/external/audio/media/1'));
+    expect(
+      entry.track.sourceUri,
+      Uri.parse('content://media/external/audio/media/1'),
+    );
     expect(locationOf(entry.track), TrackLocation.synced);
   });
+
+  for (final name in ['آهنگ من', 'My Song', 'اجرای زنده 🎵']) {
+    test('original display filename $name merges despite different titles', () {
+      final server = cloud('uploaded', title: name, fileName: '$name.mp3');
+      final local = device(1, title: 'Embedded title', fileName: '$name.MP3');
+
+      // Both immediately after upload and on subsequent library refreshes.
+      for (var refresh = 0; refresh < 2; refresh++) {
+        final entries = mergeLibrary([server], [local]);
+        expect(entries, hasLength(1));
+        expect(entries.single.location, TrackLocation.synced);
+        expect(entries.single.track.id, server.id);
+        expect(entries.single.track.sourceUri, local.sourceUri);
+      }
+    });
+  }
 
   test('a Persian filename matches by title when sizes are equal', () {
     final entries = mergeLibrary(
@@ -60,14 +78,15 @@ void main() {
       ],
     );
 
-    expect([
-      for (final e in entries) (e.track.id, e.location)
-    ], [
-      ('t1', TrackLocation.server),
-      ('t2', TrackLocation.server),
-      ('device:1', TrackLocation.device),
-      ('device:2', TrackLocation.device),
-    ]);
+    expect(
+      [for (final e in entries) (e.track.id, e.location)],
+      [
+        ('t1', TrackLocation.server),
+        ('t2', TrackLocation.server),
+        ('device:1', TrackLocation.device),
+        ('device:2', TrackLocation.device),
+      ],
+    );
   });
 
   test('each server copy matches at most one device file', () {
@@ -76,21 +95,20 @@ void main() {
       [device(1, title: 'Song'), device(2, title: 'Song')],
     );
 
-    expect([
-      for (final e in entries) (e.track.id, e.location)
-    ], [
-      ('t1', TrackLocation.synced),
-      ('device:2', TrackLocation.device),
-    ]);
+    expect(
+      [for (final e in entries) (e.track.id, e.location)],
+      [('t1', TrackLocation.synced), ('device:2', TrackLocation.device)],
+    );
   });
 
   test('a synced track keeps the server metadata version for editing', () {
     const edited = Track(
-        id: 't1',
-        title: 'Song',
-        contentType: 'audio/mpeg',
-        sizeBytes: 100,
-        version: 4);
+      id: 't1',
+      title: 'Song',
+      contentType: 'audio/mpeg',
+      sizeBytes: 100,
+      version: 4,
+    );
 
     final synced = mergeLibrary([edited], [device(1, title: 'Song')]);
 
@@ -100,8 +118,10 @@ void main() {
   test('locationOf tells device, server and synced tracks apart', () {
     expect(locationOf(cloud('t1')), TrackLocation.server);
     expect(locationOf(device(1)), TrackLocation.device);
-    expect(locationOf(cloud('t1').withDeviceCopy(Uri.parse('content://x'))),
-        TrackLocation.synced);
+    expect(
+      locationOf(cloud('t1').withDeviceCopy(Uri.parse('content://x'))),
+      TrackLocation.synced,
+    );
   });
 
   test('safeFileName names files as the server does', () {

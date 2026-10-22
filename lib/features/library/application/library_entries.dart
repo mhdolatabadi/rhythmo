@@ -15,7 +15,7 @@ enum TrackLocation {
 /// One row of the unified library: a track and the copies it stands for.
 class LibraryEntry {
   const LibraryEntry({this.cloud, this.local})
-      : assert(cloud != null || local != null);
+    : assert(cloud != null || local != null);
 
   /// The account's copy, when uploaded.
   final Track? cloud;
@@ -24,10 +24,10 @@ class LibraryEntry {
   final Track? local;
 
   TrackLocation get location => switch ((cloud, local)) {
-        (_?, _?) => TrackLocation.synced,
-        (_?, null) => TrackLocation.server,
-        _ => TrackLocation.device,
-      };
+    (_?, _?) => TrackLocation.synced,
+    (_?, null) => TrackLocation.server,
+    _ => TrackLocation.device,
+  };
 
   /// What the list shows and plays. A synced track keeps the cloud identity
   /// (playlists, editing, deletion), but plays the device file, offline and
@@ -44,7 +44,7 @@ class LibraryEntry {
 /// Merges the account's tracks with the device's music so each file appears
 /// once. A device file is the server copy of a track when their sizes match
 /// exactly (uploads are never transcoded) and so does their filename, as the
-/// server stores it, or their title.
+/// server stores it (original display name or legacy storage name), or title.
 List<LibraryEntry> mergeLibrary(List<Track> cloud, List<Track> local) {
   final unmatched = <int, List<Track>>{};
   for (final track in cloud) {
@@ -74,10 +74,21 @@ bool _sameFile(Track cloud, Track device) {
   final deviceName = device.fileName;
   if (cloudName != null &&
       deviceName != null &&
-      safeFileName(deviceName) == cloudName) {
+      (_displayName(deviceName) == _displayName(cloudName) ||
+          safeFileName(deviceName) == cloudName)) {
     return true;
   }
   return _comparable(cloud.title) == _comparable(device.title);
+}
+
+// The API preserves Unicode and spaces in display filenames. Only the
+// storage key uses safeFileName; comparing just that loses uploaded files
+// when their embedded title differs from their filename.
+String _displayName(String name) {
+  final base = name.replaceAll('\\', '/').split('/').last;
+  final dot = base.lastIndexOf('.');
+  if (dot < 0) return base;
+  return '${base.substring(0, dot)}${base.substring(dot).toLowerCase()}';
 }
 
 String _comparable(String text) =>
@@ -93,7 +104,8 @@ String safeFileName(String name) {
   final ext = dot < 0 ? '' : base.substring(dot).toLowerCase();
   final stemSource = dot < 0 ? base : base.substring(0, dot);
   var stem = stemSource.runes.map((rune) {
-    final ok = (rune >= 0x30 && rune <= 0x39) ||
+    final ok =
+        (rune >= 0x30 && rune <= 0x39) ||
         (rune >= 0x41 && rune <= 0x5a) ||
         (rune >= 0x61 && rune <= 0x7a) ||
         rune == 0x2d ||
@@ -109,7 +121,7 @@ String safeFileName(String name) {
 /// Where [track], as the unified library lists it, is kept: device tracks
 /// have `device:` IDs, and a cloud track with a device file is synced.
 TrackLocation locationOf(Track track) => switch (track) {
-      Track(isLocal: false) => TrackLocation.server,
-      Track(id: final id) when id.startsWith('device:') => TrackLocation.device,
-      _ => TrackLocation.synced,
-    };
+  Track(isLocal: false) => TrackLocation.server,
+  Track(id: final id) when id.startsWith('device:') => TrackLocation.device,
+  _ => TrackLocation.synced,
+};
