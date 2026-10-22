@@ -20,6 +20,13 @@ Track _track(String id,
       ),
     );
 
+FileAudioCache cacheForTest(Future<Directory> Function() directory,
+    {int maxBytes = defaultCacheBytes}) {
+  final cache = FileAudioCache(directory, maxBytes: maxBytes);
+  addTearDown(cache.dispose);
+  return cache;
+}
+
 void main() {
   late Directory dir;
 
@@ -41,7 +48,7 @@ void main() {
 
   test('a new track streams to a file named by id and revision, not URL',
       () async {
-    final cache = FileAudioCache(() async => dir, maxBytes: 1000);
+    final cache = cacheForTest(() async => dir, maxBytes: 1000);
     final source = await cache.sourceFor(_track('t1', type: 'audio/mp4'),
         Uri.parse('https://x/nafir-music/k?X-Amz-Signature=abc'));
 
@@ -55,7 +62,7 @@ void main() {
   test('unavailable cache storage falls back to direct streaming', () async {
     final blocked = File('${dir.path}/blocked');
     await blocked.writeAsString('not a directory');
-    final cache = FileAudioCache(() async => Directory(blocked.path));
+    final cache = cacheForTest(() async => Directory(blocked.path));
     final url = Uri.parse('https://music.example.com/track.mp3');
     final source = await cache.sourceFor(_track('t1'), url);
     expect(source, isA<ProgressiveAudioSource>());
@@ -66,7 +73,7 @@ void main() {
 
   test('a completed download is played from disk and marked recent', () async {
     await put('t1.r0.mp3', 10, 60);
-    final cache = FileAudioCache(() async => dir, maxBytes: 1000);
+    final cache = cacheForTest(() async => dir, maxBytes: 1000);
 
     final source =
         await cache.sourceFor(_track('t1', size: 10), Uri.parse('https://x/'));
@@ -85,7 +92,7 @@ void main() {
     await put('old.mp3.mime', 10, 30);
     await put('mid.mp3', 400, 20);
     await put('new.mp3', 100, 10);
-    final cache = FileAudioCache(() async => dir, maxBytes: 1000);
+    final cache = cacheForTest(() async => dir, maxBytes: 1000);
 
     // 910 cached + 300 incoming > 1000: the oldest (old.*) must go.
     await cache.sourceFor(_track('next', size: 300), Uri.parse('https://x/'));
@@ -97,7 +104,7 @@ void main() {
     await put('a.mp3', 400, 30);
     await put('b.mp3', 400, 20);
     await put('keep.mp3.part', 150, 40);
-    final cache = FileAudioCache(() async => dir, maxBytes: 500);
+    final cache = cacheForTest(() async => dir, maxBytes: 500);
 
     await cache.evict(dir, incomingBytes: 300, keep: 'keep');
 
@@ -105,7 +112,7 @@ void main() {
   });
 
   test('size counts every cached file, partial downloads included', () async {
-    final cache = FileAudioCache(() async => dir);
+    final cache = cacheForTest(() async => dir);
     expect(await cache.sizeBytes(), 0);
 
     await put('a.mp3', 300, 1);
@@ -116,7 +123,7 @@ void main() {
   });
 
   test('size of a cache that was never created is zero', () async {
-    final cache = FileAudioCache(() async => Directory('${dir.path}/none'));
+    final cache = cacheForTest(() async => Directory('${dir.path}/none'));
     expect(await cache.sizeBytes(), 0);
     await cache.clear();
   });
@@ -125,7 +132,7 @@ void main() {
     await put('a.mp3', 10, 1);
     await put('a.mp3.mime', 10, 1);
     await put('playing.mp3.part', 10, 1);
-    final cache = FileAudioCache(() async => dir);
+    final cache = cacheForTest(() async => dir);
 
     await cache.clear(keep: 'playing');
 
@@ -142,7 +149,7 @@ void main() {
     await put('t1.r0.mp3', 100, 5);
     await put('t1.r0.mp3.mime', 10, 5);
     await put('other.r0.mp3', 100, 5);
-    final cache = FileAudioCache(() async => dir, maxBytes: 10000);
+    final cache = cacheForTest(() async => dir, maxBytes: 10000);
 
     final source = await cache.sourceFor(
         _track('t1', size: 120, tagRevision: 2), Uri.parse('https://x/'));
@@ -157,7 +164,7 @@ void main() {
 
   test('a cached file of the wrong size is not played', () async {
     await put('t1.r0.mp3', 60, 5);
-    final cache = FileAudioCache(() async => dir, maxBytes: 10000);
+    final cache = cacheForTest(() async => dir, maxBytes: 10000);
 
     final source =
         await cache.sourceFor(_track('t1', size: 100), Uri.parse('https://x/'));
@@ -167,6 +174,48 @@ void main() {
     expect(names(), isEmpty);
   });
 
+  for (final failure in ['none', '403', 'truncated']) {
+    test('owned audio proxy observes response failures: $failure', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+      server.listen((request) async {
+        if (failure == '403') {
+          request.response.statusCode = HttpStatus.forbidden;
+          await request.response.close();
+          return;
+        }
+        if (failure == 'truncated') {
+          final socket =
+              await request.response.detachSocket(writeHeaders: false);
+          socket.write('HTTP/1.1 200 OK\r\nContent-Length: 100\r\n'
+              'Connection: close\r\n\r\n');
+          socket.add(List.filled(44, 0));
+          await socket.flush();
+          await socket.close();
+          return;
+        }
+        request.response
+          ..contentLength = 100
+          ..add(List.filled(100, 0));
+        await request.response.close();
+      });
+      final source = await cacheForTest(() async => dir).sourceFor(
+              _track('t1'), Uri.parse('http://127.0.0.1:${server.port}/audio'))
+          as FileCachingAudioSource;
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final response = await (await client.getUrl(source.uri)).close();
+      if (failure == 'truncated') {
+        await expectLater(
+            response.drain<void>(), throwsA(isA<HttpException>()));
+      } else {
+        expect(response.statusCode, failure == '403' ? 502 : 200);
+        await response.drain<void>();
+      }
+      await pumpEventQueue();
+    });
+  }
+
   test('HTTP errors stay on the request Future without detached failures',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -175,7 +224,7 @@ void main() {
       request.response.statusCode = HttpStatus.forbidden;
       await request.response.close();
     });
-    final source = await FileAudioCache(() async => dir).sourceFor(
+    final source = await cacheForTest(() async => dir).sourceFor(
       _track('t1'),
       Uri.parse('http://127.0.0.1:${server.port}/signed-audio'),
     ) as FileCachingAudioSource;
@@ -199,7 +248,7 @@ void main() {
       await socket.flush();
       await socket.close();
     });
-    final source = await FileAudioCache(() async => dir).sourceFor(
+    final source = await cacheForTest(() async => dir).sourceFor(
       _track('t1'),
       Uri.parse('http://127.0.0.1:${server.port}/audio'),
     ) as FileCachingAudioSource;
@@ -225,7 +274,7 @@ void main() {
         ..add(stored.sublist(10, 20));
       await request.response.close();
     });
-    final source = await FileAudioCache(() async => dir).sourceFor(
+    final source = await cacheForTest(() async => dir).sourceFor(
       _track('t1'),
       Uri.parse('http://127.0.0.1:${server.port}/audio'),
     ) as FileCachingAudioSource;
@@ -252,7 +301,7 @@ void main() {
     });
     final url =
         Uri.parse('http://127.0.0.1:${server.port}/nafir-music/u/t1.mp3');
-    final cache = FileAudioCache(() async => dir, maxBytes: 10 << 20);
+    final cache = cacheForTest(() async => dir, maxBytes: 10 << 20);
     final track = _track('t1', size: stored.length);
 
     // ignore: experimental_member_use
