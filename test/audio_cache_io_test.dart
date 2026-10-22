@@ -52,6 +52,18 @@ void main() {
     expect(file.path, '${dir.path}/t1.r0.m4a');
   });
 
+  test('unavailable cache storage falls back to direct streaming', () async {
+    final blocked = File('${dir.path}/blocked');
+    await blocked.writeAsString('not a directory');
+    final cache = FileAudioCache(() async => Directory(blocked.path));
+    final url = Uri.parse('https://music.example.com/track.mp3');
+    final source = await cache.sourceFor(_track('t1'), url);
+    expect(source, isA<ProgressiveAudioSource>());
+    final direct = source as UriAudioSource;
+    expect(direct.uri, url);
+    expect(direct.tag, 't1');
+  });
+
   test('a completed download is played from disk and marked recent', () async {
     await put('t1.r0.mp3', 10, 60);
     final cache = FileAudioCache(() async => dir, maxBytes: 1000);
