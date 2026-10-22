@@ -37,6 +37,16 @@ class FileAudioCache implements AudioCache {
 
   @override
   Future<AudioSource> sourceFor(Track track, Uri url) async {
+    try {
+      return await _cachedSourceFor(track, url);
+    } on FileSystemException {
+      // Cache storage is optional. A full/unavailable temporary directory
+      // must not prevent streaming an otherwise accessible cloud file.
+      return AudioSource.uri(url, tag: track.id);
+    }
+  }
+
+  Future<AudioSource> _cachedSourceFor(Track track, Uri url) async {
     final directory = await _directory();
     await directory.create(recursive: true);
     final name = cacheFileName(track);
