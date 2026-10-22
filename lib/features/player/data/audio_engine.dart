@@ -549,6 +549,9 @@ class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
     _fadeDone?.complete();
     await _active.player.dispose();
     await _standby?.player.dispose();
+    if (_cache is DisposableAudioCache) {
+      await (_cache as DisposableAudioCache).dispose();
+    }
     await Future.wait([
       _position.close(),
       _duration.close(),
