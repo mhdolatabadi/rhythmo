@@ -192,6 +192,7 @@ void main() {
           socket.add(List.filled(44, 0));
           await socket.flush();
           await socket.close();
+          socket.destroy();
           return;
         }
         request.response
@@ -247,6 +248,7 @@ void main() {
       socket.add(List.filled(44, 0));
       await socket.flush();
       await socket.close();
+      socket.destroy();
     });
     final source = await cacheForTest(() async => dir).sourceFor(
       _track('t1'),
