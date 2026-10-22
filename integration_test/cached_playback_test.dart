@@ -14,6 +14,8 @@ import 'package:rhythmo/features/player/data/audio_cache.dart';
 import 'package:rhythmo/features/player/data/audio_cache_io.dart';
 import 'package:rhythmo/features/player/data/audio_engine.dart';
 
+import 'audio_sample.dart';
+
 // Exercise the actual API client, shared context, controller, cache and
 // Android decoder. A fake engine cannot detect proxy or decoder failures.
 void main() {
@@ -58,6 +60,31 @@ void main() {
             expect(harness.mediaRequests.length, greaterThanOrEqualTo(2));
           }
           expect(harness.mediaRequests, contains('/audio/first.wav'));
+          expect(harness.privateLibraryRequests, 0);
+        } finally {
+          await harness.close();
+        }
+      });
+    });
+  }
+
+  for (final format in ['mp3', 'm4a']) {
+    testWidgets('recipient streams $format through the production player',
+        (tester) async {
+      await tester.runAsync(() async {
+        final harness = await _Harness.create(format: format);
+        try {
+          final playlist =
+              await harness.api.getSharedPlaylist('recipient', _share);
+          final progressed = harness.engine.position.firstWhere(
+            (position) => position >= const Duration(milliseconds: 200),
+          );
+          await harness.player
+              .play(playlist.tracks.first)
+              .timeout(const Duration(seconds: 20));
+          await progressed.timeout(const Duration(seconds: 10));
+          expect(harness.player.status, PlayerStatus.playing);
+          expect(harness.mediaRequests, contains('/audio/first.$format'));
           expect(harness.privateLibraryRequests, 0);
         } finally {
           await harness.close();
@@ -112,7 +139,8 @@ void main() {
 const _share = 'AAAAAAAAAAAAAAAAAAAAAA';
 
 class _Harness {
-  _Harness(this.directory, this.server, AudioCache cache) {
+  _Harness(this.directory, this.server, AudioCache cache,
+      {this.format = 'wav'}) {
     api = ApiClient(
       Uri.parse('http://127.0.0.1:${server.port}'),
       httpClient: client,
@@ -126,20 +154,28 @@ class _Harness {
     server.listen(_handle);
   }
 
-  static Future<_Harness> create({AudioCache? cache}) async {
+  static Future<_Harness> create(
+      {AudioCache? cache, String format = 'wav'}) async {
     final directory = await Directory.systemTemp.createTemp('rhythmo-audio-');
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     return _Harness(
       directory,
       server,
       cache ?? FileAudioCache(() async => directory),
+      format: format,
     );
   }
 
   final Directory directory;
   final HttpServer server;
   final client = http.Client();
-  final bytes = _wav();
+  final String format;
+  late final bytes = format == 'wav' ? _wav() : encodedAudioSample(format);
+  String get contentType => switch (format) {
+        'mp3' => 'audio/mpeg',
+        'm4a' => 'audio/mp4',
+        _ => 'audio/wav',
+      };
   late final ApiClient api;
   late final JustAudioEngine engine;
   late final PlayerController player;
@@ -158,7 +194,7 @@ class _Harness {
         await request.response.close();
         return;
       }
-      request.response.headers.contentType = ContentType('audio', 'wav');
+      request.response.headers.contentType = ContentType.parse(contentType);
       request.response.contentLength = bytes.length;
       if (interruptFirstDownload) {
         interruptFirstDownload = false;
@@ -183,7 +219,7 @@ class _Harness {
             {
               'id': id,
               'title': id,
-              'contentType': 'audio/wav',
+              'contentType': contentType,
               'sizeBytes': bytes.length,
             },
         ],
@@ -194,7 +230,7 @@ class _Harness {
       final id = request.uri.pathSegments[5];
       final prefix = expireFirstLink && streamRequests == 1 ? 'expired/' : '';
       _json(request, {
-        'url': 'http://127.0.0.1:${server.port}/audio/$prefix$id.wav',
+        'url': 'http://127.0.0.1:${server.port}/audio/$prefix$id.$format',
         'expiresAt': DateTime.now()
             .add(const Duration(hours: 1))
             .toUtc()
