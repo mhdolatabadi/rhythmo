@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/lyrics/application/lyrics_controller.dart';
@@ -58,13 +59,13 @@ class PlayerController extends ChangeNotifier {
     this.onListened,
     this.journey,
     this.lyrics,
-  })  : _api = api,
-        _engine = engine,
-        _token = token,
-        _random = random ?? Random(),
-        _settingsStore = settingsStore ?? MemoryPlaybackSettingsStore(),
-        _now = now ?? DateTime.now,
-        favorites = favorites ?? FavoriteTracks() {
+  }) : _api = api,
+       _engine = engine,
+       _token = token,
+       _random = random ?? Random(),
+       _settingsStore = settingsStore ?? MemoryPlaybackSettingsStore(),
+       _now = now ?? DateTime.now,
+       favorites = favorites ?? FavoriteTracks() {
     _subscriptions = [
       engine.position.listen((value) {
         _countHeard(value - _position);
@@ -299,8 +300,9 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> _applySpeed(double speed) async {
-    final value =
-        speed.clamp(playbackSpeeds.first, playbackSpeeds.last).toDouble();
+    final value = speed
+        .clamp(playbackSpeeds.first, playbackSpeeds.last)
+        .toDouble();
     _settings = _settings.copyWith(speed: value);
     await _engine.setSpeed(value);
   }
@@ -690,9 +692,9 @@ class PlayerController extends ChangeNotifier {
       case PlayerStatus.error:
         if (_track != null) await _start(_track!);
       case PlayerStatus.idle ||
-            PlayerStatus.loading ||
-            PlayerStatus.playing ||
-            PlayerStatus.buffering:
+          PlayerStatus.loading ||
+          PlayerStatus.playing ||
+          PlayerStatus.buffering:
         break;
     }
   }
@@ -772,7 +774,26 @@ class PlayerController extends ChangeNotifier {
   /// Someone else's track is played through the shared link or the
   /// collaborative playlist it was opened from, a store song through the
   /// store; the user's own directly.
-  Future<StreamLink> _link(String? token, Track track) {
+  Future<StreamLink> _link(String? token, Track track) async {
+    final request = _request;
+    try {
+      return await _requestLink(token, track);
+    } catch (error) {
+      final transient =
+          error is TimeoutException ||
+          error is http.ClientException ||
+          (error is ApiException &&
+              error.statusCode != null &&
+              error.statusCode! >= 500 &&
+              error.statusCode! < 600);
+      if (!transient || request != _request) rethrow;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (request != _request) rethrow;
+      return _requestLink(token, track);
+    }
+  }
+
+  Future<StreamLink> _requestLink(String? token, Track track) {
     if (track.fromStore) return _api.storeStreamLink(token, track.id);
     final shareToken = track.sharedVia;
     final playlistId = track.viaPlaylist;
@@ -859,8 +880,7 @@ class PlayerController extends ChangeNotifier {
     _setStatus(switch (_engineState) {
       EngineState.completed => PlayerStatus.completed,
       EngineState.loading ||
-      EngineState.buffering when _playing =>
-        PlayerStatus.buffering,
+      EngineState.buffering when _playing => PlayerStatus.buffering,
       _ => _playing ? PlayerStatus.playing : PlayerStatus.paused,
     });
   }
@@ -874,6 +894,7 @@ class PlayerController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _request++;
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
