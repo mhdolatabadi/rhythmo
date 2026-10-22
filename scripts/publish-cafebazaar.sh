@@ -49,7 +49,22 @@ else
   echo "Reusing the release that is not submitted yet"
 fi
 
-expect_success "$(call POST /apps/releases/upload/ -F "apk=@${apk};type=application/vnd.android.package-archive" -F architecture=all)" "upload $(basename "$apk")"
+upload_package() {
+  call POST /apps/releases/upload/ -F "apk=@${apk};type=application/vnd.android.package-archive" -F architecture=all
+}
+
+upload_status=0
+upload="$(upload_package)" || upload_status=$?
+# The draft may disappear between lookup and upload, and the lookup can return
+# a success envelope even when there is no usable draft. Recover only from the
+# explicit no-release response; never replace or delete an existing release.
+if jq -e '(.message // "" | gsub("[[:space:]‌]"; "")) == "رهانشثبتشدهایوجودندارد."' <<<"$upload" >/dev/null 2>&1; then
+  expect_success "$(call POST /apps/releases/ -H 'Content-Type: application/json' -d '{}')" "create missing release"
+  upload_status=0
+  upload="$(upload_package)" || upload_status=$?
+fi
+expect_success "$upload" "upload $(basename "$apk")"
+(( upload_status == 0 )) || exit "$upload_status"
 
 body="$(jq -n --arg v "$version" --argjson auto "$auto_publish" --argjson rollout "$rollout" '{
   changelog_fa: ("نسخه‌ی " + $v + ": بهبودها و رفع اشکال‌ها."),

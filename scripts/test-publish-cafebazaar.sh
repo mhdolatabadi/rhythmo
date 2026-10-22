@@ -32,4 +32,12 @@ run pending 19102 pending ok 0
 ! grep -q 'POST /v1/apps/releases/ ' "$work/log"
 run refused 19103 fresh fail 1
 ! grep -q 'commit' "$work/log"
+run missing-draft 19105 missing ok 0
+[[ "$(grep -c 'POST /v1/apps/releases/ ' "$work/log")" == 1 ]]
+[[ "$(grep -c 'POST /v1/apps/releases/upload/' "$work/log")" == 2 ]]
+grep -q 'commit' "$work/log"
+run still-missing 19106 missing-persistent ok 1
+[[ "$(grep -c 'POST /v1/apps/releases/ ' "$work/log")" == 1 ]]
+[[ "$(grep -c 'POST /v1/apps/releases/upload/' "$work/log")" == 2 ]]
+! grep -q 'commit' "$work/log"
 echo "all Cafe Bazaar publish tests passed"
