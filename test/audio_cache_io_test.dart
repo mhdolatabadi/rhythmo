@@ -187,6 +187,29 @@ void main() {
     expect(names(), isEmpty);
   });
 
+  test('a truncated transfer reports failure and removes the partial cache',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((request) async {
+      final socket = await request.response.detachSocket(writeHeaders: false);
+      socket.write('HTTP/1.1 200 OK\r\nContent-Length: 100\r\n'
+          'Connection: close\r\n\r\n');
+      socket.add(List.filled(44, 0));
+      await socket.flush();
+      await socket.close();
+    });
+    final source = await FileAudioCache(() async => dir).sourceFor(
+      _track('t1'),
+      Uri.parse('http://127.0.0.1:${server.port}/audio'),
+    ) as FileCachingAudioSource;
+    final response = await source.request();
+    await expectLater(
+        response.stream.drain<void>(), throwsA(isA<AudioTransferException>()));
+    await pumpEventQueue();
+    expect(names(), isEmpty);
+  });
+
   test('a byte-range response streams unchanged without caching a partial file',
       () async {
     final stored = List<int>.generate(100, (i) => i);
