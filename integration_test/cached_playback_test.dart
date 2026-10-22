@@ -19,41 +19,51 @@ import 'package:rhythmo/features/player/data/audio_engine.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  for (final corruptCache in [false, true]) {
-    testWidgets(
-      'recipient plays a shared track with ${corruptCache ? 'corrupt' : 'empty'} cache',
-      (tester) async {
-        await tester.runAsync(() async {
-          final harness = await _Harness.create();
-          try {
-            final playlist = await harness.api.getSharedPlaylist(
-              'recipient',
-              _share,
-            );
-            expect(playlist.isOwner, isFalse);
-            final track = playlist.tracks.first;
-            expect(track.sharedVia, _share);
-            if (corruptCache) {
-              await File('${harness.directory.path}/${cacheFileName(track)}')
-                  .writeAsBytes(Uint8List(track.sizeBytes));
-            }
-            final progressed = harness.engine.position.firstWhere(
-              (position) => position >= const Duration(milliseconds: 200),
-            );
-            await harness.player
-                .play(track)
-                .timeout(const Duration(seconds: 20));
-            await progressed.timeout(const Duration(seconds: 10));
-            expect(harness.player.status, PlayerStatus.playing);
-            expect(harness.streamRequests, 1);
-            expect(harness.mediaRequests, contains('/audio/first.wav'));
-            expect(harness.privateLibraryRequests, 0);
-          } finally {
-            await harness.close();
+  for (final scenario in [
+    'empty cache',
+    'corrupt cache',
+    'expired link',
+    'interrupted download',
+  ]) {
+    testWidgets('recipient plays a shared track with $scenario', (
+      tester,
+    ) async {
+      await tester.runAsync(() async {
+        final harness = await _Harness.create();
+        harness.expireFirstLink = scenario == 'expired link';
+        harness.interruptFirstDownload = scenario == 'interrupted download';
+        try {
+          final playlist = await harness.api.getSharedPlaylist(
+            'recipient',
+            _share,
+          );
+          expect(playlist.isOwner, isFalse);
+          final track = playlist.tracks.first;
+          expect(track.sharedVia, _share);
+          if (scenario == 'corrupt cache') {
+            await File('${harness.directory.path}/${cacheFileName(track)}')
+                .writeAsBytes(Uint8List(track.sizeBytes));
           }
-        });
-      },
-    );
+          final progressed = harness.engine.position.firstWhere(
+            (position) => position >= const Duration(milliseconds: 200),
+          );
+          await harness.player.play(track).timeout(const Duration(seconds: 20));
+          await progressed.timeout(const Duration(seconds: 10));
+          expect(harness.player.status, PlayerStatus.playing);
+          expect(harness.streamRequests, inInclusiveRange(1, 2));
+          if (scenario == 'expired link') {
+            expect(harness.streamRequests, 2);
+          }
+          if (scenario == 'interrupted download') {
+            expect(harness.mediaRequests.length, greaterThanOrEqualTo(2));
+          }
+          expect(harness.mediaRequests, contains('/audio/first.wav'));
+          expect(harness.privateLibraryRequests, 0);
+        } finally {
+          await harness.close();
+        }
+      });
+    });
   }
 
   for (final stop in [false, true]) {
@@ -133,6 +143,8 @@ class _Harness {
   late final ApiClient api;
   late final JustAudioEngine engine;
   late final PlayerController player;
+  var expireFirstLink = false;
+  var interruptFirstDownload = false;
   var streamRequests = 0;
   var privateLibraryRequests = 0;
   final mediaRequests = <String>[];
@@ -141,8 +153,22 @@ class _Harness {
     final path = request.uri.path;
     if (path.startsWith('/audio/')) {
       mediaRequests.add(path);
+      if (path.startsWith('/audio/expired/')) {
+        request.response.statusCode = HttpStatus.forbidden;
+        await request.response.close();
+        return;
+      }
       request.response.headers.contentType = ContentType('audio', 'wav');
       request.response.contentLength = bytes.length;
+      if (interruptFirstDownload) {
+        interruptFirstDownload = false;
+        // Advertise a full WAV then cut the transport after only its header.
+        request.response.add(bytes.sublist(0, 44));
+        await request.response.flush();
+        final socket = await request.response.detachSocket(writeHeaders: false);
+        socket.destroy();
+        return;
+      }
       request.response.add(bytes);
     } else if (request.headers.value('Authorization') != 'Bearer recipient') {
       request.response.statusCode = HttpStatus.unauthorized;
@@ -166,8 +192,9 @@ class _Harness {
         path.endsWith('/stream')) {
       streamRequests++;
       final id = request.uri.pathSegments[5];
+      final prefix = expireFirstLink && streamRequests == 1 ? 'expired/' : '';
       _json(request, {
-        'url': 'http://127.0.0.1:${server.port}/audio/$id.wav',
+        'url': 'http://127.0.0.1:${server.port}/audio/$prefix$id.wav',
         'expiresAt': DateTime.now()
             .add(const Duration(hours: 1))
             .toUtc()
