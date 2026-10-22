@@ -1,4 +1,5 @@
 import 'package:rhythmo/features/journey/application/listening_journey.dart';
+
 import 'dart:async';
 import 'dart:math';
 
@@ -20,7 +21,7 @@ enum PlayerStatus {
   paused,
   buffering,
   completed,
-  error
+  error,
 }
 
 /// "Previous" restarts the current track once it has played this long.
@@ -238,14 +239,16 @@ class PlayerController extends ChangeNotifier {
       }
       if (!_systemSettingsChanged) {
         if (supportsSilenceSkipping) {
-          await (_engine as SilenceSkippingEngine)
-              .setSkipSilence(saved.skipSilence);
+          await (_engine as SilenceSkippingEngine).setSkipSilence(
+            saved.skipSilence,
+          );
         }
         if (!_systemSettingsChanged) {
           _settings = _settings.copyWith(
-              systemControls: saved.systemControls,
-              externalPlayback: saved.externalPlayback,
-              skipSilence: supportsSilenceSkipping && saved.skipSilence);
+            systemControls: saved.systemControls,
+            externalPlayback: saved.externalPlayback,
+            skipSilence: supportsSilenceSkipping && saved.skipSilence,
+          );
         }
       }
       if (!_queueSettingsChanged) {
@@ -513,7 +516,18 @@ class PlayerController extends ChangeNotifier {
       final url =
           track.sourceUri ?? prefetched ?? (await _link(token, track)).url;
       if (request != _request) return;
-      await _engine.load(track, url);
+      try {
+        await _engine.load(track, url);
+      } catch (_) {
+        if (request != _request) return;
+        if (track.isLocal) rethrow;
+        // A link can fail during initial loading too, before the engine
+        // starts playing. Keep the same sharing authorization on retry.
+        _retriedLink = true;
+        final fresh = await _link(token, track);
+        if (request != _request) return;
+        await _engine.load(track, fresh.url);
+      }
       if (request != _request) return;
       _loading = false;
       if (autoplay) _engine.play();
@@ -704,7 +718,9 @@ class PlayerController extends ChangeNotifier {
   /// Release a local file while its tags are rewritten, then reopen it at the
   /// same position. The queue and repeat/shuffle choices stay intact.
   Future<T> whileEditingLocalFile<T>(
-      Track edited, Future<T> Function() edit) async {
+    Track edited,
+    Future<T> Function() edit,
+  ) async {
     final current = _track;
     if (current == null ||
         current.sourceUri == null ||
@@ -773,6 +789,9 @@ class PlayerController extends ChangeNotifier {
   /// Stream URLs expire; when playback fails (typically on a seek after the
   /// URL expired), fetch a fresh one once and resume where it stopped.
   Future<void> _onEngineError(Object error) async {
+    // load() reports failures through its Future as well. The load owner
+    // handles those; a parallel retry would race it and corrupt the status.
+    if (_loading) return;
     if (error is PlaybackBlocked) {
       // Nothing is wrong with the track: the browser wants a tap first.
       _needsTap = true;
@@ -791,6 +810,8 @@ class PlayerController extends ChangeNotifier {
     _retriedLink = true;
     final request = _request;
     final resumeAt = _position;
+    _loading = true;
+    _setStatus(PlayerStatus.loading);
     try {
       final link = await _link(token, track);
       if (request != _request) return;
@@ -798,9 +819,15 @@ class PlayerController extends ChangeNotifier {
       _preloadedId = null;
       _prefetched = null;
       await _engine.load(track, link.url, start: resumeAt);
+      if (request != _request) return;
+      _loading = false;
       _engine.play();
+      _refreshStatus();
     } catch (_) {
-      if (request == _request) _setStatus(PlayerStatus.error);
+      if (request == _request) {
+        _loading = false;
+        _setStatus(PlayerStatus.error);
+      }
     }
   }
 
