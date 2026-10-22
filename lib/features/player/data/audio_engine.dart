@@ -192,6 +192,10 @@ class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
   /// fetching its source when the queue moved on is dropped.
   int _generation = 0;
 
+  // Unlike preload generation, this is invalidated only by load/stop/dispose.
+  // A slow cache lookup must never replace a newer selection or undo stop.
+  int _loadOperation = 0;
+
   _Deck _listen(_Deck deck) {
     final player = deck.player;
     if (supportsSilenceSkipping && _skipSilence) {
@@ -212,9 +216,12 @@ class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
       if (deck == _active) _state.add(_engineState(value));
     });
     player.currentIndexStream.listen((index) => _onIndex(deck, index));
-    player.playbackEventStream.listen((_) {}, onError: (Object error) {
-      if (deck == _active) _errors.add(error);
-    });
+    player.playbackEventStream.listen(
+      (_) {},
+      onError: (Object error) {
+        if (deck == _active) _errors.add(error);
+      },
+    );
     return deck;
   }
 
@@ -249,12 +256,19 @@ class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
       : await _cache.sourceFor(track, url);
 
   @override
-  Future<void> load(Track track, Uri url,
-      {Duration start = Duration.zero}) async {
+  Future<void> load(
+    Track track,
+    Uri url, {
+    Duration start = Duration.zero,
+  }) async {
+    final operation = ++_loadOperation;
     _generation++;
     await _finishCrossfade();
+    if (operation != _loadOperation) return;
     await _clearStandby();
+    if (operation != _loadOperation) return;
     final source = await _source(track, url);
+    if (operation != _loadOperation) return;
     final deck = _active;
     final playlist = ConcatenatingAudioSource(children: [source]);
     deck
@@ -268,7 +282,22 @@ class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
     _seekOp++;
     _transport.jump(1);
     await deck.player.setVolume(_deckVolume(deck));
-    await deck.player.setAudioSource(playlist, initialPosition: start);
+    if (operation != _loadOperation) return;
+    try {
+      await deck.player.setAudioSource(playlist, initialPosition: start);
+    } catch (_) {
+      if (operation != _loadOperation) return;
+      if (track.isLocal) rethrow;
+      // A corrupt cached file (even one with the expected length), or a
+      // failed cache proxy, must not poison every subsequent attempt. Try
+      // the original URL directly once; the controller can refresh it if
+      // that URL has expired. Keep the same requested seek position.
+      final direct = ConcatenatingAudioSource(
+        children: [AudioSource.uri(url, tag: track.id)],
+      );
+      deck.playlist = direct;
+      await deck.player.setAudioSource(direct, initialPosition: start);
+    }
   }
 
   @override
@@ -475,6 +504,7 @@ class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
 
   @override
   Future<void> stop() async {
+    _loadOperation++;
     _generation++;
     _playOp++;
     _seekOp++;
@@ -513,11 +543,15 @@ class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
 
   @override
   Future<void> dispose() async {
+    _loadOperation++;
     _transport.dispose();
     _fade?.cancel();
     _fadeDone?.complete();
     await _active.player.dispose();
     await _standby?.player.dispose();
+    if (_cache is DisposableAudioCache) {
+      await (_cache as DisposableAudioCache).dispose();
+    }
     await Future.wait([
       _position.close(),
       _duration.close(),

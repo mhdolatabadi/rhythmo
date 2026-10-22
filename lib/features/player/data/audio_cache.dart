@@ -23,4 +23,9 @@ abstract interface class AudioCache {
   Future<void> clear({String? keep});
 }
 
+/// Optional lifecycle for caches that own a local streaming server.
+abstract interface class DisposableAudioCache {
+  Future<void> dispose();
+}
+
 AudioCache createAudioCache() => platform.createAudioCache();

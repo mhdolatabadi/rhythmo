@@ -20,6 +20,7 @@ class FakeAudioEngine implements AudioEngine {
   final loads = <(String, Uri, Duration)>[];
   final calls = <String>[];
   Object? loadError;
+  Future<void> Function(Track track)? onLoad;
 
   /// Tracks handed to [preload], by id; null entries are [clearPreload]s.
   final preloads = <String?>[];
@@ -50,6 +51,7 @@ class FakeAudioEngine implements AudioEngine {
   Future<void> load(Track track, Uri url,
       {Duration start = Duration.zero}) async {
     loads.add((track.id, url, start));
+    await onLoad?.call(track);
     if (preloaded != null) preloads.add(null);
     if (loadError != null) throw loadError!;
     stateCtl.add(EngineState.ready);
@@ -235,6 +237,86 @@ void main() {
     api.linkError = null;
     await player.toggle();
     expect(player.status, PlayerStatus.playing);
+  });
+
+  test(
+    'initial shared load failure refreshes its link and plays once',
+    () async {
+      const shared = Track(
+        id: 'shared',
+        title: 'Shared',
+        contentType: 'audio/mpeg',
+        sizeBytes: 1,
+        sharedVia: 'share-token',
+      );
+      engine.onLoad = (_) async {
+        if (engine.loads.length == 1) {
+          final error = Exception('initial load failed');
+          engine.errorCtl.add(error);
+          throw error;
+        }
+      };
+      await player.play(shared);
+      expect(api.calls.where((call) => call.startsWith('shared:')), [
+        'shared:share-token:shared',
+        'shared:share-token:shared',
+      ]);
+      expect(engine.loads, hasLength(2));
+      expect(engine.calls.where((call) => call == 'play'), hasLength(1));
+      expect(player.status, PlayerStatus.playing);
+    },
+  );
+
+  test(
+    'persistent initial load failure retries once then allows manual retry',
+    () async {
+      engine.loadError = Exception('load failed');
+      await player.play(_a);
+      expect(engine.loads, hasLength(2));
+      expect(player.status, PlayerStatus.error);
+      engine.loadError = null;
+      await player.toggle();
+      expect(player.status, PlayerStatus.playing);
+    },
+  );
+
+  test('recovery ignores duplicate engine errors and exits loading', () async {
+    await player.play(_a);
+    final gate = Completer<void>();
+    engine.onLoad = (_) => gate.future;
+    engine.errorCtl.add(Exception('expired'));
+    await pumpEventQueue();
+    expect(player.status, PlayerStatus.loading);
+    engine.errorCtl.add(Exception('duplicate event'));
+    gate.complete();
+    await pumpEventQueue();
+    expect(engine.loads, hasLength(2));
+    expect(player.status, PlayerStatus.playing);
+  });
+
+  test('a recovery finishing after stop cannot restart playback', () async {
+    await player.play(_a);
+    final gate = Completer<void>();
+    engine.onLoad = (_) => gate.future;
+    engine.errorCtl.add(Exception('expired'));
+    await pumpEventQueue();
+    expect(player.status, PlayerStatus.loading);
+    await player.stop();
+    final playCalls = engine.calls.where((call) => call == 'play').length;
+    gate.complete();
+    await pumpEventQueue();
+    expect(player.track, isNull);
+    expect(player.status, PlayerStatus.idle);
+    expect(engine.calls.where((call) => call == 'play'), hasLength(playCalls));
+  });
+
+  test('a failed device load does not request a cloud link', () async {
+    final local = _a.withDeviceCopy(Uri.parse('content://media/audio/1'));
+    engine.loadError = Exception('file missing');
+    await player.play(local);
+    expect(engine.loads, hasLength(1));
+    expect(api.calls, isEmpty);
+    expect(player.status, PlayerStatus.error);
   });
 
   test('an expired URL is replaced once and playback resumes in place',
