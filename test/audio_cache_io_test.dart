@@ -46,9 +46,9 @@ void main() {
         Uri.parse('https://x/nafir-music/k?X-Amz-Signature=abc'));
 
     // ignore: experimental_member_use
-    expect(source, isA<LockCachingAudioSource>());
+    expect(source, isA<FileCachingAudioSource>());
     // ignore: experimental_member_use
-    final file = await (source as LockCachingAudioSource).cacheFile;
+    final file = (source as FileCachingAudioSource).cacheFile;
     expect(file.path, '${dir.path}/t1.r0.m4a');
   });
 
@@ -148,9 +148,9 @@ void main() {
         _track('t1', size: 120, tagRevision: 2), Uri.parse('https://x/'));
 
     // ignore: experimental_member_use
-    expect(source, isA<LockCachingAudioSource>());
+    expect(source, isA<FileCachingAudioSource>());
     // ignore: experimental_member_use
-    final file = await (source as LockCachingAudioSource).cacheFile;
+    final file = (source as FileCachingAudioSource).cacheFile;
     expect(file.path, '${dir.path}/t1.r2.mp3');
     expect(names(), ['other.r0.mp3']);
   });
@@ -163,7 +163,55 @@ void main() {
         await cache.sourceFor(_track('t1', size: 100), Uri.parse('https://x/'));
 
     // ignore: experimental_member_use
-    expect(source, isA<LockCachingAudioSource>());
+    expect(source, isA<FileCachingAudioSource>());
+    expect(names(), isEmpty);
+  });
+
+  test('HTTP errors stay on the request Future without detached failures',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((request) async {
+      request.response.statusCode = HttpStatus.forbidden;
+      await request.response.close();
+    });
+    final source = await FileAudioCache(() async => dir).sourceFor(
+      _track('t1'),
+      Uri.parse('http://127.0.0.1:${server.port}/signed-audio'),
+    ) as FileCachingAudioSource;
+    await expectLater(
+        source.request(),
+        throwsA(isA<AudioTransferException>()
+            .having((error) => error.code, 'code', 'http_403')));
+    await pumpEventQueue();
+    expect(names(), isEmpty);
+  });
+
+  test('a byte-range response streams unchanged without caching a partial file',
+      () async {
+    final stored = List<int>.generate(100, (i) => i);
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((request) async {
+      expect(request.headers.value(HttpHeaders.rangeHeader), 'bytes=10-19');
+      request.response
+        ..statusCode = HttpStatus.partialContent
+        ..headers.set(HttpHeaders.contentRangeHeader, 'bytes 10-19/100')
+        ..headers.contentType = ContentType('audio', 'mpeg')
+        ..contentLength = 10
+        ..add(stored.sublist(10, 20));
+      await request.response.close();
+    });
+    final source = await FileAudioCache(() async => dir).sourceFor(
+      _track('t1'),
+      Uri.parse('http://127.0.0.1:${server.port}/audio'),
+    ) as FileCachingAudioSource;
+    final response = await source.request(10, 20);
+    expect(response.offset, 10);
+    expect(response.sourceLength, 100);
+    expect(response.contentLength, 10);
+    expect(await response.stream.expand((chunk) => chunk).toList(),
+        stored.sublist(10, 20));
     expect(names(), isEmpty);
   });
 
@@ -185,10 +233,9 @@ void main() {
     final track = _track('t1', size: stored.length);
 
     // ignore: experimental_member_use
-    final source = await cache.sourceFor(track, url) as LockCachingAudioSource;
+    final source = await cache.sourceFor(track, url) as FileCachingAudioSource;
     final response = await source.request();
     final played = await response.stream.expand((chunk) => chunk).toList();
-    await source.downloadProgressStream.firstWhere((progress) => progress >= 1);
     final cached = File('${dir.path}/${cacheFileName(track)}');
     for (var i = 0; i < 50 && !await cached.exists(); i++) {
       await Future<void>.delayed(const Duration(milliseconds: 20));
