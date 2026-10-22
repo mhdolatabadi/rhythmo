@@ -111,14 +111,31 @@ class _AuthGateState extends State<AuthGate> {
   void initState() {
     super.initState();
     widget.controller.addListener(_onAuthChanged);
+    AppConfiguration.linkOpened.addListener(_onLinkOpened);
     widget.controller.restore();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onAuthChanged);
+    AppConfiguration.linkOpened.removeListener(_onLinkOpened);
     super.dispose();
   }
+
+  /// A rhythmo link opened while the app runs: start the home over, so it
+  /// shows the linked playlist or song as on a fresh start.
+  void _onLinkOpened() {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    setState(() {
+      _guestShown = false;
+      _storeSongChecked = false;
+      _linkGeneration++;
+    });
+  }
+
+  /// Bumped per opened link; keys the home so it starts over.
+  int _linkGeneration = 0;
 
   /// Signing in from a guest screen lands in the library, not back on the
   /// sign-in or playlist page it was opened from. Signing out, or deleting
@@ -170,6 +187,7 @@ class _AuthGateState extends State<AuthGate> {
       }
     }
     return PopularPlaylistsScreen(
+      key: ValueKey(_linkGeneration),
       controller: playlists,
       player: widget.player,
       onSignIn: _openSignIn,
@@ -198,6 +216,7 @@ class _AuthGateState extends State<AuthGate> {
               ? SignInScreen(controller: controller)
               : _guestHome(widget.playlists!),
           AuthStatus.signedIn => LibraryScreen(
+              key: ValueKey(_linkGeneration),
               email: controller.user!.email,
               onFeedback: widget.adminApi is FeedbackApi
                   ? () => Navigator.of(context).push(MaterialPageRoute<void>(

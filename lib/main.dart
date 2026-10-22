@@ -47,6 +47,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) await BrowserContextMenu.disableContextMenu();
   final mediaSession = await startMediaSession();
+  await AppConfiguration.loadLaunchLink();
   runApp(ProviderScope(child: RhythmoApp(mediaSession: mediaSession)));
 }
 

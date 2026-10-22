@@ -29,6 +29,9 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // The site whose links open in the app (Android App Links).
+        manifestPlaceholders["appLinkHost"] =
+            (project.findProperty("appLinkHost") as String?) ?: "rhythmo.ir"
     }
 
     signingConfigs {

@@ -47,8 +47,29 @@ class MainActivity : AudioServiceActivity() {
     /// Waiting for the user to confirm deleting a file another app made.
     private var pendingDelete: ((Boolean) -> Unit)? = null
 
+    /// rhythmo links (App Links) the app is opened with.
+    private val linksChannelName = "ir.mhdolatabadi.nafir/links"
+    private var linksChannel: MethodChannel? = null
+
+    /// The link that started the app, handed to Dart once.
+    private var initialLink: String? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        initialLink = linkOf(intent)
+        linksChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            linksChannelName,
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method == "initialLink") {
+                    result.success(initialLink)
+                    initialLink = null
+                } else {
+                    result.notImplemented()
+                }
+            }
+        }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelName,
@@ -557,6 +578,16 @@ class MainActivity : AudioServiceActivity() {
     }
 
     @Deprecated("Needed for MediaStore delete confirmation on API 29+.")
+    // A link opened while the app is already running (launchMode singleTop).
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        linkOf(intent)?.let { linksChannel?.invokeMethod("link", it) }
+    }
+
+    private fun linkOf(intent: Intent?): String? =
+        if (intent?.action == Intent.ACTION_VIEW) intent.dataString else null
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == metadataWriteRequest) {

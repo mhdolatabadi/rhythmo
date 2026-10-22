@@ -103,6 +103,9 @@ services:
       PRIVACY_CONTACT_EMAIL: ${PRIVACY_CONTACT_EMAIL:-}
       # Where the front page sends visitors to install the Android app (optional).
       ANDROID_APP_URL: ${ANDROID_APP_URL:-}
+      # SHA-256 fingerprints of the Android signing certificate, comma-separated.
+      # Served in /.well-known/assetlinks.json so rhythmo links open in the app.
+      ANDROID_CERT_SHA256: ${ANDROID_CERT_SHA256:-}
       # Search console ownership tokens for the front page (optional).
       GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
       BING_SITE_VERIFICATION: ${BING_SITE_VERIFICATION:-}
