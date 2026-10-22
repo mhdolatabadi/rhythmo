@@ -165,8 +165,7 @@ class FileCachingAudioSource extends StreamAudioSource {
       {required this.cacheFile,
       required this.expectedBytes,
       required this.contentType,
-      required String tag})
-      : super(tag: tag);
+      required super.tag});
 
   final Uri uri;
   final File cacheFile;
@@ -248,7 +247,7 @@ class FileCachingAudioSource extends StreamAudioSource {
               await writer.writeFrom(chunk);
             }
           } on FileSystemException {
-            await _close(writer);
+            if (writer != null) await _close(writer);
             writer = null;
           }
         }
