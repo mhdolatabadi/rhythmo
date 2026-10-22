@@ -199,10 +199,12 @@ class _Harness {
       if (interruptFirstDownload) {
         interruptFirstDownload = false;
         // Advertise a full WAV then cut the transport after only its header.
-        request.response.add(bytes.sublist(0, 44));
-        await request.response.flush();
         final socket = await request.response.detachSocket(writeHeaders: false);
-        socket.destroy();
+        socket.write('HTTP/1.1 200 OK\r\nContent-Type: $contentType\r\n'
+            'Content-Length: ${bytes.length}\r\nConnection: close\r\n\r\n');
+        socket.add(bytes.sublist(0, 44));
+        await socket.flush();
+        await socket.close();
         return;
       }
       request.response.add(bytes);
