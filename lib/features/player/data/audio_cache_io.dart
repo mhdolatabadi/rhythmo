@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 import 'dart:io';
 
 import 'package:just_audio/just_audio.dart';
@@ -30,17 +32,18 @@ String cacheFileName(Track track) {
 /// Caches played tracks in the app's temporary directory, which the OS may
 /// also clear. Files are named by [cacheFileName]. When the cache would
 /// exceed [maxBytes], the least recently played tracks are deleted first.
-class FileAudioCache implements AudioCache {
+class FileAudioCache implements AudioCache, DisposableAudioCache {
   FileAudioCache(this._directory, {this.maxBytes = defaultCacheBytes});
 
   final Future<Directory> Function() _directory;
   final int maxBytes;
+  Future<_CacheProxy>? _proxy;
 
   @override
   Future<AudioSource> sourceFor(Track track, Uri url) async {
     try {
       return await _cachedSourceFor(track, url);
-    } on FileSystemException {
+    } on IOException {
       // Cache storage is optional. A full/unavailable temporary directory
       // must not prevent streaming an otherwise accessible cloud file.
       return AudioSource.uri(url, tag: track.id);
@@ -64,11 +67,22 @@ class FileAudioCache implements AudioCache {
       await _delete(file);
     }
     await evict(directory, incomingBytes: track.sizeBytes, keep: track.id);
-    return FileCachingAudioSource(url,
+    final proxy = await (_proxy ??= _CacheProxy.start());
+    return proxy.source(url,
         cacheFile: file,
         expectedBytes: track.sizeBytes,
         contentType: track.contentType,
         tag: track.id);
+  }
+
+  @override
+  Future<void> dispose() async {
+    final pending = _proxy;
+    _proxy = null;
+    if (pending == null) return;
+    try {
+      await (await pending).close();
+    } on IOException {/* Optional cache. */}
   }
 
   /// Deletes the cached copies of earlier revisions of track [id], and their
@@ -159,28 +173,27 @@ class FileAudioCache implements AudioCache {
 /// A single observed HTTP stream, optionally copied to disk. Unlike the
 /// library's experimental LockCachingAudioSource, every network Future and
 /// stream error is owned by request()/its returned stream, never detached.
-// ignore: experimental_member_use
-class FileCachingAudioSource extends StreamAudioSource {
-  FileCachingAudioSource(this.uri,
+class FileCachingAudioSource extends ProgressiveAudioSource {
+  FileCachingAudioSource(this.origin, super.uri,
       {required this.cacheFile,
       required this.expectedBytes,
       required this.contentType,
       required super.tag});
 
-  final Uri uri;
+  final Uri origin;
   final File cacheFile;
   final int expectedBytes;
   final String contentType;
   static int _partSequence = 0;
   static const _timeout = Duration(seconds: 15);
 
-  @override
   // ignore: experimental_member_use
   Future<StreamAudioResponse> request([int? start, int? end]) async {
     final client = HttpClient()..connectionTimeout = _timeout;
     client.autoUncompress = false;
     try {
-      final request = await client.getUrl(uri).timeout(_timeout);
+      final request = await client.getUrl(origin).timeout(_timeout);
+      request.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
       if (start != null || end != null) {
         request.headers.set(HttpHeaders.rangeHeader,
             'bytes=${start ?? 0}-${end == null ? '' : end - 1}');
@@ -281,6 +294,99 @@ class FileCachingAudioSource extends StreamAudioSource {
     try {
       await file.close();
     } on FileSystemException {/* Optional cache. */}
+  }
+}
+
+/// Owns the loopback HTTP boundary too: just_audio's experimental proxy can
+/// leak detached response-close errors when a transfer is truncated.
+class _CacheProxy {
+  _CacheProxy(this.server) {
+    server.listen((request) {
+      unawaited(_handle(request));
+    });
+  }
+
+  static Future<_CacheProxy> start() async =>
+      _CacheProxy(await HttpServer.bind(InternetAddress.loopbackIPv4, 0));
+
+  final HttpServer server;
+  final _sources = <String, FileCachingAudioSource>{};
+  final _paths = <String, String>{};
+  final _random = Random.secure();
+
+  FileCachingAudioSource source(Uri origin,
+      {required File cacheFile,
+      required int expectedBytes,
+      required String contentType,
+      required String tag}) {
+    final path = _paths.putIfAbsent(cacheFile.path, () {
+      final token = base64UrlEncode(List<int>.generate(18, (_) => _random.nextInt(256)));
+      return '/$token';
+    });
+    final source = FileCachingAudioSource(
+        origin, Uri.parse('http://127.0.0.1:${server.port}$path'),
+        cacheFile: cacheFile,
+        expectedBytes: expectedBytes,
+        contentType: contentType,
+        tag: tag);
+    _sources[path] = source;
+    return source;
+  }
+
+  Future<void> _handle(HttpRequest request) async {
+    // Observe both the body-copy Future and the separate response.done Future.
+    // A native player cancelling a request is normal, not a global Dart error.
+    unawaited(request.response.done
+        .then<void>((_) {}, onError: (Object error, StackTrace stack) {}));
+    try {
+      final source = _sources[request.uri.path];
+      if (source == null || request.method != 'GET') {
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+        return;
+      }
+      int? start, end;
+      final header = request.headers.value(HttpHeaders.rangeHeader);
+      if (header != null) {
+        final match = RegExp(r'^bytes=(\d+)-(\d*)$').firstMatch(header);
+        if (match == null) {
+          request.response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
+          await request.response.close();
+          return;
+        }
+        start = int.parse(match[1]!);
+        end = match[2]!.isEmpty ? null : int.parse(match[2]!) + 1;
+      }
+      final response = await source.request(start, end);
+      request.response.headers.contentType =
+          ContentType.parse(response.contentType);
+      request.response.contentLength = response.contentLength ?? -1;
+      if (response.rangeRequestsSupported) {
+        request.response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
+      }
+      if (response.offset != null && response.contentLength != null) {
+        request.response.statusCode = HttpStatus.partialContent;
+        request.response.headers.set(HttpHeaders.contentRangeHeader,
+            'bytes ${response.offset}-${response.offset! + response.contentLength! - 1}/${response.sourceLength ?? '*'}');
+      }
+      await request.response.addStream(response.stream);
+      await request.response.close();
+    } catch (_) {
+      // Headers may already be sent. Either return a gateway failure or close
+      // the incomplete body, so the decoder reports an ordinary load error.
+      try {
+        request.response.statusCode = HttpStatus.badGateway;
+      } catch (_) {}
+      try {
+        await request.response.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> close() async {
+    await server.close(force: true);
+    _sources.clear();
+    _paths.clear();
   }
 }
 
