@@ -294,6 +294,31 @@ void main() {
     expect(player.status, PlayerStatus.playing);
   });
 
+  test('a recovery finishing after stop cannot restart playback', () async {
+    await player.play(_a);
+    final gate = Completer<void>();
+    engine.onLoad = (_) => gate.future;
+    engine.errorCtl.add(Exception('expired'));
+    await pumpEventQueue();
+    expect(player.status, PlayerStatus.loading);
+    await player.stop();
+    final playCalls = engine.calls.where((call) => call == 'play').length;
+    gate.complete();
+    await pumpEventQueue();
+    expect(player.track, isNull);
+    expect(player.status, PlayerStatus.idle);
+    expect(engine.calls.where((call) => call == 'play'), hasLength(playCalls));
+  });
+
+  test('a failed device load does not request a cloud link', () async {
+    final local = _a.withDeviceCopy(Uri.parse('content://media/audio/1'));
+    engine.loadError = Exception('file missing');
+    await player.play(local);
+    expect(engine.loads, hasLength(1));
+    expect(api.calls, isEmpty);
+    expect(player.status, PlayerStatus.error);
+  });
+
   test('an expired URL is replaced once and playback resumes in place',
       () async {
     await player.play(_a);
