@@ -8,6 +8,15 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 MAX_BYTES = 200 * 1024 * 1024
 MAX_SECONDS = 2 * 60 * 60
+BUNDLED_MODELS = '/opt/whisper'
+
+
+def model_source(name, bundled=BUNDLED_MODELS):
+    """The model baked into the image when it matches, so the server needs no download."""
+    path = os.path.join(bundled, name)
+    if os.path.isfile(os.path.join(path, 'model.bin')):
+        return path
+    return name
 
 
 def transcript(segments):
@@ -98,7 +107,7 @@ if __name__ == '__main__':
     secret = os.environ['TRANSCRIPTION_TOKEN']
     if len(secret) < 32:
         raise ValueError('TRANSCRIPTION_TOKEN must contain at least 32 characters')
-    model = WhisperModel(os.getenv('TRANSCRIPTION_MODEL', 'small'),
+    model = WhisperModel(model_source(os.getenv('TRANSCRIPTION_MODEL', 'small')),
                          device='cpu', compute_type='int8',
                          cpu_threads=int(os.getenv('TRANSCRIPTION_THREADS', '2')),
                          download_root='/models')

@@ -1,10 +1,11 @@
 import unittest
 from types import SimpleNamespace
-from service import transcript, make_handler
+from service import transcript, make_handler, model_source
 from http.client import HTTPConnection
 from http.server import HTTPServer
 from threading import Thread
 import os
+import tempfile
 
 class TranscriptTest(unittest.TestCase):
     def test_persian_timing_and_multiline_cleanup(self):
@@ -17,6 +18,15 @@ class TranscriptTest(unittest.TestCase):
         for segments in ([], [SimpleNamespace(start=0, text='ا' * 40000)]):
             with self.assertRaises(ValueError):
                 transcript(segments)
+
+class ModelSourceTest(unittest.TestCase):
+    def test_prefers_bundled_model_and_falls_back_to_download(self):
+        with tempfile.TemporaryDirectory() as bundled:
+            os.makedirs(os.path.join(bundled, 'small'))
+            self.assertEqual(model_source('small', bundled), 'small')
+            open(os.path.join(bundled, 'small', 'model.bin'), 'wb').close()
+            self.assertEqual(model_source('small', bundled), os.path.join(bundled, 'small'))
+            self.assertEqual(model_source('medium', bundled), 'medium')
 
 class PrivateServiceTest(unittest.TestCase):
     def test_authentication_temporary_audio_and_health(self):

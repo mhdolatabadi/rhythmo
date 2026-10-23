@@ -15,6 +15,18 @@ if ! grep -qE '^NAFIR_DOMAIN=' .env; then
   exit 1
 fi
 
+# Turning transcription on needs only TRANSCRIPTION_ENABLED=true: a missing or
+# short token is generated once and kept in .env. The value is never printed.
+if grep -qE '^TRANSCRIPTION_ENABLED=true$' .env; then
+  transcription_token="$(grep -E '^TRANSCRIPTION_TOKEN=' .env | tail -n 1 | cut -d= -f2- || true)"
+  if (( ${#transcription_token} < 32 )); then
+    sed -i '/^TRANSCRIPTION_TOKEN=/d' .env
+    printf 'TRANSCRIPTION_TOKEN=%s\n' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
+    echo "Generated TRANSCRIPTION_TOKEN in deploy/.env."
+  fi
+  unset transcription_token
+fi
+
 git fetch --prune origin main
 git checkout --detach "$revision"
 

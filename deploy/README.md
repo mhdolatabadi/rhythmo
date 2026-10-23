@@ -472,12 +472,15 @@ verified against real Persian recitations; these limits are not performance guar
 For mostly Arabic recordings set `TRANSCRIPTION_LANGUAGE=auto` or `ar`. A larger
 model may need increased memory in `compose.yaml`.
 
-Set a random `TRANSCRIPTION_TOKEN` of at least 32 characters in `deploy/.env`, then
-`TRANSCRIPTION_ENABLED=true`. The normal deployment script enables the optional
-Compose profile, pulls the immutable transcriber image and starts it. No port is
-published; the API streams original audio directly over the internal container
-network using the token. The initial model download needs outbound access; subsequent
-loads reuse `transcription-models`. Recordings are never sent to a third party.
+To turn it on, add `TRANSCRIPTION_ENABLED=true` to `deploy/.env` and run the normal
+deployment workflow. When `TRANSCRIPTION_TOKEN` is missing or shorter than 32
+characters, the deployment script generates one into `.env` without printing it. It
+then enables the optional Compose profile, pulls the immutable transcriber image and
+starts it. No port is published; the API streams original audio directly over the
+internal container network using the token. The default `small` model is built into
+the image, so the server needs no access to Hugging Face. Another
+`TRANSCRIPTION_MODEL` is downloaded on first start and reused from
+`transcription-models`. Recordings are never sent to a third party.
 
 One job runs at a time, with at most two active jobs per owner. Limits are 200 MiB
 and 2 hours of decoded audio. Status persists through app closure. Temporary audio
