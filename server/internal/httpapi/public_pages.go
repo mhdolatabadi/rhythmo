@@ -52,6 +52,9 @@ type PublicPages struct {
 	// androidApp is where the Android app is installed from; the front page
 	// offers it only when set.
 	androidApp string
+	// androidCerts are the signing certificate fingerprints
+	// /.well-known/assetlinks.json vouches for.
+	androidCerts []string
 	// contact is the email the privacy page gives for questions and
 	// account deletion; the page leaves it out when it is empty.
 	contact string
@@ -153,6 +156,7 @@ func (p *PublicPages) register(mux *http.ServeMux) {
 		mux.HandleFunc("GET /"+p.indexNowKey+".txt", p.handleIndexNowKey)
 	}
 	mux.HandleFunc("GET /robots.txt", p.handleRobots)
+	mux.HandleFunc("GET /.well-known/assetlinks.json", p.handleAssetLinks)
 	mux.HandleFunc("GET /rhythmo.png", p.handleIcon)
 	// The icon's URL before the rename, still in old shares and caches.
 	mux.HandleFunc("GET /nafir.png", p.handleIcon)
