@@ -1,4 +1,5 @@
 import 'package:rhythmo/features/library/data/track.dart';
+import 'package:rhythmo/features/notifications/data/notifications.dart';
 
 class Playlist {
   const Playlist({
@@ -202,6 +203,7 @@ class SharedPlaylist {
     required this.tracks,
     this.isPublic = false,
     this.likes = const PlaylistLikes(liked: false, likeCount: 0),
+    this.subscription,
   });
 
   factory SharedPlaylist.fromJson(
@@ -213,6 +215,9 @@ class SharedPlaylist {
         isOwner: json['isOwner'] == true,
         isPublic: json['public'] == true,
         likes: PlaylistLikes.fromJson(json),
+        subscription: json.containsKey('subscribed')
+            ? PlaylistSubscription.fromJson(json)
+            : null,
         tracks: [
           for (final track in json['tracks'] as List<dynamic>)
             Track.fromJson(track as Map<String, dynamic>,
@@ -234,6 +239,10 @@ class SharedPlaylist {
   final bool isPublic;
   final PlaylistLikes likes;
 
+  /// Who follows it like a channel; null where the server doesn't offer
+  /// subscriptions.
+  final PlaylistSubscription? subscription;
+
   SharedPlaylist withLikes(PlaylistLikes likes) => SharedPlaylist(
         shareToken: shareToken,
         name: name,
@@ -242,6 +251,19 @@ class SharedPlaylist {
         tracks: tracks,
         isPublic: isPublic,
         likes: likes,
+        subscription: subscription,
+      );
+
+  SharedPlaylist withSubscription(PlaylistSubscription subscription) =>
+      SharedPlaylist(
+        shareToken: shareToken,
+        name: name,
+        owner: owner,
+        isOwner: isOwner,
+        tracks: tracks,
+        isPublic: isPublic,
+        likes: likes,
+        subscription: subscription,
       );
 }
 

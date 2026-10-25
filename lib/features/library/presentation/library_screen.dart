@@ -45,6 +45,8 @@ import 'package:rhythmo/features/upload/application/upload_controller.dart';
 import 'package:rhythmo/features/upload/data/audio_picker.dart';
 import 'package:rhythmo/features/upload/presentation/upload_status_card.dart';
 import 'package:rhythmo/features/store/application/store_controller.dart';
+import 'package:rhythmo/features/notifications/application/notifications_controller.dart';
+import 'package:rhythmo/features/notifications/presentation/notifications_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
@@ -67,6 +69,7 @@ class LibraryScreen extends StatefulWidget {
     this.linkImports,
     this.identify,
     this.store,
+    this.notifications,
     required this.picker,
     required this.player,
     this.recent,
@@ -105,6 +108,9 @@ class LibraryScreen extends StatefulWidget {
 
   /// The public store; null hides it.
   final StoreController? store;
+
+  /// Notices from subscribed public playlists; null hides the bell.
+  final NotificationsController? notifications;
   final AudioPicker picker;
 
   /// The account's recently played tracks; null hides them.
@@ -249,6 +255,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     widget.library.load();
     widget.botLinks?.load();
     widget.recent?.load();
+    widget.notifications?.startPolling();
     _recentSearches.load();
     widget.library.addListener(_onLibraryChanged);
     if (widget.localAudio.supported) widget.localAudio.load();
@@ -285,6 +292,7 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   @override
   void dispose() {
+    widget.notifications?.stopPolling();
     if (widget.recentSearches == null) _recentSearches.dispose();
     _tabs.dispose();
     _lifecycle.dispose();
@@ -520,6 +528,21 @@ class _LibraryScreenState extends State<LibraryScreen>
     if (mounted) playlists.load();
   }
 
+  Future<void> _openNotifications() async {
+    final notifications = widget.notifications;
+    final playlists = widget.playlists;
+    if (notifications == null || playlists == null) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => NotificationsScreen(
+        controller: notifications,
+        playlists: playlists,
+        player: widget.player,
+        onSaved: widget.library.load,
+      ),
+    ));
+    if (mounted) notifications.refreshUnread();
+  }
+
   void _openStore() {
     final store = widget.store;
     if (store == null) return;
@@ -606,6 +629,10 @@ class _LibraryScreenState extends State<LibraryScreen>
     final popular = widget.playlists == null
         ? null
         : PopularPlaylistsButton(onOpen: _openPopular);
+    final bell = widget.notifications == null || widget.playlists == null
+        ? null
+        : NotificationsButton(
+            controller: widget.notifications!, onOpen: _openNotifications);
     final storeButton = widget.store == null
         ? null
         : IconButton(
@@ -615,6 +642,7 @@ class _LibraryScreenState extends State<LibraryScreen>
           );
     if (MediaQuery.sizeOf(context).width >= wideActions) {
       return [
+        if (bell != null) bell,
         if (popular != null) popular,
         if (storeButton != null) storeButton,
         if (identifySong != null) identifySong,
@@ -641,6 +669,7 @@ class _LibraryScreenState extends State<LibraryScreen>
       ];
     }
     return [
+      if (bell != null) bell,
       if (popular != null) popular,
       if (storeButton != null) storeButton,
       if (identifySong != null) identifySong,

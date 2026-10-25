@@ -207,15 +207,19 @@ func (h *PlaylistHandlers) handleUnshare(w http.ResponseWriter, r *http.Request)
 }
 
 type sharedPlaylistResponse struct {
-	Name       string          `json:"name"`
-	Owner      string          `json:"owner"`
-	IsOwner    bool            `json:"isOwner"`
-	Public     bool            `json:"public"`
-	TrackCount int             `json:"trackCount"`
-	LikeCount  int             `json:"likeCount"`
-	Liked      bool            `json:"liked"`
-	Tracks     []trackResponse `json:"tracks"`
-	UpdatedAt  time.Time       `json:"updatedAt"`
+	Name       string `json:"name"`
+	Owner      string `json:"owner"`
+	IsOwner    bool   `json:"isOwner"`
+	Public     bool   `json:"public"`
+	TrackCount int    `json:"trackCount"`
+	LikeCount  int    `json:"likeCount"`
+	Liked      bool   `json:"liked"`
+	// Subscribed and SubscriberCount are left out while subscriptions are
+	// off.
+	Subscribed      *bool           `json:"subscribed,omitempty"`
+	SubscriberCount *int            `json:"subscriberCount,omitempty"`
+	Tracks          []trackResponse `json:"tracks"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
 }
 
 // sharedPlaylist loads the playlist for the {token} link. Malformed,
@@ -264,6 +268,21 @@ func (h *PlaylistHandlers) handleShared(w http.ResponseWriter, r *http.Request) 
 	}
 	for _, track := range shared.Tracks {
 		response.Tracks = append(response.Tracks, toTrackResponse(track))
+	}
+	if h.subscriptions != nil {
+		s, err := h.subscriptions.SubscriptionFor(r.Context(), shared.ID, userID)
+		if err != nil {
+			internalError(w, "load playlist subscription", err)
+			return
+		}
+		response.Subscribed, response.SubscriberCount = &s.Subscribed, &s.Count
+		// Opening the playlist reads its notice, as opening a channel does.
+		if userID != "" && s.Subscribed {
+			if err := h.notifications.MarkRead(r.Context(), userID, nil, *shared.ShareToken); err != nil {
+				internalError(w, "mark playlist notifications read", err)
+				return
+			}
+		}
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, response)

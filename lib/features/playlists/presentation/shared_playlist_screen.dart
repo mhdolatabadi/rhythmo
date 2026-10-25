@@ -10,6 +10,7 @@ import 'package:rhythmo/features/player/presentation/mini_player.dart';
 import 'package:rhythmo/features/likes/presentation/liked_songs_screen.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
+import 'package:rhythmo/features/notifications/data/notifications.dart';
 
 /// A playlist someone shared by link: its tracks can be played, not changed.
 class SharedPlaylistScreen extends StatefulWidget {
@@ -102,6 +103,37 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
     );
   }
 
+  Future<void> _subscribe() async {
+    if (!widget.controller.signedIn) {
+      askToSignIn(context, action: 'عضویت', onSignIn: widget.onSignIn);
+      return;
+    }
+    final current = _playlist?.subscription;
+    if (current == null) return;
+    final result = await widget.controller.setSubscription(
+      widget.shareToken,
+      current,
+      onChange: (subscription) {
+        if (mounted) {
+          setState(() => _playlist = _playlist?.withSubscription(subscription));
+        }
+      },
+    );
+    if (!mounted) return;
+    final now = _playlist?.subscription;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(switch (result) {
+          LikeResult.done => now?.subscribed == true
+              ? 'عضو شدی. هر صوت تازه‌ای که اضافه شود خبرت می‌کنیم.'
+              : 'دیگر از این فهرست پخش اعلانی نمی‌گیری.',
+          LikeResult.gone => 'این فهرست پخش دیگر عمومی نیست.',
+          LikeResult.failed => 'عضویت ثبت نشد. دوباره تلاش کن.',
+        }),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -167,6 +199,9 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
                 onLike: widget.controller.isLiking(widget.shareToken)
                     ? null
                     : _like,
+                onSubscribe: widget.controller.isSubscribing(widget.shareToken)
+                    ? null
+                    : _subscribe,
               ),
             ),
         },
@@ -182,10 +217,14 @@ class _Contents extends StatelessWidget {
     required this.saving,
     this.onSave,
     this.onLike,
+    this.onSubscribe,
     this.onSignIn,
   });
 
   final VoidCallback? onSignIn;
+
+  /// Subscribes or unsubscribes; null while one is on its way.
+  final VoidCallback? onSubscribe;
   final SharedPlaylist playlist;
   final PlayerController player;
   final bool saving;
@@ -250,6 +289,9 @@ class _Contents extends StatelessWidget {
                             '${persianDigits(tracks.length)} آهنگ',
                             if (playlist.isOwner)
                               playlist.isPublic ? 'عمومی' : 'فقط با لینک',
+                            if (playlist.isPublic &&
+                                playlist.subscription != null)
+                              '${persianDigits(playlist.subscription!.subscriberCount)} عضو',
                           ].join(' · '),
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
@@ -270,6 +312,13 @@ class _Contents extends StatelessWidget {
                       onPressed: () => player.playFrom(tracks, 0),
                       icon: const Icon(RhythmoIcons.playFill),
                       label: const Text('پخش همه'),
+                    ),
+                  if (playlist.isPublic &&
+                      !playlist.isOwner &&
+                      playlist.subscription != null)
+                    PlaylistSubscribeButton(
+                      subscription: playlist.subscription!,
+                      onPressed: onSubscribe,
                     ),
                   PlaylistLikeButton(likes: playlist.likes, onPressed: onLike),
                   if (onSave != null && tracks.isNotEmpty)
@@ -405,6 +454,43 @@ class PlaylistLikeButton extends StatelessWidget {
                 ),
               ),
       ),
+    );
+  }
+}
+
+/// Subscribes to a public playlist like joining a channel, so new audio
+/// added to it shows up in the notifications. Subscribed reads as a filled
+/// button with a check, so the state never rests on color alone.
+class PlaylistSubscribeButton extends StatelessWidget {
+  const PlaylistSubscribeButton({
+    super.key,
+    required this.subscription,
+    required this.onPressed,
+  });
+
+  final PlaylistSubscription subscription;
+
+  /// Null while a change is on its way.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final subscribed = subscription.subscribed;
+    return Tooltip(
+      message: subscribed
+          ? 'لغو عضویت و قطع اعلان‌ها'
+          : 'عضویت و اعلان صوت‌های تازه',
+      child: subscribed
+          ? FilledButton.tonalIcon(
+              onPressed: onPressed,
+              icon: const Icon(RhythmoIcons.bellFill),
+              label: const Text('عضو هستی'),
+            )
+          : FilledButton.icon(
+              onPressed: onPressed,
+              icon: const Icon(RhythmoIcons.bell),
+              label: const Text('عضویت'),
+            ),
     );
   }
 }

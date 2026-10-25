@@ -15,6 +15,7 @@ import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/features/upload/data/upload_models.dart';
 import 'package:rhythmo/features/store/data/store_catalog.dart';
 import 'package:rhythmo/features/likes/data/likes.dart';
+import 'package:rhythmo/features/notifications/data/notifications.dart';
 
 class ApiException implements Exception {
   const ApiException(this.message,
@@ -224,6 +225,28 @@ abstract interface class PlaylistsApi {
 /// request to list it publicly waits for an admin (#322).
 typedef PlaylistShare = ({String shareToken, bool isPublic, bool pending});
 
+/// Public playlists as channels: subscribing, and the notices of audio
+/// added to them.
+abstract interface class NotificationsApi {
+  /// Subscribes to a public playlist or unsubscribes; doing it twice is the
+  /// same as once.
+  Future<PlaylistSubscription> setPlaylistSubscription(
+      String token, String shareToken, bool subscribed);
+
+  /// The public playlists this account subscribed to, unread ones first.
+  Future<List<SubscribedPlaylist>> listSubscriptions(String token);
+
+  /// The newest notices and how many are unread.
+  Future<({List<PlaylistNotification> notifications, int unread})>
+      listNotifications(String token);
+
+  Future<int> unreadNotificationCount(String token);
+
+  /// Marks the notices with [ids] read, or all of them when it is empty.
+  Future<void> markNotificationsRead(String token,
+      {List<String> ids = const []});
+}
+
 abstract interface class BotsApi {
   Future<List<MessengerBot>> listBots(String token);
   Future<BotLinkCode> createBotLinkCode(String token);
@@ -341,6 +364,7 @@ class ApiClient
         IdentifyApi,
         StoreApi,
         LikesApi,
+        NotificationsApi,
         AdminApi,
         AdminSongReportsApi,
         FeedbackApi,
@@ -651,6 +675,53 @@ class ApiClient
         '/api/v1/shared-playlists/${Uri.encodeComponent(shareToken)}/like',
         token: token);
     return PlaylistLikes.fromJson(body);
+  }
+
+  @override
+  Future<PlaylistSubscription> setPlaylistSubscription(
+      String token, String shareToken, bool subscribed) async {
+    final body = await _send(
+        subscribed ? 'PUT' : 'DELETE',
+        '/api/v1/shared-playlists/${Uri.encodeComponent(shareToken)}'
+        '/subscription',
+        token: token);
+    return PlaylistSubscription.fromJson(body);
+  }
+
+  @override
+  Future<List<SubscribedPlaylist>> listSubscriptions(String token) async {
+    final body = await _send('GET', '/api/v1/subscriptions', token: token);
+    return [
+      for (final json in body['playlists'] as List<dynamic>)
+        SubscribedPlaylist.fromJson(json as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<({List<PlaylistNotification> notifications, int unread})>
+      listNotifications(String token) async {
+    final body = await _send('GET', '/api/v1/notifications', token: token);
+    return (
+      notifications: [
+        for (final json in body['notifications'] as List<dynamic>)
+          PlaylistNotification.fromJson(json as Map<String, dynamic>),
+      ],
+      unread: body['unreadCount'] as int? ?? 0,
+    );
+  }
+
+  @override
+  Future<int> unreadNotificationCount(String token) async {
+    final body =
+        await _send('GET', '/api/v1/notifications/unread-count', token: token);
+    return body['unreadCount'] as int? ?? 0;
+  }
+
+  @override
+  Future<void> markNotificationsRead(String token,
+      {List<String> ids = const []}) async {
+    await _send('POST', '/api/v1/notifications/read',
+        token: token, body: {'ids': ids}, expectBody: false);
   }
 
   @override

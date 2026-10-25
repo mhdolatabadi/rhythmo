@@ -48,6 +48,10 @@ type PlaylistHandlers struct {
 	// publishGate sends public listing by unverified owners to an admin
 	// first (#322); nil lists directly.
 	publishGate *PublishGate
+	// subscriptions and notifications serve public playlists as channels
+	// (#414); nil leaves them out.
+	subscriptions SubscriptionStore
+	notifications NotificationStore
 }
 
 // WithPublishGate makes listing a playlist publicly need an admin's
@@ -78,6 +82,9 @@ func (h *PlaylistHandlers) register(mux *http.ServeMux) {
 	h.registerCollaboration(mux)
 	if h.shared != nil {
 		h.registerSharing(mux)
+		if h.subscriptions != nil {
+			h.registerSubscriptions(mux)
+		}
 	}
 }
 

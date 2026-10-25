@@ -29,6 +29,7 @@ const (
 	botWebhookConcurrency   = 16
 	botSendConcurrency      = 4
 	botHealthLogInterval    = 5 * time.Minute
+	botNotifyInterval       = 30 * time.Second
 	minWebhookSecretLength  = 32
 )
 
@@ -60,6 +61,9 @@ type botDeps struct {
 	tracks      *store.Tracks
 	objects     *storage.Storage
 	policy      bot.UploadPolicy
+	// notifications are pushed to linked chats; webOrigin builds the links.
+	notifications *store.Notifications
+	webOrigin     string
 }
 
 // setupBots starts every messenger bot with a token configured. It returns
@@ -108,6 +112,7 @@ func setupBots(ctx context.Context, deps botDeps) (map[string]http.Handler, *htt
 	webhooks := map[string]http.Handler{}
 	senders := bot.Senders{}
 	var watched []bot.Watched
+	var clients []bot.Provider
 	var listed []httpapi.Bot
 	for _, m := range enabled {
 		env := func(name string) string { return os.Getenv(m.envPrefix + "_" + name) }
@@ -149,6 +154,7 @@ func setupBots(ctx context.Context, deps botDeps) (map[string]http.Handler, *htt
 		go service.Resume(ctx)
 		senders[m.name] = bot.NewSender(client, deps.bots, deps.tracks, deps.objects, linker.SessionTTL(), botSendConcurrency).
 			CountInto(service.Metrics())
+		clients = append(clients, client)
 		watched = append(watched, bot.Watched{
 			Name: m.name, Webhook: client, WebhookURL: webhookURL, Metrics: service.Metrics(),
 		})
@@ -156,6 +162,10 @@ func setupBots(ctx context.Context, deps botDeps) (map[string]http.Handler, *htt
 		slog.Info("bot enabled", "provider", m.name)
 	}
 	go forgetOldUpdates(ctx, deps.bots)
+	if deps.notifications != nil {
+		go bot.NewNotifier(clients, deps.notifications, deps.bots, linker.SessionTTL(), deps.webOrigin).
+			Run(ctx, botNotifyInterval)
+	}
 	monitor := bot.NewMonitor(deps.bots, watched...)
 	go monitor.LogHealth(ctx, botHealthLogInterval)
 	return webhooks, httpapi.NewBotHandlers(linker, senders, deps.tokens, listed, linkRate, sendRate), monitor, nil

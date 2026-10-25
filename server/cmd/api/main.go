@@ -257,14 +257,17 @@ func run() error {
 		Grace: streamURLTTL + time.Minute, MaxOwnerBytes: ownerQuotaBytes,
 	})
 	playlists := store.NewPlaylists(pool)
+	notifications := store.NewNotifications(pool)
 	bots := store.NewBots(pool)
 	webhooks, botHandlers, botMonitor, err := setupBots(ctx, botDeps{
-		tokenSecret: []byte(os.Getenv("AUTH_TOKEN_SECRET")),
-		tokens:      tokens,
-		bots:        bots,
-		users:       users,
-		tracks:      tracks,
-		objects:     objects,
+		tokenSecret:   []byte(os.Getenv("AUTH_TOKEN_SECRET")),
+		tokens:        tokens,
+		bots:          bots,
+		users:         users,
+		tracks:        tracks,
+		objects:       objects,
+		notifications: notifications,
+		webOrigin:     os.Getenv("WEB_ORIGIN"),
 		policy: bot.UploadPolicy{
 			Enabled: uploadsEnabled, MaxFileBytes: maxUploadBytes,
 			MaxOwnerBytes: ownerQuotaBytes, MaxPending: maxPending,
@@ -381,7 +384,7 @@ func run() error {
 			Playlists: httpapi.NewPlaylistHandlers(playlists, tokens).WithSharing(playlists, objects, httpapi.SavePolicy{
 				Objects: objects, MaxOwnerBytes: ownerQuotaBytes, Enabled: uploadsEnabled,
 			}).WithAnonymous(httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
-				WithEmailGate(emailGate).WithPublishGate(publishGate),
+				WithEmailGate(emailGate).WithPublishGate(publishGate).WithSubscriptions(playlists, notifications),
 			History: httpapi.NewHistoryHandlers(store.NewHistory(pool), tokens, historyRate),
 			Public:  publicPages,
 			Bots:    botHandlers.WithEmailGate(emailGate),
