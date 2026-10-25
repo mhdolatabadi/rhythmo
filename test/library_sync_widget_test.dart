@@ -17,13 +17,16 @@ import 'player_controller_test.dart' show FakeAudioEngine;
 import 'upload_controller_test.dart' show FakeTracksApi, FakeUploader;
 import 'widget_test.dart' show FakeAuthApi, FakePicker;
 
-Track _device(int id, String title, {int size = 4, String? fileName}) => Track(
+Track _device(int id, String title,
+        {int size = 4, String? fileName, DateTime? addedAt}) =>
+    Track(
       id: 'device:$id',
       title: title,
       contentType: 'audio/mpeg',
       sizeBytes: size,
       fileName: fileName ?? '$title.mp3',
       sourceUri: Uri.parse('content://media/external/audio/media/$id'),
+      addedAt: addedAt,
     );
 
 Future<void> _pump(
@@ -113,6 +116,58 @@ void main() {
     expect(find.text('حذف از دستگاه'), findsOneWidget);
     expect(find.text('حذف از سرور'), findsNothing);
     expect(find.text('ویرایش اطلاعات آهنگ'), findsOneWidget);
+  });
+
+  testWidgets(
+      'the list sorts server and device tracks together, and new device '
+      'music has its own tab on a narrow screen', (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final now = DateTime.now();
+    DateTime daysAgo(int days) => now.subtract(Duration(days: days));
+    await _pump(
+      tester,
+      tracks: FakeTracksApi([
+        Track(
+            id: 't1',
+            title: 'Server new',
+            contentType: 'audio/mpeg',
+            sizeBytes: 100,
+            addedAt: daysAgo(2)),
+        Track(
+            id: 't2',
+            title: 'Server old',
+            contentType: 'audio/mpeg',
+            sizeBytes: 200,
+            addedAt: daysAgo(90)),
+      ]),
+      device: FakeLocalAudioLibrary(LocalAudioResult(LocalAudioStatus.loaded, [
+        _device(1, 'Phone newest', size: 300, addedAt: daysAgo(1)),
+        _device(2, 'Phone mid', size: 400, addedAt: daysAgo(10)),
+        _device(3, 'Phone old', size: 500, addedAt: daysAgo(60)),
+      ])),
+    );
+
+    double top(String title) => tester.getTopLeft(find.text(title)).dy;
+    final titles = [
+      'Phone newest',
+      'Server new',
+      'Phone mid',
+      'Phone old',
+      'Server old'
+    ];
+    for (var i = 1; i < titles.length; i++) {
+      expect(top(titles[i - 1]), lessThan(top(titles[i])), reason: titles[i]);
+    }
+
+    await tester.tap(find.text('تازه‌های دستگاه'));
+    await tester.pumpAndSettle();
+    expect(find.text('۲ آهنگ'), findsOneWidget);
+    expect(top('Phone newest'), lessThan(top('Phone mid')));
+    expect(find.text('Server new'), findsNothing);
+    expect(find.text('Phone old'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('editing from the menu saves and shows the new title',

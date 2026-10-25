@@ -4,6 +4,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum LibraryTab {
   tracks('آهنگ‌ها'),
+
+  /// Music added to this device lately, newest first; Android only.
+  newOnDevice('تازه‌های دستگاه'),
   playlists('فهرست‌های پخش'),
   albums('آلبوم‌ها'),
   artists('هنرمندان'),

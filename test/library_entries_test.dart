@@ -2,16 +2,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rhythmo/features/library/application/library_entries.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 
-Track cloud(String id, {String? title, String? fileName, int size = 100}) =>
+Track cloud(String id,
+        {String? title, String? fileName, int size = 100, DateTime? at}) =>
     Track(
       id: id,
       title: title ?? id,
       contentType: 'audio/mpeg',
       sizeBytes: size,
       fileName: fileName,
+      addedAt: at,
     );
 
-Track device(int id, {String? title, String? fileName, int size = 100}) =>
+Track device(int id,
+        {String? title, String? fileName, int size = 100, DateTime? at}) =>
     Track(
       id: 'device:$id',
       title: title ?? 'Device $id',
@@ -19,6 +22,7 @@ Track device(int id, {String? title, String? fileName, int size = 100}) =>
       sizeBytes: size,
       fileName: fileName,
       sourceUri: Uri.parse('content://media/external/audio/media/$id'),
+      addedAt: at,
     );
 
 void main() {
@@ -115,5 +119,45 @@ void main() {
     ]) {
       expect(safeFileName(input), want, reason: input);
     }
+  });
+
+  group('recently added to device', () {
+    final now = DateTime(2026, 10, 25);
+    DateTime daysAgo(int days) => now.subtract(Duration(days: days));
+
+    test('lists device files newest first, synced ones included', () {
+      final entries = mergeLibrary(
+        [
+          cloud('server-only', size: 1, at: daysAgo(1)),
+          cloud('synced', title: 'Synced', size: 2, at: daysAgo(40)),
+        ],
+        [
+          device(1, size: 3, at: daysAgo(10)),
+          device(2, title: 'Synced', size: 2, at: daysAgo(3)),
+          device(3, size: 4, at: daysAgo(5)),
+        ],
+      );
+      final recent = recentlyAddedToDevice(entries, now: now);
+      expect(
+          [for (final t in recent) t.id], ['synced', 'device:3', 'device:1']);
+    });
+
+    test('leaves out files older than the window or without a date', () {
+      final entries = mergeLibrary([], [
+        device(1, size: 1, at: daysAgo(31)),
+        device(2, size: 2),
+        device(3, size: 3, at: daysAgo(29)),
+      ]);
+      expect([for (final t in recentlyAddedToDevice(entries, now: now)) t.id],
+          ['device:3']);
+    });
+
+    test('a synced track counts as added when its first copy was', () {
+      final synced = mergeLibrary(
+        [cloud('t1', title: 'Song', at: daysAgo(2))],
+        [device(1, title: 'Song', at: daysAgo(9))],
+      ).single.track;
+      expect(synced.addedAt, daysAgo(9));
+    });
   });
 }

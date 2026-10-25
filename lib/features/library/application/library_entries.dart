@@ -37,7 +37,7 @@ class LibraryEntry {
     final local = this.local;
     if (cloud == null) return local!;
     if (local == null) return cloud;
-    return cloud.withDeviceCopy(local.sourceUri!);
+    return cloud.withDeviceCopy(local.sourceUri!, deviceAddedAt: local.addedAt);
   }
 }
 
@@ -67,6 +67,24 @@ List<LibraryEntry> mergeLibrary(List<Track> cloud, List<Track> local) {
       LibraryEntry(cloud: track, local: localFor[track.id]),
     for (final track in deviceOnly) LibraryEntry(local: track),
   ];
+}
+
+/// The library's files that are on this device, the ones added to it most
+/// recently first, as the list shows them: only those added within [window]
+/// of [now]. Files whose date the device doesn't know are left out.
+List<Track> recentlyAddedToDevice(
+  List<LibraryEntry> entries, {
+  required DateTime now,
+  Duration window = const Duration(days: 30),
+}) {
+  final since = now.subtract(window);
+  final recent = [
+    for (final entry in entries)
+      if (entry.local?.addedAt case final at? when at.isAfter(since))
+        (at, entry.track),
+  ];
+  recent.sort((a, b) => b.$1.compareTo(a.$1));
+  return [for (final (_, track) in recent) track];
 }
 
 bool _sameFile(Track cloud, Track device) {

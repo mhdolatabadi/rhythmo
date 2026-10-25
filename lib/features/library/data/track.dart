@@ -93,6 +93,7 @@ class Track {
     this.version = 1,
     this.embeddedTags = const EmbeddedTags(),
     this.replayGain,
+    this.addedAt,
   });
 
   /// A song in the public store (#243): [id] is the store's own id for it,
@@ -150,6 +151,7 @@ class Track {
         publishReview: json['publishReview'] as String?,
         likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
         liked: json['liked'] == true,
+        addedAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
       );
 
   final String id;
@@ -175,6 +177,10 @@ class Track {
 
   /// Loudness from the file's tags, for normalization; null when unknown.
   final ReplayGain? replayGain;
+
+  /// When it was added: uploaded to the account, or, for a device file,
+  /// added to the device's music. Null when unknown.
+  final DateTime? addedAt;
 
   /// This track with the shared-playlist context of [other] kept, for
   /// replacing a stale copy after the server returns fresh metadata.
@@ -206,6 +212,7 @@ class Track {
         version: version,
         embeddedTags: embeddedTags,
         replayGain: replayGain,
+        addedAt: addedAt ?? other.addedAt,
       );
 
   /// Original filename when the platform exposes it. Local uploads use this
@@ -263,8 +270,9 @@ class Track {
   bool get playsWithoutAccount => isLocal || sharedVia != null || fromStore;
 
   /// This cloud track, played from the identical file at [uri] on this
-  /// device.
-  Track withDeviceCopy(Uri uri) => Track(
+  /// device. It counts as added when the first of the two copies was,
+  /// [deviceAddedAt] being when the device's copy was.
+  Track withDeviceCopy(Uri uri, {DateTime? deviceAddedAt}) => Track(
         id: id,
         title: title,
         artist: artist,
@@ -292,6 +300,11 @@ class Track {
         version: version,
         // The same file, so the same loudness.
         replayGain: replayGain,
+        addedAt: switch ((addedAt, deviceAddedAt)) {
+          (final cloud?, final device?) =>
+            device.isBefore(cloud) ? device : cloud,
+          (final cloud, final device) => cloud ?? device,
+        },
       );
 
   /// The messenger a bot imported this track from, for people; null for

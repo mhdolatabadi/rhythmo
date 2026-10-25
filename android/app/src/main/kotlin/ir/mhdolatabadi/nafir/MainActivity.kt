@@ -665,6 +665,7 @@ class MainActivity : AudioServiceActivity() {
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.MIME_TYPE,
             MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.DATE_ADDED,
         )
         val tracks = mutableListOf<Map<String, Any?>>()
         contentResolver.query(
@@ -681,6 +682,7 @@ class MainActivity : AudioServiceActivity() {
             val albumColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
             val typeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
             val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+            val addedColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
                 tracks += mapOf(
@@ -693,6 +695,8 @@ class MainActivity : AudioServiceActivity() {
                     "contentType" to (cursor.getString(typeColumn) ?: "audio/*"),
                     "sizeBytes" to cursor.getLong(sizeColumn),
                     "fileName" to cursor.getString(nameColumn),
+                    // DATE_ADDED is in seconds.
+                    "addedAtMs" to cursor.getLong(addedColumn) * 1000,
                     "uri" to ContentUris.withAppendedId(
                         MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                         id,
