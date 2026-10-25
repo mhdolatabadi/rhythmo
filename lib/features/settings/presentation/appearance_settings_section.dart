@@ -89,9 +89,13 @@ class ManageTabsScreen extends StatelessWidget {
                     return ListTile(
                         key: ValueKey(tab),
                         title: Text(tab.label),
-                        subtitle: tab == LibraryTab.tracks
-                            ? const Text('همیشه نمایش داده می‌شود')
-                            : null,
+                        subtitle: switch (tab) {
+                          LibraryTab.tracks =>
+                            const Text('همیشه نمایش داده می‌شود'),
+                          LibraryTab.newOnDevice =>
+                            const Text('فقط در اپ اندروید'),
+                          _ => null,
+                        },
                         leading: Checkbox(
                             value: !settings.hidden.contains(tab),
                             onChanged: tab == LibraryTab.tracks

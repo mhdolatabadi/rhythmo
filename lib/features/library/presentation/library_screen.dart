@@ -133,7 +133,8 @@ class _LibraryScreenState extends State<LibraryScreen>
     final visible = settings.order
         .where((tab) =>
             !settings.hidden.contains(tab) &&
-            (tab != LibraryTab.playlists || widget.playlists != null))
+            (tab != LibraryTab.playlists || widget.playlists != null) &&
+            (tab != LibraryTab.newOnDevice || widget.localAudio.supported))
         .toList();
     if (visible.length == _visibleTabs.length &&
         List.generate(visible.length, (i) => visible[i] == _visibleTabs[i])
@@ -800,6 +801,7 @@ class _LibraryScreenState extends State<LibraryScreen>
             player: widget.player,
             onSharedSaved: widget.library.load,
             underHeader: true),
+        LibraryTab.newOnDevice => _newOnDeviceTab(),
         LibraryTab.albums => _groupsTab(albums: true),
         LibraryTab.artists => _groupsTab(albums: false),
         LibraryTab.favorites => ListenableBuilder(
@@ -813,6 +815,53 @@ class _LibraryScreenState extends State<LibraryScreen>
                   : _trackList(tracks);
             }),
       };
+
+  /// The device's music added in the last 30 days, newest first, with the
+  /// library's row actions.
+  Widget _newOnDeviceTab() => ListenableBuilder(
+        listenable: _libraryChanges,
+        builder: (context, _) {
+          final tracks = recentlyAddedToDevice(
+            mergeLibrary(widget.library.tracks, widget.localAudio.tracks),
+            now: DateTime.now(),
+          );
+          if (tracks.isNotEmpty) {
+            return RefreshIndicator(
+              onRefresh: _refreshLibrary,
+              child: _trackList(tracks, filterable: false),
+            );
+          }
+          final status = widget.localAudio.status;
+          final notice = _DeviceNotice.fromStatus(status, true);
+          return RefreshIndicator(
+            onRefresh: _refreshLibrary,
+            child: _TabScrollView(slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 56),
+                  child: status == LocalAudioViewStatus.loading ||
+                          status == LocalAudioViewStatus.idle
+                      ? const Center(child: CircularProgressIndicator())
+                      : Column(
+                          children: [
+                            if (notice != null) ...[
+                              _DeviceStatusBanner(notice: notice),
+                              const SizedBox(height: 16),
+                            ],
+                            const _LibraryState(
+                              icon: RhythmoIcons.deviceMobile,
+                              title: 'آهنگ تازه‌ای روی دستگاه نیست',
+                              message:
+                                  'آهنگ‌هایی که در ۳۰ روز گذشته به حافظهٔ دستگاه اضافه شده‌اند، جدیدترین اول، این‌جا می‌آیند.',
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+            ]),
+          );
+        },
+      );
 
   Widget _groupsTab({required bool albums}) => ListenableBuilder(
         listenable: Listenable.merge([widget.library, widget.localAudio]),
