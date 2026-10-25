@@ -25,6 +25,7 @@ import 'package:rhythmo/features/settings/application/cache_controller.dart';
 import 'package:rhythmo/features/upload/application/upload_controller.dart';
 import 'package:rhythmo/features/upload/data/audio_picker.dart';
 import 'package:rhythmo/features/store/application/store_controller.dart';
+import 'package:rhythmo/features/notifications/application/notifications_controller.dart';
 import 'package:rhythmo/features/store/presentation/store_screen.dart';
 
 /// Restores the saved session once, then shows the library, or for a guest
@@ -45,6 +46,7 @@ class AuthGate extends StatefulWidget {
     this.linkImports,
     this.identify,
     this.store,
+    this.notifications,
     required this.picker,
     required this.player,
   });
@@ -69,6 +71,9 @@ class AuthGate extends StatefulWidget {
 
   /// The public store; null hides it.
   final StoreController? store;
+
+  /// Notices from subscribed public playlists; null hides the bell.
+  final NotificationsController? notifications;
   final AudioPicker picker;
 
   @override
@@ -272,6 +277,7 @@ class _AuthGateState extends State<AuthGate> {
               linkImports: widget.linkImports,
               identify: widget.identify,
               store: widget.store,
+              notifications: widget.notifications,
               picker: widget.picker,
             ),
         };

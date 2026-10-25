@@ -42,6 +42,7 @@ import 'package:rhythmo/features/upload/data/storage_uploader.dart';
 import 'package:rhythmo/features/store/application/store_controller.dart';
 import 'package:rhythmo/features/store/data/store_catalog.dart';
 import 'package:rhythmo/features/likes/data/likes.dart';
+import 'package:rhythmo/features/notifications/application/notifications_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,6 +65,7 @@ class RhythmoApp extends StatefulWidget {
     this.linkImportsApi,
     this.identifyApi,
     this.storeApi,
+    this.notificationsApi,
     this.likesApi,
     this.snippetRecorder,
     this.historyApi,
@@ -92,6 +94,7 @@ class RhythmoApp extends StatefulWidget {
   final LinkImportsApi? linkImportsApi;
   final IdentifyApi? identifyApi;
   final StoreApi? storeApi;
+  final NotificationsApi? notificationsApi;
   final LikesApi? likesApi;
   final SnippetRecorder? snippetRecorder;
   final HistoryApi? historyApi;
@@ -135,8 +138,19 @@ class _RhythmoAppState extends State<RhythmoApp> {
           api: _playlistsApi,
           accountId: () => _auth?.user?.id,
           deviceStore: SecureDevicePlaylistStore(),
+          subscriptions: _notificationsApi,
           token: () => _auth?.token,
           isAdmin: () => _auth?.user?.isAdmin ?? false);
+
+  late final NotificationsApi? _notificationsApi = widget.notificationsApi ??
+      _apiClient ??
+      (_playlistsApi is NotificationsApi
+          ? _playlistsApi as NotificationsApi
+          : null);
+  late final NotificationsController? _notifications = _notificationsApi == null
+      ? null
+      : NotificationsController(
+          api: _notificationsApi, token: () => _auth?.token);
 
   late final BotsApi? _botsApi = widget.botsApi ?? _apiClient;
   late final BotLinkController? _botLinks = _botsApi == null
@@ -355,6 +369,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
                       linkImports: _linkImports,
                       identify: _identify,
                       store: _store,
+                      notifications: _notifications,
                       picker: widget.picker ?? FilePickerAudioPicker(),
                     ),
             ),

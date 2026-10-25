@@ -3,6 +3,7 @@ import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
+import 'package:rhythmo/features/notifications/data/notifications.dart';
 
 enum PlaylistsStatus { loading, loaded, error }
 
@@ -30,8 +31,10 @@ class PlaylistsController extends ChangeNotifier {
       required String? Function() token,
       bool Function()? isAdmin,
       DevicePlaylistStore? deviceStore,
+      NotificationsApi? subscriptions,
       String? Function()? accountId})
       : _api = api,
+        _subscriptions = subscriptions,
         _token = token,
         _isAdmin = isAdmin,
         _deviceStore = deviceStore ?? MemoryDevicePlaylistStore(),
@@ -54,6 +57,7 @@ class PlaylistsController extends ChangeNotifier {
   }
 
   final PlaylistsApi _api;
+  final NotificationsApi? _subscriptions;
   final String? Function() _token;
   final bool Function()? _isAdmin;
 
@@ -67,6 +71,10 @@ class PlaylistsController extends ChangeNotifier {
   /// Public playlists, most liked first, once [loadPopular] has run.
   PlaylistsStatus popularStatus = PlaylistsStatus.loading;
   List<PublicPlaylist> popular = const [];
+
+  /// Share tokens whose subscription is on its way to the server.
+  final Set<String> _subscribing = {};
+  bool isSubscribing(String shareToken) => _subscribing.contains(shareToken);
 
   /// Share tokens whose like is on its way to the server.
   final Set<String> _liking = {};
@@ -168,6 +176,38 @@ class PlaylistsController extends ChangeNotifier {
       return LikeResult.failed;
     } finally {
       _liking.remove(shareToken);
+      notifyListeners();
+    }
+  }
+
+  /// Subscribes to a public playlist, like joining a channel, or
+  /// unsubscribes. [onChange] shows the change at once and goes back if
+  /// the server refuses it. One already on its way is not sent twice.
+  Future<LikeResult> setSubscription(
+      String shareToken, PlaylistSubscription current,
+      {required void Function(PlaylistSubscription subscription)
+          onChange}) async {
+    final token = _token();
+    final api = _subscriptions;
+    if (token == null || api == null || _subscribing.contains(shareToken)) {
+      return LikeResult.failed;
+    }
+    final wanted = current.toggled();
+    _subscribing.add(shareToken);
+    onChange(wanted);
+    notifyListeners();
+    try {
+      onChange(await api.setPlaylistSubscription(
+          token, shareToken, wanted.subscribed));
+      return LikeResult.done;
+    } on ApiException catch (e) {
+      onChange(current);
+      return e.statusCode == 404 ? LikeResult.gone : LikeResult.failed;
+    } catch (_) {
+      onChange(current);
+      return LikeResult.failed;
+    } finally {
+      _subscribing.remove(shareToken);
       notifyListeners();
     }
   }

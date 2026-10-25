@@ -13,6 +13,9 @@ abstract final class RhythmoIcons {
       IconData(0xe5de, fontFamily: 'Phosphor');
   static const IconData arrowsClockwise =
       IconData(0xe094, fontFamily: 'Phosphor');
+  static const IconData bell = IconData(0xe0ce, fontFamily: 'Phosphor');
+  static const IconData bellFill = IconData(0xe0ce, fontFamily: 'PhosphorFill');
+  static const IconData bellSlash = IconData(0xe0d2, fontFamily: 'Phosphor');
   static const IconData caretDown = IconData(0xe136, fontFamily: 'Phosphor');
   static const IconData caretLeft = IconData(0xe138, fontFamily: 'Phosphor');
   static const IconData check = IconData(0xe182, fontFamily: 'Phosphor');
