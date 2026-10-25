@@ -466,7 +466,7 @@ and plain text in PostgreSQL. Machine transcripts may contain mistakes, especial
 with chanting, backing music and crowds. Original audio is never rewritten.
 Generated text is currently available to the owner, not shared playlist visitors.
 
-Provision and measure resources before enabling: the default CPU/int8 `small` model
+Provision and measure resources before enabling: the default CPU/int8 `large-v3-turbo` model
 container is limited to 2 CPUs and 4 GiB RAM. Quality and processing time must be
 verified against real Persian recitations; these limits are not performance guarantees.
 For mostly Arabic recordings set `TRANSCRIPTION_LANGUAGE=auto` or `ar`. A larger
@@ -477,10 +477,10 @@ deployment workflow. When `TRANSCRIPTION_TOKEN` is missing or shorter than 32
 characters, the deployment script generates one into `.env` without printing it. It
 then enables the optional Compose profile, pulls the immutable transcriber image and
 starts it. No port is published; the API streams original audio directly over the
-internal container network using the token. The default `small` model is built into
-the image, so the server needs no access to Hugging Face. Another
-`TRANSCRIPTION_MODEL` is downloaded on first start and reused from
-`transcription-models`. Recordings are never sent to a third party.
+internal container network using the token. The default `large-v3-turbo` model,
+much more accurate in Persian than `small`, is built into the image, so the server
+needs no access to Hugging Face. Another `TRANSCRIPTION_MODEL` is downloaded on
+first start and reused from `transcription-models`. Recordings are never sent to a third party.
 
 One job runs at a time, with at most two active jobs per owner. Limits are 200 MiB
 and 2 hours of decoded audio. Status persists through app closure. Temporary audio

@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 MAX_BYTES = 200 * 1024 * 1024
 MAX_SECONDS = 2 * 60 * 60
 BUNDLED_MODELS = '/opt/whisper'
+DEFAULT_MODEL = 'large-v3-turbo'
 
 
 def model_source(name, bundled=BUNDLED_MODELS):
@@ -107,7 +108,7 @@ if __name__ == '__main__':
     secret = os.environ['TRANSCRIPTION_TOKEN']
     if len(secret) < 32:
         raise ValueError('TRANSCRIPTION_TOKEN must contain at least 32 characters')
-    model = WhisperModel(model_source(os.getenv('TRANSCRIPTION_MODEL', 'small')),
+    model = WhisperModel(model_source(os.getenv('TRANSCRIPTION_MODEL', DEFAULT_MODEL)),
                          device='cpu', compute_type='int8',
                          cpu_threads=int(os.getenv('TRANSCRIPTION_THREADS', '2')),
                          download_root='/models')
