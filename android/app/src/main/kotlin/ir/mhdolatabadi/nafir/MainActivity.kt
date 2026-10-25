@@ -92,6 +92,16 @@ class MainActivity : AudioServiceActivity() {
                     result.success(mapOf("version" to info.versionName, "build_number" to build.toString()))
                 }
                 "queryAudio" -> handleQueryAudio(result)
+                // Only after the music permission: the import offer never
+                // asks for a permission on its own.
+                "queryPlaylists" -> if (hasAudioPermission()) {
+                    Thread {
+                        val playlists = try { queryPlaylists() } catch (_: Exception) { emptyList() }
+                        runOnUiThread { result.success(playlists) }
+                    }.start()
+                } else {
+                    result.success(emptyList<Map<String, Any?>>())
+                }
                 "readArtwork" -> handleReadArtwork(call.argument<String>("uri"), result)
                 "copyAudioToCache" -> handleCopyAudioToCache(
                     call.argument<String>("uri"),
@@ -705,5 +715,54 @@ class MainActivity : AudioServiceActivity() {
             }
         }
         return tracks
+    }
+
+    /// The device's playlists with their tracks in order: what Samsung Music
+    /// and other players keep in MediaStore, and the .m3u files Samsung
+    /// Music exports, which Android indexes there too. Samsung Music's own
+    /// database is private to it.
+    @Suppress("DEPRECATION")
+    private fun queryPlaylists(): List<Map<String, Any?>> {
+        val playlists = mutableListOf<Map<String, Any?>>()
+        // No projection: older versions lack owner_package_name.
+        contentResolver.query(
+            MediaStore.Audio.Playlists.EXTERNAL_CONTENT_URI,
+            null,
+            null,
+            null,
+            "${MediaStore.Audio.Playlists.NAME} COLLATE NOCASE ASC",
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Playlists._ID)
+            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Playlists.NAME)
+            val ownerColumn = cursor.getColumnIndex("owner_package_name")
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(idColumn)
+                val name = cursor.getString(nameColumn)?.trim()
+                if (name.isNullOrEmpty()) continue
+                playlists += mapOf(
+                    "id" to id.toString(),
+                    "name" to name,
+                    "owner" to if (ownerColumn >= 0) cursor.getString(ownerColumn) else null,
+                    "audioIds" to playlistMembers(id),
+                )
+            }
+        }
+        return playlists
+    }
+
+    @Suppress("DEPRECATION")
+    private fun playlistMembers(playlistId: Long): List<String> {
+        val members = mutableListOf<String>()
+        contentResolver.query(
+            MediaStore.Audio.Playlists.Members.getContentUri("external", playlistId),
+            arrayOf(MediaStore.Audio.Playlists.Members.AUDIO_ID),
+            null,
+            null,
+            MediaStore.Audio.Playlists.Members.PLAY_ORDER,
+        )?.use { cursor ->
+            val audioColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Playlists.Members.AUDIO_ID)
+            while (cursor.moveToNext()) members += cursor.getLong(audioColumn).toString()
+        }
+        return members
     }
 }

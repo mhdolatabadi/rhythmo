@@ -42,7 +42,10 @@ class PlaylistsController extends ChangeNotifier {
 
   final DevicePlaylistStore _deviceStore;
   final String? Function() _accountId;
-  String _deviceKey(String id) => '${_accountId() ?? 'default'}:$id';
+
+  /// The signed-in account that device-only records belong to.
+  String get deviceScope => _accountId() ?? 'default';
+  String _deviceKey(String id) => '$deviceScope:$id';
 
   Future<Playlist> _withDeviceTracks(Playlist playlist) async {
     final local = await _deviceStore.read(_deviceKey(playlist.id));
