@@ -293,9 +293,38 @@ func (p *Playlists) ReplaceTracks(ctx context.Context, userID, playlistID string
 				return ErrNotFound
 			}
 		}
-		_, err = tx.Exec(ctx, `UPDATE playlists SET updated_at = now() WHERE id = $1::uuid`, playlistID)
-		return err
+		if _, err := tx.Exec(ctx, `UPDATE playlists SET updated_at = now() WHERE id = $1::uuid`, playlistID); err != nil {
+			return err
+		}
+		var added []string
+		for _, id := range trackIDs {
+			if current[id] == "" {
+				added = append(added, id)
+			}
+		}
+		return notifySubscribers(ctx, tx, playlistID, userID, added)
 	})
+}
+
+// notifySubscribers tells the subscribers of a public playlist, except the
+// person who added them, that tracks were added. A subscriber who has not
+// read the last notice gets it updated instead of a new one.
+func notifySubscribers(ctx context.Context, tx pgx.Tx, playlistID, actorID string, added []string) error {
+	if len(added) == 0 {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `
+		INSERT INTO playlist_notifications (user_id, playlist_id, track_id, track_count)
+		SELECT s.user_id, playlists.id, $3::uuid, $4
+		FROM playlist_subscriptions s JOIN playlists ON playlists.id = s.playlist_id
+		WHERE s.playlist_id = $1::uuid AND s.user_id::text <> $2
+		  AND playlists.is_public AND playlists.share_token IS NOT NULL
+		ON CONFLICT (user_id, playlist_id) WHERE read_at IS NULL DO UPDATE SET
+			track_id = EXCLUDED.track_id,
+			track_count = playlist_notifications.track_count + EXCLUDED.track_count,
+			updated_at = now()
+	`, playlistID, actorID, added[len(added)-1], len(added))
+	return err
 }
 
 func (p *Playlists) Delete(ctx context.Context, ownerID, playlistID string) error {

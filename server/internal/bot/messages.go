@@ -60,3 +60,18 @@ func msgSendFailed(title string) string {
 func msgSendTooLarge(title string, maxMB int64) string {
 	return fmt.Sprintf("«%s» بیشتر از %s مگابایت است و ربات نمی‌تواند آن را بفرستد.", title, display.PersianDigits(maxMB))
 }
+
+// msgPlaylistTracksAdded tells a subscriber what was added to a public
+// playlist; link, when known, opens it.
+func msgPlaylistTracksAdded(playlist string, count int, latest *string, link string) string {
+	var text string
+	if count == 1 && latest != nil {
+		text = fmt.Sprintf("«%s» به پلی‌لیست «%s» اضافه شد.", *latest, playlist)
+	} else {
+		text = fmt.Sprintf("%s صوت تازه به پلی‌لیست «%s» اضافه شد.", display.PersianDigits(int64(count)), playlist)
+	}
+	if link != "" {
+		text += "\n\n" + link
+	}
+	return text
+}
