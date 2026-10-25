@@ -79,6 +79,7 @@ class PlaylistsView extends StatefulWidget {
     required this.libraryTracks,
     required this.player,
     this.onSharedSaved,
+    this.onImportFromDevice,
     this.underHeader = false,
   });
 
@@ -88,6 +89,10 @@ class PlaylistsView extends StatefulWidget {
 
   /// Called after a shared playlist was saved, bringing its tracks along.
   final VoidCallback? onSharedSaved;
+
+  /// Brings in playlists from Samsung Music and other players on the
+  /// device; null hides the action.
+  final VoidCallback? onImportFromDevice;
 
   /// Whether this is a tab under a pinned NestedScrollView header, whose
   /// overlap the list has to make room for.
@@ -204,6 +209,15 @@ class _PlaylistsViewState extends State<PlaylistsView> {
             constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             icon: const Icon(RhythmoIcons.link),
           ),
+          if (widget.onImportFromDevice case final onImport?) ...[
+            const SizedBox(width: RhythmoSpace.sm),
+            IconButton(
+              tooltip: 'وارد کردن از گوشی',
+              onPressed: onImport,
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              icon: const Icon(RhythmoIcons.deviceMobile),
+            ),
+          ],
         ],
       ),
     );

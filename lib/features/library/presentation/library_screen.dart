@@ -32,6 +32,9 @@ import 'package:rhythmo/features/player/presentation/mini_player.dart';
 import 'package:rhythmo/features/playlists/presentation/shared_playlist_screen.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
+import 'package:rhythmo/features/playlists/application/device_playlist_import.dart';
+import 'package:rhythmo/features/playlists/data/device_playlist_source.dart';
+import 'package:rhythmo/features/playlists/presentation/device_playlist_import_dialog.dart';
 import 'package:rhythmo/features/playlists/presentation/playlists_screen.dart';
 import 'package:rhythmo/features/playlists/presentation/popular_playlists_screen.dart';
 import 'package:rhythmo/features/store/presentation/store_screen.dart';
@@ -71,6 +74,8 @@ class LibraryScreen extends StatefulWidget {
     required this.player,
     this.recent,
     this.recentSearches,
+    this.devicePlaylists,
+    this.devicePlaylistOffers,
   });
 
   final VoidCallback? onFeedback;
@@ -113,6 +118,13 @@ class LibraryScreen extends StatefulWidget {
   /// The searches run from the search screen; kept in secure storage
   /// when null.
   final RecentSearchesController? recentSearches;
+
+  /// Samsung Music's and other players' playlists on the device; the
+  /// device's own by default.
+  final DevicePlaylistSource? devicePlaylists;
+
+  /// Which of them were offered already; kept in secure storage when null.
+  final DevicePlaylistOfferStore? devicePlaylistOffers;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -235,6 +247,66 @@ class _LibraryScreenState extends State<LibraryScreen>
   late final AppLifecycleListener _lifecycle;
   late final StreamSubscription<SyncOperation> _syncFinished;
 
+  late final DevicePlaylistImporter? _devicePlaylists = widget.playlists == null
+      ? null
+      : DevicePlaylistImporter(
+          source: widget.devicePlaylists ?? createDevicePlaylistSource(),
+          playlists: widget.playlists!,
+          offers: widget.devicePlaylistOffers,
+        );
+
+  /// Whether this start already looked for device playlists to offer.
+  bool _devicePlaylistsChecked = false;
+
+  /// Once the device's music is readable, offers its playlists that were
+  /// not offered before.
+  Future<void> _onLocalAudioChanged() async {
+    final importer = _devicePlaylists;
+    if (_devicePlaylistsChecked ||
+        importer == null ||
+        !importer.supported ||
+        widget.localAudio.status != LocalAudioViewStatus.loaded) {
+      return;
+    }
+    _devicePlaylistsChecked = true;
+    final found = await importer.toOffer();
+    if (found.isEmpty || !mounted) return;
+    await _offerDevicePlaylists(importer, found);
+  }
+
+  Future<void> _offerDevicePlaylists(
+      DevicePlaylistImporter importer, List<DevicePlaylist> found) async {
+    await offerDevicePlaylistImport(
+      context,
+      importer: importer,
+      found: found,
+      existingNames: {
+        for (final playlist in widget.playlists!.playlists)
+          playlist.name.trim(),
+      },
+      cloud: () => widget.library.tracks,
+      device: () => widget.localAudio.tracks,
+    );
+  }
+
+  /// «وارد کردن از گوشی» in the playlists tab: every device playlist, even
+  /// those offered before.
+  Future<void> _importDevicePlaylists() async {
+    final importer = _devicePlaylists;
+    if (importer == null) return;
+    if (widget.localAudio.status != LocalAudioViewStatus.loaded) {
+      // Asks for the music permission first, as the library does.
+      await widget.localAudio.load();
+    }
+    final found = await importer.available();
+    if (!mounted) return;
+    if (found.isEmpty) {
+      await showNoDevicePlaylists(context);
+      return;
+    }
+    await _offerDevicePlaylists(importer, found);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -251,6 +323,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     widget.recent?.load();
     _recentSearches.load();
     widget.library.addListener(_onLibraryChanged);
+    widget.localAudio.addListener(_onLocalAudioChanged);
     if (widget.localAudio.supported) widget.localAudio.load();
     // Opened from a shared playlist link: show it once signed in.
     final shareToken = AppConfiguration.takeInitialShareToken();
@@ -291,6 +364,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     widget.uploads.removeListener(_onUploadChanged);
     _syncFinished.cancel();
     widget.library.removeListener(_onLibraryChanged);
+    widget.localAudio.removeListener(_onLocalAudioChanged);
     super.dispose();
   }
 
@@ -503,7 +577,8 @@ class _LibraryScreenState extends State<LibraryScreen>
                       controller: playlists,
                       libraryTracks: _unifiedTracks(),
                       player: widget.player,
-                      onSharedSaved: widget.library.load)),
+                      onSharedSaved: widget.library.load,
+                      onImportFromDevice: _importFromDeviceAction)),
             )));
   }
 
@@ -582,6 +657,9 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   /// Each file once: the account's tracks, matched with their copies on
   /// this device, then the device's other music.
+  VoidCallback? get _importFromDeviceAction =>
+      _devicePlaylists?.supported ?? false ? _importDevicePlaylists : null;
+
   List<Track> _unifiedTracks() => [
         for (final entry
             in mergeLibrary(widget.library.tracks, widget.localAudio.tracks))
@@ -799,6 +877,7 @@ class _LibraryScreenState extends State<LibraryScreen>
             libraryTracks: _unifiedTracks(),
             player: widget.player,
             onSharedSaved: widget.library.load,
+            onImportFromDevice: _importFromDeviceAction,
             underHeader: true),
         LibraryTab.albums => _groupsTab(albums: true),
         LibraryTab.artists => _groupsTab(albums: false),
