@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from service import transcript, make_handler, model_source
+from service import transcript, make_handler, model_source, DEFAULT_MODEL
 from http.client import HTTPConnection
 from http.server import HTTPServer
 from threading import Thread
@@ -27,6 +27,13 @@ class ModelSourceTest(unittest.TestCase):
             open(os.path.join(bundled, 'small', 'model.bin'), 'wb').close()
             self.assertEqual(model_source('small', bundled), os.path.join(bundled, 'small'))
             self.assertEqual(model_source('medium', bundled), 'medium')
+
+    def test_image_bundles_the_default_model(self):
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, 'Dockerfile')) as dockerfile:
+            self.assertIn(f'ARG WHISPER_MODEL={DEFAULT_MODEL}\n', dockerfile.read())
+        with open(os.path.join(here, '..', '..', 'deploy', 'compose.yaml')) as compose:
+            self.assertIn(f'TRANSCRIPTION_MODEL:-{DEFAULT_MODEL}}}', compose.read())
 
 class PrivateServiceTest(unittest.TestCase):
     def test_authentication_temporary_audio_and_health(self):
