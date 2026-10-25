@@ -157,12 +157,20 @@ class _AuthGateState extends State<AuthGate> {
       _forgetAccount();
       Navigator.of(context).popUntil((route) => route.isFirst);
     }
+    // The last session's account track cannot play without that account.
+    final restored = widget.player.track;
+    if (status == AuthStatus.signedOut &&
+        widget.player.restored &&
+        restored != null &&
+        !restored.playsWithoutAccount) {
+      widget.player.stop(forget: true);
+    }
     _status = status;
   }
 
   /// Never show one account's tracks to the next one.
   void _forgetAccount() {
-    widget.player.stop();
+    widget.player.stop(forget: true);
     widget.player.favorites.clearAccount();
     widget.library.clear();
     widget.playlists?.clear();
@@ -253,7 +261,7 @@ class _AuthGateState extends State<AuthGate> {
                   : null,
               onLogout: () {
                 // Never show one account's tracks to the next one.
-                widget.player.stop();
+                widget.player.stop(forget: true);
                 widget.library.clear();
                 widget.playlists?.clear();
                 widget.recent?.clear();

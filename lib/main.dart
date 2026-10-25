@@ -28,6 +28,7 @@ import 'package:rhythmo/features/library/data/local_audio_upload.dart';
 import 'package:rhythmo/features/library/data/track_download.dart';
 import 'package:rhythmo/features/lyrics/application/lyrics_controller.dart';
 import 'package:rhythmo/features/player/application/favorite_tracks.dart';
+import 'package:rhythmo/features/player/application/last_playback.dart';
 import 'package:rhythmo/features/player/application/media_session.dart';
 import 'package:rhythmo/features/player/application/playback_settings.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
@@ -79,6 +80,7 @@ class RhythmoApp extends StatefulWidget {
     this.trackDownloader,
     this.favoritesStore,
     this.playbackSettingsStore,
+    this.lastPlaybackStore,
     this.mediaSession,
     this.appPreferencesStore,
   });
@@ -108,6 +110,7 @@ class RhythmoApp extends StatefulWidget {
   final TrackDownloader? trackDownloader;
   final FavoritesStore? favoritesStore;
   final PlaybackSettingsStore? playbackSettingsStore;
+  final LastPlaybackStore? lastPlaybackStore;
 
   /// System media controls; null in tests and where they are unavailable.
   final RhythmoAudioHandler? mediaSession;
@@ -249,6 +252,9 @@ class _RhythmoAppState extends State<RhythmoApp> {
           )..load(),
           settingsStore:
               widget.playbackSettingsStore ?? SecurePlaybackSettingsStore(),
+          // The mini player shows what was playing when the app was closed.
+          lastPlaybackStore:
+              widget.lastPlaybackStore ?? SecureLastPlaybackStore(),
           // A real listen goes into the recently played history.
           journey: _journey,
           onListened: (track) => _recent?.record(track),
@@ -291,6 +297,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
     _preferences.load();
     final player = _player;
     if (player != null) {
+      player.restoreLastPlayback();
       widget.mediaSession?.attach(
         player,
         artworkFor: (track) async {
