@@ -2,6 +2,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/features/library/data/track.dart';
+import 'package:rhythmo/features/player/application/audio_interruptions.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/data/notification_artwork.dart';
 
@@ -12,9 +13,12 @@ const untitledTrack = 'آهنگ بی‌نام';
 /// buttons and, on the web, the browser's MediaSession) to [PlayerController].
 class RhythmoAudioHandler extends BaseAudioHandler with SeekHandler {
   /// [artwork] is used only when the file has no readable cover.
-  RhythmoAudioHandler({this.artwork});
+  RhythmoAudioHandler({this.artwork, this.interruptions});
 
   final Uri? artwork;
+
+  /// Pauses for calls and resumes after them.
+  final AudioInterruptions? interruptions;
   Future<Uri?> Function(Track)? _artworkFor;
   PlayerController? _player;
   Object? _mediaKey;
@@ -27,6 +31,7 @@ class RhythmoAudioHandler extends BaseAudioHandler with SeekHandler {
     _player?.removeListener(_sync);
     _player = player;
     player.addListener(_sync);
+    interruptions?.attach(player);
     _sync();
   }
 
@@ -209,9 +214,16 @@ Future<RhythmoAudioHandler?> startMediaSession() async {
     final session = await AudioSession.instance;
     // Music: pause for calls and other apps' audio, duck for notifications.
     await session.configure(const AudioSessionConfiguration.music());
+    final interruptions = AudioInterruptions(
+      events: session.interruptionEventStream,
+      inCall: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? _androidInCall
+          : null,
+    );
     final artwork = await resolveNotificationArtwork();
     return activeMediaSession = await AudioService.init(
-      builder: () => RhythmoAudioHandler(artwork: artwork),
+      builder: () =>
+          RhythmoAudioHandler(artwork: artwork, interruptions: interruptions),
       config: const AudioServiceConfig(
         androidNotificationChannelId: 'ir.mhdolatabadi.nafir.playback',
         androidNotificationChannelName: 'پخش موسیقی',
@@ -223,4 +235,12 @@ Future<RhythmoAudioHandler?> startMediaSession() async {
     debugPrint('Media session unavailable: $error');
     return null;
   }
+}
+
+/// Whether a phone or VoIP call is ringing or under way.
+Future<bool> _androidInCall() async {
+  final mode = await AndroidAudioManager().getMode();
+  return mode == AndroidAudioHardwareMode.ringtone ||
+      mode == AndroidAudioHardwareMode.inCall ||
+      mode == AndroidAudioHardwareMode.inCommunication;
 }
