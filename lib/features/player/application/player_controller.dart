@@ -9,6 +9,7 @@ import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/lyrics/application/lyrics_controller.dart';
 import 'package:rhythmo/features/player/application/favorite_tracks.dart';
+import 'package:rhythmo/features/player/application/last_playback.dart';
 import 'package:rhythmo/features/player/application/playback_metrics.dart';
 import 'package:rhythmo/features/player/application/play_queue.dart';
 import 'package:rhythmo/features/player/application/playback_settings.dart';
@@ -55,6 +56,7 @@ class PlayerController extends ChangeNotifier {
     Random? random,
     FavoriteTracks? favorites,
     PlaybackSettingsStore? settingsStore,
+    LastPlaybackStore? lastPlaybackStore,
     DateTime Function()? now,
     this.onListened,
     this.journey,
@@ -64,6 +66,7 @@ class PlayerController extends ChangeNotifier {
         _token = token,
         _random = random ?? Random(),
         _settingsStore = settingsStore ?? MemoryPlaybackSettingsStore(),
+        _lastPlaybackStore = lastPlaybackStore ?? MemoryLastPlaybackStore(),
         _now = now ?? DateTime.now,
         favorites = favorites ?? FavoriteTracks() {
     _subscriptions = [
@@ -72,6 +75,7 @@ class PlayerController extends ChangeNotifier {
         _position = value;
         _maybePreload();
         _maybeFadeAtTrackEnd();
+        _rememberProgress();
         notifyListeners();
       }),
       engine.duration.listen((value) {
@@ -98,6 +102,7 @@ class PlayerController extends ChangeNotifier {
   final String? Function() _token;
   final Random _random;
   final PlaybackSettingsStore _settingsStore;
+  final LastPlaybackStore _lastPlaybackStore;
   final DateTime Function() _now;
   late final List<StreamSubscription<Object?>> _subscriptions;
 
@@ -145,12 +150,21 @@ class PlayerController extends ChangeNotifier {
   String? _preloadedId;
   ({String id, Uri url, DateTime? expiresAt})? _prefetched;
 
+  /// The track shown is the one from the last session, not loaded yet:
+  /// playing it continues from [position].
+  bool _restored = false;
+  DateTime? _lastRemembered;
+  Future<void> _remembering = Future.value();
+
   DateTime? _sleepAt;
   bool _sleepAtTrackEnd = false;
   Timer? _sleepTick;
   Timer? _fadeTimer;
 
   Track? get track => _track;
+
+  /// Whether [track] is the last session's, waiting to be continued.
+  bool get restored => _restored;
   bool get shuffle => _shuffle;
   QueueRepeat get repeat => _repeat;
   PlayerStatus get status => _status;
@@ -434,7 +448,10 @@ class PlayerController extends ChangeNotifier {
   /// is already the current one. Shuffle and repeat settings carry over.
   Future<void> playFrom(List<Track> tracks, int index) async {
     final track = tracks[index];
-    if (_track?.id == track.id && _status != PlayerStatus.error) {
+    final continuing = _restored && _track?.id == track.id;
+    if (_track?.id == track.id &&
+        _status != PlayerStatus.error &&
+        !continuing) {
       return toggle();
     }
     final queued = _queueTracks(tracks);
@@ -444,7 +461,8 @@ class PlayerController extends ChangeNotifier {
     _queue = PlayQueue(queued, start: start, random: _random)
       ..repeat = _repeat
       ..shuffled = _shuffle;
-    await _start(_queue!.current);
+    // Picking the last session's track again continues where it stopped.
+    await _start(_queue!.current, start: continuing ? _position : null);
   }
 
   /// Starts with a randomized first track and keeps the full source shuffled.
@@ -477,6 +495,7 @@ class PlayerController extends ChangeNotifier {
     _shuffle = !_shuffle;
     _queue?.shuffled = _shuffle;
     notifyListeners();
+    _remember();
     unawaited(_replanPreload());
   }
 
@@ -486,25 +505,31 @@ class PlayerController extends ChangeNotifier {
         QueueRepeat.values[(_repeat.index + 1) % QueueRepeat.values.length];
     _queue?.repeat = _repeat;
     notifyListeners();
+    _remember();
     unawaited(_replanPreload());
   }
 
   /// Loads [track] and plays it, or leaves it paused when [autoplay] is false.
-  Future<void> _start(Track track, {bool autoplay = true}) async {
+  /// [start] is where in the track to begin, its start when null.
+  Future<void> _start(Track track,
+      {bool autoplay = true, Duration? start}) async {
     final token = _token();
     if (token == null && !track.playsWithoutAccount) return;
     final request = ++_request;
     final prefetched = _freshPrefetch(track.id);
     _preloadedId = null;
     _prefetched = null;
+    final duration = _restored && _track?.id == track.id ? _duration : null;
+    _restored = false;
     _track = track;
-    _position = Duration.zero;
-    _duration = null;
+    _position = start ?? Duration.zero;
+    _duration = duration;
     _retriedLink = false;
     _listened = false;
     _heard = Duration.zero;
     _advancing = false;
     _loading = true;
+    _remember();
     if (_fadeTimer != null && _sleepAtTrackEnd) {
       // A new track restarts the wait for a track's end at full volume.
       _fadeTimer!.cancel();
@@ -518,7 +543,7 @@ class PlayerController extends ChangeNotifier {
           track.sourceUri ?? prefetched ?? (await _link(token, track)).url;
       if (request != _request) return;
       try {
-        await _engine.load(track, url);
+        await _engine.load(track, url, start: start ?? Duration.zero);
       } catch (_) {
         if (request != _request) return;
         if (track.isLocal) rethrow;
@@ -527,7 +552,7 @@ class PlayerController extends ChangeNotifier {
         _retriedLink = true;
         final fresh = await _link(token, track);
         if (request != _request) return;
-        await _engine.load(track, fresh.url);
+        await _engine.load(track, fresh.url, start: start ?? Duration.zero);
       }
       if (request != _request) return;
       _loading = false;
@@ -583,6 +608,7 @@ class PlayerController extends ChangeNotifier {
     _listened = false;
     _heard = Duration.zero;
     _advancing = false;
+    _remember();
     metrics.started(next.id, _now(), preloaded: true);
     _refreshStatus();
   }
@@ -661,7 +687,9 @@ class PlayerController extends ChangeNotifier {
         await pause();
       case PlayerStatus.paused || PlayerStatus.completed || PlayerStatus.error:
         await resume();
-      case PlayerStatus.idle || PlayerStatus.loading:
+      case PlayerStatus.idle:
+        if (_restored) await resume();
+      case PlayerStatus.loading:
         break;
     }
   }
@@ -669,6 +697,7 @@ class PlayerController extends ChangeNotifier {
   Future<void> pause() async {
     if (_status == PlayerStatus.playing || _status == PlayerStatus.buffering) {
       await _engine.pause();
+      _remember();
     }
   }
 
@@ -690,8 +719,17 @@ class PlayerController extends ChangeNotifier {
         _engine.play();
       case PlayerStatus.error:
         if (_track != null) await _start(_track!);
-      case PlayerStatus.idle ||
-            PlayerStatus.loading ||
+      case PlayerStatus.idle:
+        // The last session's track: load it and continue where it stopped.
+        final track = _track;
+        if (!_restored || track == null) return;
+        if (_token() == null && !track.playsWithoutAccount) {
+          // Signed out since: the account's track is gone with it.
+          await stop(forget: true);
+          return;
+        }
+        await _start(track, start: _position);
+      case PlayerStatus.loading ||
             PlayerStatus.playing ||
             PlayerStatus.buffering:
         break;
@@ -701,6 +739,9 @@ class PlayerController extends ChangeNotifier {
   Future<void> seek(Duration position) async {
     _position = position;
     notifyListeners();
+    _remember();
+    // Nothing is loaded yet; playing starts from there.
+    if (_restored) return;
     await _engine.seek(position);
   }
 
@@ -709,10 +750,11 @@ class PlayerController extends ChangeNotifier {
   Future<void> removeTrack(String trackId) async {
     final queue = _queue;
     if (_track?.id == trackId || (queue != null && !queue.remove(trackId))) {
-      await stop();
+      await stop(forget: true);
       return;
     }
     notifyListeners();
+    _remember();
     await _replanPreload();
   }
 
@@ -752,11 +794,21 @@ class PlayerController extends ChangeNotifier {
     final current = _track;
     final playing = current != null && current.id == track.id;
     if (playing) _track = track.keepingContextOf(current);
-    if (queued || playing) notifyListeners();
+    if (queued || playing) {
+      notifyListeners();
+      _remember();
+    }
   }
 
-  /// Stops playback and forgets the track, for example on logout.
-  Future<void> stop() async {
+  /// Stops playback and forgets the track. The next launch still shows it,
+  /// unless [forget] is set, for example on logout.
+  Future<void> stop({bool forget = false}) async {
+    if (forget) {
+      _rememberNow(null);
+    } else {
+      _remember();
+    }
+    _restored = false;
     _request++;
     _clearSleep();
     _preloadedId = null;
@@ -884,6 +936,67 @@ class PlayerController extends ChangeNotifier {
     });
   }
 
+  /// Shows the last session's track again, paused, without loading it, so
+  /// nothing plays or downloads until the listener asks. Ignored once
+  /// something else is playing.
+  Future<void> restoreLastPlayback() async {
+    final LastPlayback? saved;
+    try {
+      saved = await _lastPlaybackStore.read();
+    } catch (error) {
+      debugPrint('Last playback unavailable: $error');
+      return;
+    }
+    if (saved == null || _track != null) return;
+    _shuffle = saved.shuffle;
+    _repeat = saved.repeat;
+    // The saved order is already shuffled; keep it as it was.
+    _queue = PlayQueue([saved.track, ...saved.upcoming], random: _random)
+      ..repeat = _repeat;
+    _track = saved.track;
+    _position = saved.position;
+    _duration = saved.duration;
+    _restored = true;
+    notifyListeners();
+  }
+
+  /// How often the position is saved while a track plays.
+  static const _rememberEvery = Duration(seconds: 10);
+
+  void _rememberProgress() {
+    final last = _lastRemembered;
+    if (_loading || _restored || _track == null) return;
+    if (last != null && _now().difference(last) < _rememberEvery) return;
+    _remember();
+  }
+
+  /// Saves what is playing now, for the next launch.
+  void _remember() {
+    final track = _track;
+    if (track == null) return;
+    if (!LastPlayback.canRestore(track)) return _rememberNow(null);
+    _lastRemembered = _now();
+    _rememberNow(LastPlayback(
+      track: track,
+      upcoming: upcoming.take(lastPlaybackQueueLimit).toList(),
+      position: _position,
+      duration: _duration,
+      shuffle: _shuffle,
+      repeat: _repeat,
+    ));
+  }
+
+  /// Writes one snapshot at a time, so an older one never lands last.
+  void _rememberNow(LastPlayback? playback) {
+    _remembering = _remembering.then((_) async {
+      try {
+        await _lastPlaybackStore.write(playback);
+      } catch (error) {
+        debugPrint('Could not save the last playback: $error');
+      }
+    });
+  }
+
   void _setStatus(PlayerStatus status) {
     if (status == PlayerStatus.playing) _needsTap = false;
     _status = status;
@@ -893,6 +1006,7 @@ class PlayerController extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (!_restored) _remember();
     _request++;
     for (final subscription in _subscriptions) {
       subscription.cancel();
