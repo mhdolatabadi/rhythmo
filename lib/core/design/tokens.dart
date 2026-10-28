@@ -81,7 +81,7 @@ abstract final class RhythmoColors {
 }
 
 /// Spacing scale, in logical pixels. Groups are tight (xs–sm), sections
-/// generous (lg–xxl). Page gutters are [lg] on phones and [xxl] on desktop.
+/// a step apart (md–lg); the app is compact, so xxl and up are rare. Page gutters are [lg] on phones and [xxl] on desktop.
 abstract final class RhythmoSpace {
   static const double xxs = 2;
   static const double xs = 4;
@@ -142,9 +142,6 @@ abstract final class RhythmoMotion {
   /// Artwork breathing, the playing lyric line scrolling into place.
   static const long = Duration(milliseconds: 420);
 
-  /// The ambient light settling in once, as a screen arrives.
-  static const arrival = Duration(milliseconds: 1400);
-
   /// The now-playing backdrop's slow drift, repeated while music plays.
   static const ambient = Duration(seconds: 6);
 
@@ -180,18 +177,18 @@ abstract final class RhythmoType {
           color: color,
         );
     return base.copyWith(
-      displaySmall: style(base.displaySmall, 34, FontWeight.w800, 1.25),
-      headlineMedium: style(base.headlineMedium, 28, FontWeight.w800, 1.3),
-      headlineSmall: style(base.headlineSmall, 24, FontWeight.w800, 1.35),
-      titleLarge: style(base.titleLarge, 20, FontWeight.w800, 1.4),
-      titleMedium: style(base.titleMedium, 16, FontWeight.w700, 1.45),
-      titleSmall: style(base.titleSmall, 14, FontWeight.w700, 1.45),
-      bodyLarge: style(base.bodyLarge, 16, FontWeight.w400, 1.6),
-      bodyMedium: style(base.bodyMedium, 14, FontWeight.w400, 1.6),
-      bodySmall: style(base.bodySmall, 12, FontWeight.w400, 1.55),
-      labelLarge: style(base.labelLarge, 14, FontWeight.w600, 1.4),
-      labelMedium: style(base.labelMedium, 12, FontWeight.w500, 1.4),
-      labelSmall: style(base.labelSmall, 11, FontWeight.w500, 1.4),
+      displaySmall: style(base.displaySmall, 26, FontWeight.w800, 1.3),
+      headlineMedium: style(base.headlineMedium, 22, FontWeight.w800, 1.35),
+      headlineSmall: style(base.headlineSmall, 20, FontWeight.w800, 1.4),
+      titleLarge: style(base.titleLarge, 17, FontWeight.w800, 1.4),
+      titleMedium: style(base.titleMedium, 14, FontWeight.w700, 1.45),
+      titleSmall: style(base.titleSmall, 13, FontWeight.w700, 1.45),
+      bodyLarge: style(base.bodyLarge, 15, FontWeight.w400, 1.6),
+      bodyMedium: style(base.bodyMedium, 13, FontWeight.w400, 1.6),
+      bodySmall: style(base.bodySmall, 11.5, FontWeight.w400, 1.55),
+      labelLarge: style(base.labelLarge, 13, FontWeight.w600, 1.4),
+      labelMedium: style(base.labelMedium, 11.5, FontWeight.w500, 1.4),
+      labelSmall: style(base.labelSmall, 10.5, FontWeight.w500, 1.4),
     );
   }
 }

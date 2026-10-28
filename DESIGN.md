@@ -22,27 +22,27 @@ colors:
 typography:
   display:
     fontFamily: "Vazirmatn"
-    fontSize: "34px"
+    fontSize: "26px"
     fontWeight: 800
-    lineHeight: 1.25
+    lineHeight: 1.3
   headline:
     fontFamily: "Vazirmatn"
-    fontSize: "24px"
+    fontSize: "22px"
     fontWeight: 800
     lineHeight: 1.35
   title:
     fontFamily: "Vazirmatn"
-    fontSize: "20px"
+    fontSize: "17px"
     fontWeight: 800
     lineHeight: 1.4
   body:
     fontFamily: "Vazirmatn"
-    fontSize: "16px"
+    fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.6
   label:
     fontFamily: "Vazirmatn"
-    fontSize: "14px"
+    fontSize: "13px"
     fontWeight: 600
     lineHeight: 1.4
 rounded:
@@ -67,7 +67,7 @@ components:
     backgroundColor: "{colors.ember}"
     textColor: "{colors.on-ember}"
     rounded: "{rounded.md}"
-    padding: "12px 20px"
+    padding: "10px 16px"
     height: "48px"
   button-tonal:
     backgroundColor: "{colors.violet-container}"
@@ -84,7 +84,7 @@ components:
     backgroundColor: "{colors.surface-strong}"
     rounded: "{rounded.sheet}"
   track-row:
-    height: "64px"
+    height: "56px"
     rounded: "{rounded.md}"
 ---
 
@@ -101,13 +101,18 @@ honest (see *Do's and Don'ts*).
 the owner)*
 
 rhythmo is a dark room with music playing. The canvas is near-black
-night, lit by two slow lights: ember red (the music, and anything you can
-press to make it play) and a cool violet (secondary, the library's quiet
-companion). Surfaces are frosted glass: translucent, softly bordered, and
-blurred only where a layer truly floats over content. The interface is an
+night, lit by a still aurora of two lights: ember red from the top corner
+(the music, and anything you can press to make it play) and a cool violet
+from the opposite side (secondary, the library's quiet companion). These
+are the only two brand colours; a screen is never tinted by the playing
+track (a cover without art still gets its own quiet tile colour). Surfaces
+are frosted glass: translucent, softly bordered, and blurred only where a
+layer truly floats over content. The interface is an
 *Operate* surface: scanning a library, finding a song and controlling
-playback outrank decoration. Its personality lives in precise details: the
-breathing artwork, each track's own tint, the ambient light.
+playback outrank decoration, and the layout is compact: small covers, tight
+rows, bold but modest titles. Its personality lives in precise details: the
+still aurora and the small equalizer beside the playing track, the only
+thing that moves on its own.
 
 **Key Characteristics:**
 - Dark first. The dark glass theme is the brand and the default. A light
@@ -139,7 +144,9 @@ A near-black night with one warm and one cool light.
 
 ### Neutral
 - **Night** (#070810): the canvas, from which the ambient gradient
-  (#17101D → #090B14 → night) rises.
+  (#17101D → #090B14 → night) rises. On it sit two blurred glows, ember
+  (26%) at the top end corner and violet (20%) on the start side, fading
+  into night at the bottom (`RhythmoBackdrop`). The aurora never moves.
 - **Surface / Surface Strong / Surface Raised** (#121522, #191D2D,
   #23283A): glass bases, sheets and the highest container.
 - **Text** (#F5F1F7) and **Text Muted** (#D0C8D4): both meet 4.5:1 on every
@@ -165,13 +172,14 @@ digits in the same family. Persian digits come from `persianDigits()`.
 typeface.
 
 ### Hierarchy
-- **Display** (800, 34px, 1.25): rare. The library's large collapsing title.
-- **Headline** (800, 24px, 1.35): the now-playing title, dialog titles.
-- **Title** (800, 20px, 1.4; titleMedium 700, 16px): section and sheet
+- **Display** (800, 26px, 1.3): rare. The library's large collapsing title.
+- **Headline** (800, 22px, 1.35; headlineSmall 20px): the now-playing
+  title, dialog titles. Titles are bold, not big.
+- **Title** (800, 17px, 1.4; titleMedium 700, 14px): section and sheet
   headings, list titles.
-- **Body** (400, 16/14px, 1.6): descriptions and lyrics. Lines stay within
+- **Body** (400, 15/13px, 1.6): descriptions and lyrics. Lines stay within
   65–75 characters (`RhythmoSpace.readingWidth`).
-- **Label** (600, 14px; 500, 12px): buttons, chips, times. Times use
+- **Label** (600, 13px; 500, 11.5px): buttons, chips, times. Times use
   tabular figures.
 
 ### Named Rules
@@ -188,9 +196,11 @@ height; Arabic-script marks must not collide.
   (`RhythmoSpace.pageWidth`). Lists of settings rows are capped at 720px
   (`listWidth`), and reading columns such as now playing and identify at
   520px. Nothing touches the window edges.
-- **Spacing rhythm:** 4/8/12/16/20/24/32/48. Use tight steps (4–8) inside a
-  group and generous ones (16–24) between groups, with more space above a
-  heading than below it.
+- **Spacing rhythm:** 4/8/12/16/20/24/32/48. The app is compact: use tight
+  steps (4–8) inside a group and 12–16 between groups, with more space
+  above a heading than below it. 24 and up are rare.
+- **Density:** list covers are 40px and track rows 56px tall; controls
+  stay compact visually but every touch target is still at least 48px.
 - **Direction:** RTL by default. Time and transport stay left to right, as
   on every player. Each lyric line takes the direction of its own text.
 

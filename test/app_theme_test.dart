@@ -42,7 +42,7 @@ void main() {
         const Color(0xB31B1E2D),
       );
       expect(theme.snackBarTheme.behavior, SnackBarBehavior.floating);
-      expect(theme.searchBarTheme.constraints?.minHeight, 56);
+      expect(theme.searchBarTheme.constraints?.minHeight, 48);
     });
 
     test('separates major surfaces with restrained depth', () {

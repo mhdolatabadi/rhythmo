@@ -10,7 +10,7 @@ class RhythmoArtworkTile extends StatelessWidget {
   const RhythmoArtworkTile({
     super.key,
     required this.seed,
-    this.size = 44,
+    this.size = 40,
     this.icon = RhythmoIcons.musicNote,
     this.active = false,
     this.track,
@@ -58,7 +58,7 @@ class RhythmoArtworkTile extends StatelessWidget {
 
 /// One track in a list: artwork, title, the artist (or where it plays
 /// from) and supporting detail such as the file size, then actions. Long
-/// titles in any script end in an ellipsis; the row is at least 64 px.
+/// titles in any script end in an ellipsis; the row is at least 56 px.
 class RhythmoTrackRow extends StatelessWidget {
   const RhythmoTrackRow({
     super.key,
@@ -90,7 +90,7 @@ class RhythmoTrackRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final line = detail == null ? subtitle : '$subtitle · $detail';
     return ListTile(
-      minTileHeight: 64,
+      minTileHeight: 56,
       contentPadding: const EdgeInsetsDirectional.fromSTEB(
           RhythmoSpace.lg, 0, RhythmoSpace.xs, 0),
       onTap: onTap,
