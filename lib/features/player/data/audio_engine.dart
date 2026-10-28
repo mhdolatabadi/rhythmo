@@ -86,7 +86,8 @@ abstract interface class SilenceSkippingEngine {
 
 /// One just_audio player and the tracks queued in it, by id.
 class _Deck {
-  _Deck() : player = AudioPlayer();
+  // Calls and other apps' audio are handled by `AudioInterruptions`.
+  _Deck() : player = AudioPlayer(handleInterruptions: false);
 
   final AudioPlayer player;
   ConcatenatingAudioSource? playlist;
