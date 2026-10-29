@@ -647,7 +647,8 @@ class _BottomRow extends StatelessWidget {
               label: Text(
                 upcoming == 0
                     ? 'صف پخش'
-                    : 'صف پخش · ${persianDigits(upcoming)}',
+                    // Not «·»: beside Persian digits it reads as a zero.
+                    : 'صف پخش (${persianDigits(upcoming)})',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

@@ -150,7 +150,7 @@ void main() {
       (tester) async {
     await open(tester);
 
-    await tester.tap(find.text('صف پخش · ۲'));
+    await tester.tap(find.text('صف پخش (۲)'));
     await advanceUi(tester);
 
     final sheet = find.byType(QueueSheet);
@@ -273,7 +273,7 @@ void main() {
           screen.contains(rect.topLeft) && rect.right <= screen.right, isTrue,
           reason: '$tooltip is on screen');
     }
-    final queue = tester.getRect(find.text('صف پخش · ۲'));
+    final queue = tester.getRect(find.text('صف پخش (۲)'));
     expect(queue.bottom, lessThanOrEqualTo(640 - 34),
         reason: 'the bottom row clears the gesture bar');
     final title = tester.getRect(find.text(_tracks[0].title));
@@ -281,7 +281,7 @@ void main() {
     expect(title.left, greaterThanOrEqualTo(0));
 
     // The queue sheet also fits, and its last row clears the inset.
-    await tester.tap(find.text('صف پخش · ۲'));
+    await tester.tap(find.text('صف پخش (۲)'));
     await advanceUi(tester);
     expect(tester.takeException(), isNull);
     expect(
