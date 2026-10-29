@@ -131,10 +131,13 @@ thing that moves on its own.
 A near-black night with one warm and one cool light.
 
 ### Primary
-- **Ember** (#FF626A): primary buttons, the playing line in lyrics,
-  sliders, focus rings and the active tab. Text on it is **On-ember**
-  (#250005). The play control is the exception: it is white (Text on
-  night), the brightest thing on the player.
+- **Ember** (#FF626A): the primary button, the add button, the playing
+  line in lyrics, focus rings and the active tab. Text on it is
+  **On-ember** (#250005).
+- **White** (Text on night) marks what is on or playing: every play
+  button (`rhythmoPlayStyle`), the dock's selected item, switches that
+  are on and slider tracks. Text buttons are plain text colour, not
+  ember.
 - **Artwork tints** (`artworkTint`): tiles standing in for missing cover
   art take dark hues between violet and ember only, never green or blue.
 - **Ember Container** (#462026) with **On-ember Container** (#FFDADB): the
@@ -160,9 +163,9 @@ A near-black night with one warm and one cool light.
 
 ### Named Rules
 **The One Light Rule.** A screen has one bright filled control at a time:
-the action that matters most. On the now-playing screen and the mini
-player that is the white play button; elsewhere it is ember. Everything
-else is tonal, outlined or text.
+the action that matters most. Where music plays that is the white play
+button; elsewhere it is ember. Everything else is white-on-state, tonal,
+outlined or text.
 
 **The No-Grey-On-Colour Rule.** Text on a tint or container uses that
 container's own "on" colour, never a generic grey.
@@ -208,13 +211,19 @@ height; Arabic-script marks must not collide.
   stay compact visually but every touch target is still at least 48px.
 - **Direction:** RTL by default. Time and transport stay left to right, as
   on every player. Each lyric line takes the direction of its own text.
-- **The dock** (`RhythmoDock`): the main screens end in the mini player
-  above a pill of destinations (خانه، کتابخانه، پسندیده‌ها، حساب) and a
+- **One shell, signed in or not.** Every screen, sign-in and error
+  screens included, sits on the aurora under the same brand header
+  (`RhythmoBrand`), with forms and welcomes in flat glass cards. The
+  listener's own collection is called «موسیقی من», never «کتابخانه».
+- **The dock** (`RhythmoDock`, built on `RhythmoDockBar`): the main
+  screens end in the mini player above a pill of destinations (خانه،
+  موسیقی من، پسندیده‌ها، حساب) and a
   separate search bubble, capped at 520px and centred on wide windows.
   The selected destination is a white pill with its name; the others show
-  only their icon, each a 48px target. The pills are flat and nearly
-  opaque, not blurred, so the mini player keeps the blur budget. The app
-  opens on the library; خانه greets, offers «ادامه بده», the newest tracks
+  only their icon, each a 48px target. The pills are flat and opaque, not
+  blurred, so the mini player keeps the blur budget and white buttons do
+  not show through. Guests get the same dock with خانه، گنجینه and ورود.
+  The app opens on «موسیقی من»; خانه greets, offers «ادامه بده», the newest tracks
   and what was played lately.
 
 ## Elevation & Depth

@@ -142,8 +142,9 @@ class RhythmoDockBar extends StatelessWidget {
   }
 }
 
-/// A flat, nearly opaque pill: the dock stays calm and unblurred, so the
-/// mini player above it keeps the screen's blur budget.
+/// A flat, opaque pill: the dock stays calm and unblurred, so the mini
+/// player above it keeps the screen's blur budget, and white play buttons
+/// scrolling under it do not show through.
 class _DockPill extends StatelessWidget {
   const _DockPill({required this.child});
 
@@ -155,10 +156,9 @@ class _DockPill extends StatelessWidget {
     return DecoratedBox(
       decoration: ShapeDecoration(
         shape: StadiumBorder(side: BorderSide(color: colors.outlineVariant)),
-        color: (Theme.of(context).brightness == Brightness.dark
-                ? RhythmoColors.surface
-                : colors.surfaceContainerLow)
-            .withValues(alpha: 0.88),
+        color: Theme.of(context).brightness == Brightness.dark
+            ? RhythmoColors.surface
+            : colors.surfaceContainerLow,
       ),
       child: Padding(
         padding: const EdgeInsets.all(RhythmoSpace.xs),

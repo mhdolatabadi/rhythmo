@@ -308,11 +308,25 @@ abstract final class RhythmoTheme {
           borderRadius: BorderRadius.circular(RhythmoRadii.lg),
         ),
       ),
+      // Settings controls are white when on, as the dock's selected item
+      // is, so ember stays the one light on a screen.
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? colors.surface
+              : colors.outline,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? colors.onSurface
+              : colors.surfaceContainerHighest,
+        ),
+      ),
       sliderTheme: base.sliderTheme.copyWith(
-        activeTrackColor: colors.primary,
+        activeTrackColor: colors.onSurface,
         inactiveTrackColor: colors.surfaceContainerHighest,
-        thumbColor: colors.primary,
-        overlayColor: colors.primary.withValues(alpha: 0.12),
+        thumbColor: colors.onSurface,
+        overlayColor: colors.onSurface.withValues(alpha: 0.12),
         trackHeight: 3,
       ),
       scrollbarTheme: ScrollbarThemeData(

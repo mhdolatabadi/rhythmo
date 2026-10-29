@@ -923,7 +923,11 @@ class _LibraryScreenState extends State<LibraryScreen>
       builder: (context, _) {
         final tracks = widget.player.favorites.likedFrom(_unifiedTracks());
         return tracks.isEmpty
-            ? const Center(child: Text('هنوز آهنگی را پسند نکرده‌ای'))
+            ? const RhythmoStateView(
+                icon: RhythmoIcons.heart,
+                title: 'هنوز آهنگی را پسند نکرده‌ای',
+                message: 'با قلب کنار هر آهنگ، اینجا جمعش کن.',
+              )
             : _trackList(tracks);
       });
 

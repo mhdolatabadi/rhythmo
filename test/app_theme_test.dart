@@ -53,6 +53,17 @@ void main() {
       expect(theme.bottomSheetTheme.showDragHandle, isTrue);
     });
 
+    test('switches, sliders and text buttons are white, not ember', () {
+      final colors = theme.colorScheme;
+      const on = {WidgetState.selected};
+      expect(theme.switchTheme.trackColor?.resolve(on), colors.onSurface);
+      expect(theme.switchTheme.thumbColor?.resolve(on), colors.surface);
+      expect(theme.sliderTheme.activeTrackColor, colors.onSurface);
+      expect(theme.sliderTheme.thumbColor, colors.onSurface);
+      expect(theme.textButtonTheme.style?.foregroundColor?.resolve({}),
+          colors.onSurface);
+    });
+
     test('tabs show only the pill, with no rectangular hover box', () {
       final overlay = theme.tabBarTheme.overlayColor!;
       expect(overlay.resolve({WidgetState.hovered}), Colors.transparent);
