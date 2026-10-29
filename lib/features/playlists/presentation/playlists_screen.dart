@@ -7,6 +7,7 @@ import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
+import 'package:rhythmo/features/playlists/presentation/channel_sync_sheet.dart';
 import 'package:rhythmo/features/playlists/presentation/collab_sheet.dart';
 import 'package:rhythmo/features/playlists/presentation/shared_playlist_screen.dart';
 
@@ -613,6 +614,8 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               icon: const Icon(RhythmoIcons.dotsThreeVertical),
               onSelected: (action) => switch (action) {
                 _PlaylistAction.rename => _rename(),
+                _PlaylistAction.syncChannel => showChannelSyncSheet(context,
+                    playlist: current, controller: widget.controller),
                 _PlaylistAction.delete => _delete(),
                 _PlaylistAction.leave => _leave(),
               },
@@ -627,6 +630,14 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       child: _MenuRow(
                         icon: RhythmoIcons.pencilSimple,
                         label: 'ویرایش نام و توضیح',
+                      ),
+                    ),
+                  if (current.canManage && widget.controller.canSyncChannels)
+                    const PopupMenuItem(
+                      value: _PlaylistAction.syncChannel,
+                      child: _MenuRow(
+                        icon: RhythmoIcons.paperPlaneTilt,
+                        label: 'اتصال کانال تلگرام یا بله',
                       ),
                     ),
                   if (current.isOwner)
@@ -695,7 +706,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   }
 }
 
-enum _PlaylistAction { rename, delete, leave }
+enum _PlaylistAction { rename, syncChannel, delete, leave }
 
 class _MenuRow extends StatelessWidget {
   const _MenuRow({required this.icon, required this.label, this.color});

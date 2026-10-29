@@ -267,6 +267,17 @@ abstract interface class BotsApi {
   Future<void> sendTrackToBot(String token, String provider, String trackId);
 }
 
+/// Syncing a Telegram or Bale channel into a playlist (#430): its owner or an
+/// admin gets a code, makes the bot an admin of the channel and posts the
+/// code there.
+abstract interface class BotChannelsApi {
+  Future<BotLinkCode> createChannelCode(String token, String playlistId);
+  Future<List<SyncedChannel>> listSyncedChannels(
+      String token, String playlistId);
+  Future<void> removeSyncedChannel(
+      String token, String playlistId, SyncedChannel channel);
+}
+
 /// Song lyrics, which the server looks up on LRCLIB; the app never calls
 /// LRCLIB itself.
 abstract interface class TranscriptionApi {
@@ -370,6 +381,7 @@ class ApiClient
         HistoryApi,
         PlaylistsApi,
         BotsApi,
+        BotChannelsApi,
         LinkImportsApi,
         LyricsApi,
         TranscriptionApi,
@@ -1098,6 +1110,40 @@ class ApiClient
   Future<BotLinkCode> createBotLinkCode(String token) async {
     final body = await _send('POST', '/api/v1/bots/link-code', token: token);
     return BotLinkCode.fromJson(body);
+  }
+
+  @override
+  Future<BotLinkCode> createChannelCode(String token, String playlistId) async {
+    final body = await _send(
+        'POST',
+        '/api/v1/playlists/${Uri.encodeComponent(playlistId)}'
+            '/bot-channels/code',
+        token: token);
+    return BotLinkCode.fromJson(body);
+  }
+
+  @override
+  Future<List<SyncedChannel>> listSyncedChannels(
+      String token, String playlistId) async {
+    final body = await _send('GET',
+        '/api/v1/playlists/${Uri.encodeComponent(playlistId)}/bot-channels',
+        token: token);
+    return [
+      for (final channel in body['channels'] as List<dynamic>)
+        SyncedChannel.fromJson(channel as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<void> removeSyncedChannel(
+      String token, String playlistId, SyncedChannel channel) async {
+    await _send(
+        'DELETE',
+        '/api/v1/playlists/${Uri.encodeComponent(playlistId)}/bot-channels'
+            '/${Uri.encodeComponent(channel.provider)}'
+            '/${Uri.encodeComponent(channel.chatId)}',
+        token: token,
+        expectBody: false);
   }
 
   @override

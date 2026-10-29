@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/core/api/api_client.dart';
+import 'package:rhythmo/features/bots/data/messenger_bot.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/features/notifications/data/notifications.dart';
@@ -32,9 +33,11 @@ class PlaylistsController extends ChangeNotifier {
       bool Function()? isAdmin,
       DevicePlaylistStore? deviceStore,
       NotificationsApi? subscriptions,
+      BotChannelsApi? channels,
       String? Function()? accountId})
       : _api = api,
         _subscriptions = subscriptions,
+        _channels = channels,
         _token = token,
         _isAdmin = isAdmin,
         _deviceStore = deviceStore ?? MemoryDevicePlaylistStore(),
@@ -61,7 +64,45 @@ class PlaylistsController extends ChangeNotifier {
 
   final PlaylistsApi _api;
   final NotificationsApi? _subscriptions;
+  final BotChannelsApi? _channels;
   final String? Function() _token;
+
+  /// Whether Telegram and Bale channels can be synced into playlists.
+  bool get canSyncChannels => _channels != null;
+
+  /// A code to post in a messenger channel so it syncs into the playlist,
+  /// or null when that failed.
+  Future<BotLinkCode?> createChannelCode(String id) async {
+    final token = _token();
+    final api = _channels;
+    if (token == null || api == null) return null;
+    try {
+      return await api.createChannelCode(token, id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The messenger channels synced into the playlist, or null when they
+  /// couldn't be loaded.
+  Future<List<SyncedChannel>?> syncedChannels(String id) async {
+    final token = _token();
+    final api = _channels;
+    if (token == null || api == null) return null;
+    try {
+      return await api.listSyncedChannels(token, id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Stops syncing a messenger channel into the playlist.
+  Future<bool> removeSyncedChannel(String id, SyncedChannel channel) {
+    final api = _channels;
+    if (api == null) return Future.value(false);
+    return _attempt((token) => api.removeSyncedChannel(token, id, channel));
+  }
+
   final bool Function()? _isAdmin;
 
   /// Whether the signed-in account may take playlists out of the popular
