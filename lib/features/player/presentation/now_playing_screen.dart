@@ -69,8 +69,9 @@ double contrastRatio(Color a, Color b) {
   return (max(la, lb) + 0.05) / (min(la, lb) + 0.05);
 }
 
-/// Full-screen player: artwork, title and like, seek bar, transport
-/// controls and the queue.
+/// Full-screen player over the still aurora: artwork, title and like, the
+/// next track, seek bar, transport controls and tools. Nothing on it moves
+/// by itself.
 class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key, required this.player});
 
@@ -81,7 +82,7 @@ class NowPlayingScreen extends StatefulWidget {
 }
 
 class _NowPlayingScreenState extends State<NowPlayingScreen>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   double? _seekMs;
 
   /// How far the screen has been dragged down to close it.
@@ -90,10 +91,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     vsync: this,
     duration: RhythmoMotion.short,
   )..addListener(() => setState(() => _drag = _settleFrom * _settle.value));
-  late final AnimationController _ambient = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 6),
-  );
   double _settleFrom = 0;
   bool _closing = false;
 
@@ -102,7 +99,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
   @override
   void dispose() {
     _settle.dispose();
-    _ambient.dispose();
     super.dispose();
   }
 
@@ -185,67 +181,31 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           return const SizedBox.shrink();
         }
         final tint = trackTint(track);
-        final moving = _player.status == PlayerStatus.playing &&
-            !MediaQuery.disableAnimationsOf(context);
-        if (moving && !_ambient.isAnimating) {
-          _ambient.repeat();
-        } else if (!moving && _ambient.isAnimating) {
-          _ambient.stop();
-        }
         return Transform.translate(
           offset: Offset(0, _drag),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onVerticalDragUpdate: _onDragUpdate,
             onVerticalDragEnd: _onDragEnd,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Theme.of(context).brightness == Brightness.dark
-                        ? tint
-                        : Theme.of(context).colorScheme.primaryContainer,
-                    Theme.of(context).colorScheme.surface,
-                  ],
-                  stops: const [0, 0.78],
+            child: RhythmoBackdrop(
+              child: Material(
+                type: MaterialType.transparency,
+                child: SafeArea(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints:
+                          const BoxConstraints(maxWidth: nowPlayingMaxWidth),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(RhythmoSpace.lg, 0,
+                            RhythmoSpace.lg, RhythmoSpace.sm),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) =>
+                              _layout(context, constraints, track, tint),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: RepaintBoundary(
-                        child: CustomPaint(
-                          painter: _PlaybackBackdropPainter(
-                            animation: _ambient,
-                            tint: tint,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Material(
-                    type: MaterialType.transparency,
-                    child: SafeArea(
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                              maxWidth: nowPlayingMaxWidth),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
-                            child: LayoutBuilder(
-                              builder: (context, constraints) =>
-                                  _layout(context, constraints, track, tint),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
@@ -260,14 +220,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     Track track,
     Color tint,
   ) {
-    final header = _Header(player: _player, onClose: _close);
+    final header = _Header(
+      player: _player,
+      onClose: _close,
+      onMore: () => _openDetails(track),
+    );
+    final next = _player.upcoming.firstOrNull;
+    final title = _TitleRow(
+      track: track,
+      liked: _player.favorites.contains(track.id),
+      onLike: () => _like(track),
+    );
     final details = <Widget>[
-      _TitleRow(
-        track: track,
-        liked: _player.favorites.contains(track.id),
-        onLike: () => _like(track),
-      ),
-      const SizedBox(height: 12),
+      if (next != null) _UpNext(track: next, onQueue: _openQueue),
+      const SizedBox(height: RhythmoSpace.xs),
       _SeekBar(
         player: _player,
         dragMs: _seekMs,
@@ -277,15 +243,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
           _player.seek(Duration(milliseconds: value.round()));
         },
       ),
-      const SizedBox(height: 8),
       _Transport(player: _player),
-      const SizedBox(height: 12),
+      const SizedBox(height: RhythmoSpace.xs),
       _BottomRow(
         player: _player,
         upcoming: _player.upcoming.length,
         onQueue: _openQueue,
         onLyrics: _player.lyrics == null ? null : _openLyrics,
-        onMore: () => _openDetails(track),
       ),
     ];
 
@@ -293,7 +257,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     // button still dismisses.
     if (constraints.maxHeight < 460) {
       return SingleChildScrollView(
-        child: Column(children: [header, ...details]),
+        child: Column(children: [header, title, ...details]),
       );
     }
     return Column(
@@ -301,85 +265,48 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         header,
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
+            padding: const EdgeInsets.only(
+                top: RhythmoSpace.xs, bottom: RhythmoSpace.md),
             child: LayoutBuilder(
               builder: (context, box) => Center(
                 child: NowPlayingArtwork(
                   track: track,
                   status: _player.status,
                   tint: tint,
-                  size: min(box.maxWidth, box.maxHeight),
+                  // A little narrower than the column, as on the design.
+                  size: min(box.maxWidth * 0.8, box.maxHeight),
                 ),
               ),
             ),
           ),
         ),
+        title,
+        const SizedBox(height: RhythmoSpace.lg),
         ...details,
       ],
     );
   }
 }
 
-/// Soft musical waves behind the player; repainting does not rebuild controls.
-class _PlaybackBackdropPainter extends CustomPainter {
-  _PlaybackBackdropPainter({required this.animation, required this.tint})
-      : super(repaint: animation);
-
-  final Animation<double> animation;
-  final Color tint;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final phase = animation.value * 2 * pi;
-    final glow = Paint()
-      ..color = Color.lerp(tint, RhythmoColors.highlight, 0.35)!
-          .withValues(alpha: 0.09);
-    canvas.drawCircle(
-      Offset(size.width * (0.25 + 0.08 * sin(phase)),
-          size.height * (0.35 + 0.04 * cos(phase))),
-      size.width * 0.52,
-      glow,
-    );
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..color = RhythmoColors.highlight.withValues(alpha: 0.045)
-      ..strokeWidth = 2;
-    for (var band = 0; band < 5; band++) {
-      final path = Path();
-      final baseline = size.height * (0.48 + band * 0.065);
-      for (var step = 0; step <= 80; step++) {
-        final x = size.width * step / 80;
-        final y = baseline +
-            sin(step / 80 * 2 * pi + phase + band * 0.7) * size.height * 0.035;
-        if (step == 0) {
-          path.moveTo(x, y);
-        } else {
-          path.lineTo(x, y);
-        }
-      }
-      canvas.drawPath(path, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _PlaybackBackdropPainter oldDelegate) =>
-      oldDelegate.tint != tint || oldDelegate.animation != animation;
-}
-
 /// Close, the heading with the sleep timer's countdown under it, and the
-/// sleep timer button, which also balances the close button.
+/// track details button, which also balances the close button.
 class _Header extends StatelessWidget {
-  const _Header({required this.player, required this.onClose});
+  const _Header({
+    required this.player,
+    required this.onClose,
+    required this.onMore,
+  });
 
   final PlayerController player;
   final VoidCallback onClose;
+  final VoidCallback onMore;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final sleep = sleepTimerStatus(player);
     return SizedBox(
-      height: 56,
+      height: 52,
       child: Row(
         children: [
           IconButton(
@@ -413,15 +340,18 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          SleepTimerButton(player: player),
+          IconButton(
+            tooltip: 'جزئیات آهنگ',
+            onPressed: onMore,
+            icon: const Icon(RhythmoIcons.dotsThreeVertical),
+          ),
         ],
       ),
     );
   }
 }
 
-/// The large square artwork. It eases back a little while paused, the
-/// artwork motion; with reduced motion it simply changes size.
+/// The large square artwork. It holds still whether playing or paused.
 class NowPlayingArtwork extends StatelessWidget {
   const NowPlayingArtwork({
     super.key,
@@ -439,53 +369,45 @@ class NowPlayingArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final active = status == PlayerStatus.playing ||
-        status == PlayerStatus.buffering ||
-        status == PlayerStatus.loading;
+    final radius = RhythmoRadii.lg;
     final icon = status == PlayerStatus.error
         ? RhythmoIcons.warningCircle
         : track.isLocal
             ? RhythmoIcons.deviceMobile
             : RhythmoIcons.musicNote;
-    return AnimatedScale(
-      scale: active ? 1 : 0.9,
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : RhythmoMotion.long,
-      curve: RhythmoMotion.emphasized,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(size * 0.08),
-          gradient: LinearGradient(
-            begin: Alignment.topRight,
-            end: Alignment.bottomLeft,
-            colors: [
-              Color.lerp(tint, RhythmoColors.highlight, 0.14)!,
-              Theme.of(context).brightness == Brightness.dark
-                  ? Color.lerp(tint, RhythmoColors.background, 0.35)!
-                  : colors.primaryContainer,
-            ],
-          ),
-          border: Border.all(color: RhythmoColors.softBorder),
-          boxShadow: const [
-            BoxShadow(
-              color: RhythmoColors.shadow,
-              offset: Offset(0, 18),
-              blurRadius: 42,
-            ),
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        gradient: LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            Color.lerp(tint, RhythmoColors.highlight, 0.14)!,
+            Theme.of(context).brightness == Brightness.dark
+                ? Color.lerp(tint, RhythmoColors.background, 0.35)!
+                : colors.primaryContainer,
           ],
         ),
-        child: TrackCover(
-            track: track,
-            radius: size * 0.08,
-            child: Icon(
-              icon,
-              size: size * 0.32,
-              color: colors.onSurface.withValues(alpha: 0.72),
-            )),
+        border: Border.all(color: RhythmoColors.softBorder),
+        boxShadow: const [
+          BoxShadow(
+            color: RhythmoColors.shadow,
+            offset: Offset(0, 16),
+            blurRadius: 32,
+            spreadRadius: -12,
+          ),
+        ],
       ),
+      child: TrackCover(
+          track: track,
+          radius: radius,
+          child: Icon(
+            icon,
+            size: size * 0.28,
+            color: colors.onSurface.withValues(alpha: 0.72),
+          )),
     );
   }
 }
@@ -518,12 +440,11 @@ class _TitleRow extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 2),
               Text(
                 trackSubtitle(track),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyLarge?.copyWith(
+                style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -537,7 +458,7 @@ class _TitleRow extends StatelessWidget {
             tooltip: liked ? 'برداشتن از پسندیده‌ها' : 'پسندیدن',
             isSelected: liked,
             onPressed: onLike,
-            iconSize: 28,
+            iconSize: 24,
             color: liked ? theme.colorScheme.primary : null,
             icon: Icon(liked ? RhythmoIcons.heartFill : RhythmoIcons.heart),
           ),
@@ -618,6 +539,9 @@ class _Time extends StatelessWidget {
   }
 }
 
+/// The play button's diameter.
+const _playSize = 64.0;
+
 class _Transport extends StatelessWidget {
   const _Transport({required this.player});
 
@@ -639,18 +563,17 @@ class _Transport extends StatelessWidget {
           ShuffleToggle(player: player),
           IconButton(
             tooltip: 'قبلی',
-            iconSize: 34,
-            constraints: const BoxConstraints.tightFor(width: 56, height: 56),
+            iconSize: 26,
             onPressed: player.previous,
             icon: const Icon(RhythmoIcons.skipBackFill),
           ),
           SizedBox.square(
-            dimension: 76,
+            dimension: _playSize,
             child: busy
                 ? Semantics(
                     label: 'در حال آماده‌سازی پخش',
                     child: Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(16),
                       child: CircularProgressIndicator(
                         strokeWidth: 3,
                         color: colors.primary,
@@ -663,10 +586,13 @@ class _Transport extends StatelessWidget {
                         : playing
                             ? 'توقف'
                             : 'پخش',
-                    iconSize: 38,
+                    iconSize: 28,
+                    // The one bright control: white on the dark aurora.
                     style: IconButton.styleFrom(
                       shape: const CircleBorder(),
-                      fixedSize: const Size.square(76),
+                      fixedSize: const Size.square(_playSize),
+                      backgroundColor: colors.onSurface,
+                      foregroundColor: colors.surface,
                     ),
                     onPressed: player.toggle,
                     icon: Icon(
@@ -680,8 +606,7 @@ class _Transport extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'بعدی',
-            iconSize: 34,
-            constraints: const BoxConstraints.tightFor(width: 56, height: 56),
+            iconSize: 26,
             onPressed: player.next,
             icon: const Icon(RhythmoIcons.skipForwardFill),
           ),
@@ -698,7 +623,6 @@ class _BottomRow extends StatelessWidget {
     required this.upcoming,
     required this.onQueue,
     required this.onLyrics,
-    required this.onMore,
   });
 
   final PlayerController player;
@@ -707,7 +631,6 @@ class _BottomRow extends StatelessWidget {
 
   /// Opens «متن آهنگ»; null hides the button where there is no server.
   final VoidCallback? onLyrics;
-  final VoidCallback onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -724,7 +647,8 @@ class _BottomRow extends StatelessWidget {
               label: Text(
                 upcoming == 0
                     ? 'صف پخش'
-                    : 'صف پخش · ${persianDigits(upcoming)}',
+                    // Not «·»: beside Persian digits it reads as a zero.
+                    : 'صف پخش (${persianDigits(upcoming)})',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -738,10 +662,40 @@ class _BottomRow extends StatelessWidget {
             onPressed: onLyrics,
             icon: const Icon(RhythmoIcons.quotes),
           ),
-        IconButton(
-          tooltip: 'جزئیات آهنگ',
-          onPressed: onMore,
-          icon: const Icon(RhythmoIcons.dotsThreeVertical),
+        SleepTimerButton(player: player),
+      ],
+    );
+  }
+}
+
+/// «بعدی در صف»: the track that plays next, as one compact row. Tapping it
+/// opens the queue.
+class _UpNext extends StatelessWidget {
+  const _UpNext({required this.track, required this.onQueue});
+
+  final Track track;
+  final VoidCallback onQueue;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'بعدی در صف',
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        RhythmoTrackRow(
+          key: const ValueKey('up-next'),
+          track: track,
+          seed: track.id,
+          title: track.title,
+          subtitle: trackSubtitle(track),
+          contentPadding: EdgeInsets.zero,
+          onTap: onQueue,
         ),
       ],
     );
@@ -870,7 +824,7 @@ class QueueSheet extends StatelessWidget {
                           icon: RhythmoIcons.playlist,
                           title: 'آهنگ دیگری در صف نیست.',
                           message:
-                              'آهنگ بعدی را از کتابخانه یا فهرست پخش انتخاب کنید.',
+                              'آهنگ بعدی را از «موسیقی من» یا فهرست پخش انتخاب کنید.',
                         )
                       : ListView.builder(
                           padding: rhythmoListBottomPadding(context),

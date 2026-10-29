@@ -79,7 +79,8 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
       appBar: AppBar(title: const Text('حذف حساب کاربری')),
-      body: Align(
+      body: RhythmoBackdrop(
+          child: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
@@ -241,7 +242,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
             ),
           ),
         ),
-      ),
+      )),
     );
   }
 }

@@ -1,3 +1,5 @@
+import 'package:rhythmo/features/library/presentation/rhythmo_dock.dart';
+import 'package:rhythmo/core/widgets/rhythmo_brand.dart';
 import 'package:rhythmo/core/persian_digits.dart';
 import 'package:flutter/material.dart';
 import 'package:rhythmo/core/design/design.dart';
@@ -185,7 +187,7 @@ class _PopularPlaylistsScreenState extends State<PopularPlaylistsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('پاک کردن فهرست پخش؟'),
         content: Text('«${playlist.name}» برای همیشه پاک می‌شود و لینکش '
-            'دیگر کار نمی‌کند. آهنگ‌هایش در کتابخانهٔ صاحبانشان می‌مانند. '
+            'دیگر کار نمی‌کند. آهنگ‌هایش پیش صاحبانشان می‌مانند. '
             'این کار برگشت‌پذیر نیست.'),
         actions: [
           TextButton(
@@ -208,78 +210,170 @@ class _PopularPlaylistsScreenState extends State<PopularPlaylistsScreen> {
         : 'پاک کردن انجام نشد. دوباره تلاش کن.');
   }
 
+  void _openStore() => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => StoreScreen(
+            controller: widget.store!,
+            player: widget.player,
+            onSignIn: widget.onSignIn,
+            identify: widget.identify,
+          ),
+        ),
+      );
+
+  /// A guest's home: the same shell as the signed-in app, with the brand,
+  /// a welcome that invites signing in, and the dock.
+  bool get _guest => widget.onSignIn != null && !widget.controller.signedIn;
+
+  /// What shows while there are no popular playlists to list.
+  Widget _state(PlaylistsController controller) =>
+      switch (controller.popularStatus) {
+        PlaylistsStatus.loading => const RhythmoStateView.loading(
+            title: 'در حال دریافت فهرست‌های محبوب…'),
+        PlaylistsStatus.error => RhythmoStateView.error(
+            icon: RhythmoIcons.cloudSlash,
+            title: 'فهرست‌های پخش محبوب بارگذاری نشد.',
+            message: 'اتصال را بررسی کن و دوباره تلاش کن.',
+            action: FilledButton.icon(
+              onPressed: controller.loadPopular,
+              icon: const Icon(RhythmoIcons.arrowsClockwise),
+              label: const Text('تلاش دوباره'),
+            ),
+          ),
+        _ => const RhythmoStateView(
+            icon: RhythmoIcons.globe,
+            title: 'هنوز فهرست پخش عمومی‌ای نیست',
+            message: 'وقتی فهرست پخشی را به اشتراک می‌گذاری، «عمومی» '
+                'را انتخاب کن تا اینجا نشان داده شود.',
+          ),
+      };
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
+    final guest = _guest;
     return Scaffold(
       extendBody: true,
-      appBar: AppBar(
-        title: const Text('فهرست‌های پخش محبوب'),
-        actions: [
-          if (widget.store != null)
-            IconButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => StoreScreen(
-                    controller: widget.store!,
-                    player: widget.player,
-                    onSignIn: widget.onSignIn,
-                    identify: widget.identify,
-                  ),
+      appBar: guest
+          ? AppBar(
+              titleSpacing: RhythmoSpace.lg,
+              title: const RhythmoBrand(),
+              actions: [
+                // Readable before signing up, as the stores expect.
+                IconButton(
+                  onPressed: () => openSitePage(context, '/privacy',
+                      siteUri: widget.siteUri, openLink: widget.openLink),
+                  tooltip: 'حریم خصوصی',
+                  icon: const Icon(RhythmoIcons.shieldCheck),
                 ),
-              ),
-              tooltip: 'گنجینه',
-              icon: const Icon(RhythmoIcons.vinylRecord),
+                const SizedBox(width: RhythmoSpace.sm),
+              ],
+            )
+          : AppBar(
+              title: const Text('فهرست‌های پخش محبوب'),
+              actions: [
+                if (widget.store != null)
+                  IconButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => StoreScreen(
+                          controller: widget.store!,
+                          player: widget.player,
+                          onSignIn: widget.onSignIn,
+                          identify: widget.identify,
+                        ),
+                      ),
+                    ),
+                    tooltip: 'گنجینه',
+                    icon: const Icon(RhythmoIcons.vinylRecord),
+                  ),
+                // Readable before signing up, as the stores expect.
+                if (widget.onSignIn != null && !controller.signedIn)
+                  IconButton(
+                    onPressed: () => openSitePage(context, '/privacy',
+                        siteUri: widget.siteUri, openLink: widget.openLink),
+                    tooltip: 'حریم خصوصی',
+                    icon: const Icon(RhythmoIcons.shieldCheck),
+                  ),
+                if (widget.onSignIn != null && !controller.signedIn)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 12),
+                    child: FilledButton(
+                      onPressed: widget.onSignIn,
+                      style: FilledButton.styleFrom(
+                          minimumSize: const Size(48, 48)),
+                      child: const Text('ورود / ثبت‌نام'),
+                    ),
+                  ),
+              ],
             ),
-          // Readable before signing up, as the stores expect.
-          if (widget.onSignIn != null && !controller.signedIn)
-            IconButton(
-              onPressed: () => openSitePage(context, '/privacy',
-                  siteUri: widget.siteUri, openLink: widget.openLink),
-              tooltip: 'حریم خصوصی',
-              icon: const Icon(RhythmoIcons.shieldCheck),
-            ),
-          if (widget.onSignIn != null && !controller.signedIn)
-            Padding(
-              padding: const EdgeInsetsDirectional.only(end: 12),
-              child: FilledButton(
-                onPressed: widget.onSignIn,
-                style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-                child: const Text('ورود / ثبت‌نام'),
-              ),
-            ),
-        ],
-      ),
-      bottomNavigationBar: MiniPlayer(player: widget.player),
+      bottomNavigationBar: guest
+          ? RhythmoDockBar(
+              player: widget.player,
+              items: [
+                const DockItem(
+                    'خانه', RhythmoIcons.house, RhythmoIcons.houseFill),
+                if (widget.store != null)
+                  const DockItem('گنجینه', RhythmoIcons.vinylRecord,
+                      RhythmoIcons.vinylRecordFill),
+                const DockItem(
+                    'ورود', RhythmoIcons.signIn, RhythmoIcons.signIn),
+              ],
+              selected: 0,
+              onSelect: (index) {
+                if (index == 0) return;
+                if (widget.store != null && index == 1) {
+                  _openStore();
+                } else {
+                  widget.onSignIn!();
+                }
+              },
+            )
+          : MiniPlayer(player: widget.player),
       body: RhythmoBackdrop(
         child: ListenableBuilder(
           listenable: controller,
           builder: (context, _) {
             final popular = controller.popular;
+            // A guest keeps the welcome, and with it sign-in, above any
+            // loading, error or empty state.
+            Widget withWelcome(Widget state) => !guest
+                ? state
+                : Column(
+                    children: [
+                      SafeArea(
+                        bottom: false,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(RhythmoSpace.lg,
+                              RhythmoSpace.md, RhythmoSpace.lg, 0),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                                maxWidth: RhythmoSpace.pageWidth),
+                            child: _GuestWelcome(onSignIn: widget.onSignIn!),
+                          ),
+                        ),
+                      ),
+                      Expanded(child: state),
+                    ],
+                  );
+            if (popular.isEmpty) {
+              return withWelcome(_state(controller));
+            }
             return switch (controller.popularStatus) {
-              PlaylistsStatus.loading when popular.isEmpty =>
-                const RhythmoStateView.loading(
-                    title: 'در حال دریافت فهرست‌های محبوب…'),
-              PlaylistsStatus.error when popular.isEmpty =>
-                RhythmoStateView.error(
-                  icon: RhythmoIcons.cloudSlash,
-                  title: 'فهرست‌های پخش محبوب بارگذاری نشد.',
-                  message: 'اتصال را بررسی کن و دوباره تلاش کن.',
-                  action: FilledButton.icon(
-                    onPressed: controller.loadPopular,
-                    icon: const Icon(RhythmoIcons.arrowsClockwise),
-                    label: const Text('تلاش دوباره'),
-                  ),
-                ),
-              _ when popular.isEmpty => const RhythmoStateView(
-                  icon: RhythmoIcons.globe,
-                  title: 'هنوز فهرست پخش عمومی‌ای نیست',
-                  message: 'وقتی فهرست پخشی را به اشتراک می‌گذاری، «عمومی» '
-                      'را انتخاب کن تا اینجا نشان داده شود.',
-                ),
               _ => RefreshIndicator(
                   onRefresh: controller.loadPopular,
                   child: _PopularGrid(
+                    leading: guest
+                        ? [
+                            _GuestWelcome(onSignIn: widget.onSignIn!),
+                            const RhythmoSectionHeader(
+                              title: 'فهرست‌های پخش محبوب',
+                              padding: EdgeInsetsDirectional.only(
+                                  top: RhythmoSpace.lg,
+                                  bottom: RhythmoSpace.sm),
+                            ),
+                          ]
+                        : const [],
                     popular: popular,
                     playing: _playing,
                     isLiking: controller.isLiking,
@@ -302,6 +396,7 @@ class _PopularPlaylistsScreenState extends State<PopularPlaylistsScreen> {
 /// on wider screens, inside a centred column.
 class _PopularGrid extends StatelessWidget {
   const _PopularGrid({
+    this.leading = const [],
     required this.popular,
     required this.playing,
     required this.isLiking,
@@ -312,6 +407,8 @@ class _PopularGrid extends StatelessWidget {
     this.onDelete,
   });
 
+  /// Shown above the grid, in its column: a guest's welcome.
+  final List<Widget> leading;
   final List<PublicPlaylist> popular;
 
   /// The playlist whose tracks are being fetched to play, if any.
@@ -345,6 +442,11 @@ class _PopularGrid extends StatelessWidget {
       return CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
+          if (leading.isNotEmpty)
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(side, RhythmoSpace.md, side, 0),
+              sliver: SliverList.list(children: leading),
+            ),
           SliverPadding(
             padding: EdgeInsets.fromLTRB(side, RhythmoSpace.md, side, bottom),
             sliver: SliverGrid.builder(
@@ -482,16 +584,17 @@ class _PopularTile extends StatelessWidget {
                   tooltip: 'پخش ${playlist.name}',
                   onPressed:
                       loading || playlist.trackCount == 0 ? null : onPlay,
+                  // White, as the player's play button is.
                   style: IconButton.styleFrom(
                     minimumSize: const Size.square(RhythmoSpace.target),
-                    backgroundColor: scheme.primary,
-                    foregroundColor: scheme.onPrimary,
+                    backgroundColor: scheme.onSurface,
+                    foregroundColor: scheme.surface,
                   ),
                   icon: loading
                       ? SizedBox.square(
                           dimension: 20,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: scheme.onPrimary),
+                              strokeWidth: 2, color: scheme.surface),
                         )
                       : const Icon(RhythmoIcons.playFill),
                 ),
@@ -546,6 +649,42 @@ class _PopularTile extends StatelessWidget {
 
 enum _AdminAction { hide, delete }
 
+/// A guest's welcome: what rhythmo is and the one ember action, signing in.
+class _GuestWelcome extends StatelessWidget {
+  const _GuestWelcome({required this.onSignIn});
+
+  final VoidCallback onSignIn;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GlassSurface(
+      radius: RhythmoRadii.lg,
+      blur: 0,
+      shadow: false,
+      padding: const EdgeInsets.all(RhythmoSpace.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('به ریتمو خوش آمدی', style: theme.textTheme.headlineSmall),
+          const SizedBox(height: RhythmoSpace.xs),
+          Text(
+            'فهرست‌های محبوب را همین حالا بشنو. برای نگه داشتن آهنگ‌های '
+            'خودت در «موسیقی من»، وارد شو.',
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: RhythmoSpace.md),
+          FilledButton(
+            onPressed: onSignIn,
+            child: const Text('ورود / ثبت‌نام'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The playlist's place in the list, on its cover.
 class _RankBadge extends StatelessWidget {
   const _RankBadge({required this.rank});
@@ -561,7 +700,7 @@ class _RankBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(
           horizontal: RhythmoSpace.sm, vertical: RhythmoSpace.xxs),
       decoration: BoxDecoration(
-        color: top ? theme.colorScheme.primary : RhythmoColors.scrim,
+        color: top ? theme.colorScheme.onSurface : RhythmoColors.scrim,
         borderRadius: BorderRadius.circular(RhythmoRadii.pill),
       ),
       child: Text(
@@ -569,7 +708,7 @@ class _RankBadge extends StatelessWidget {
         textAlign: TextAlign.center,
         style: theme.textTheme.labelLarge?.copyWith(
           fontWeight: FontWeight.w800,
-          color: top ? theme.colorScheme.onPrimary : RhythmoColors.onSurface,
+          color: top ? theme.colorScheme.surface : RhythmoColors.onSurface,
         ),
       ),
     );

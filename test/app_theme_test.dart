@@ -42,7 +42,7 @@ void main() {
         const Color(0xB31B1E2D),
       );
       expect(theme.snackBarTheme.behavior, SnackBarBehavior.floating);
-      expect(theme.searchBarTheme.constraints?.minHeight, 56);
+      expect(theme.searchBarTheme.constraints?.minHeight, 48);
     });
 
     test('separates major surfaces with restrained depth', () {
@@ -51,6 +51,17 @@ void main() {
       expect(theme.tabBarTheme.dividerColor, Colors.transparent);
       expect(theme.sliderTheme.trackHeight, 3);
       expect(theme.bottomSheetTheme.showDragHandle, isTrue);
+    });
+
+    test('switches, sliders and text buttons are white, not ember', () {
+      final colors = theme.colorScheme;
+      const on = {WidgetState.selected};
+      expect(theme.switchTheme.trackColor?.resolve(on), colors.onSurface);
+      expect(theme.switchTheme.thumbColor?.resolve(on), colors.surface);
+      expect(theme.sliderTheme.activeTrackColor, colors.onSurface);
+      expect(theme.sliderTheme.thumbColor, colors.onSurface);
+      expect(theme.textButtonTheme.style?.foregroundColor?.resolve({}),
+          colors.onSurface);
     });
 
     test('tabs show only the pill, with no rectangular hover box', () {

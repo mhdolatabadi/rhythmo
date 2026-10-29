@@ -3,7 +3,9 @@ import 'package:rhythmo/app/app_configuration.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/links/open_link.dart';
 import 'package:rhythmo/core/links/site_page.dart';
+import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
+import 'package:rhythmo/core/widgets/rhythmo_mark.dart';
 import 'package:rhythmo/features/auth/application/auth_controller.dart';
 
 const _minPasswordLength = 8;
@@ -80,89 +82,117 @@ class _SignInScreenState extends State<SignInScreen> {
     return Scaffold(
       // Opened from the guest home, it can go back to browsing.
       appBar: Navigator.canPop(context) ? AppBar() : null,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Form(
-              key: _formKey,
-              child: AutofillGroup(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      _isRegistering ? 'ساخت حساب ریتمو' : 'ورود به ریتمو',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    TextFormField(
-                      controller: _email,
-                      decoration: const InputDecoration(labelText: 'ایمیل'),
-                      keyboardType: TextInputType.emailAddress,
-                      autofillHints: const [AutofillHints.email],
-                      textDirection: TextDirection.ltr,
-                      validator: (value) =>
-                          value == null || !value.contains('@')
-                              ? 'ایمیل معتبر وارد کن.'
-                              : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _password,
-                      decoration: const InputDecoration(labelText: 'رمز عبور'),
-                      obscureText: true,
-                      autofillHints: [
-                        _isRegistering
-                            ? AutofillHints.newPassword
-                            : AutofillHints.password,
-                      ],
-                      textDirection: TextDirection.ltr,
-                      onFieldSubmitted: (_) => _submit(),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'رمز عبور را وارد کن.';
-                        }
-                        if (_isRegistering &&
-                            value.length < _minPasswordLength) {
-                          return 'رمز عبور باید حداقل ۸ کاراکتر باشد.';
-                        }
-                        return null;
-                      },
-                    ),
-                    if (_error != null) ...[
-                      const SizedBox(height: 12),
+      // The same brand and aurora as the app it opens onto.
+      body: RhythmoBackdrop(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(RhythmoSpace.xxl),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Form(
+                key: _formKey,
+                child: AutofillGroup(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Center(child: RhythmoMark(size: 56)),
+                      const SizedBox(height: RhythmoSpace.lg),
                       Text(
-                        _error!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error),
+                        _isRegistering ? 'ساخت حساب ریتمو' : 'ورود به ریتمو',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: RhythmoSpace.xs),
+                      Text(
+                        'موسیقی خودت، با کیفیت اصلی، روی همهٔ دستگاه‌هایت.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: RhythmoSpace.xl),
+                      GlassSurface(
+                        radius: RhythmoRadii.lg,
+                        blur: 0,
+                        shadow: false,
+                        padding: const EdgeInsets.all(RhythmoSpace.lg),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            TextFormField(
+                              controller: _email,
+                              decoration:
+                                  const InputDecoration(labelText: 'ایمیل'),
+                              keyboardType: TextInputType.emailAddress,
+                              autofillHints: const [AutofillHints.email],
+                              textDirection: TextDirection.ltr,
+                              validator: (value) =>
+                                  value == null || !value.contains('@')
+                                      ? 'ایمیل معتبر وارد کن.'
+                                      : null,
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _password,
+                              decoration:
+                                  const InputDecoration(labelText: 'رمز عبور'),
+                              obscureText: true,
+                              autofillHints: [
+                                _isRegistering
+                                    ? AutofillHints.newPassword
+                                    : AutofillHints.password,
+                              ],
+                              textDirection: TextDirection.ltr,
+                              onFieldSubmitted: (_) => _submit(),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'رمز عبور را وارد کن.';
+                                }
+                                if (_isRegistering &&
+                                    value.length < _minPasswordLength) {
+                                  return 'رمز عبور باید حداقل ۸ کاراکتر باشد.';
+                                }
+                                return null;
+                              },
+                            ),
+                            if (_error != null) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                _error!,
+                                style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error),
+                              ),
+                            ],
+                            const SizedBox(height: RhythmoSpace.lg),
+                            FilledButton(
+                              onPressed: _isBusy ? null : _submit,
+                              child:
+                                  Text(_isRegistering ? 'ساخت حساب' : 'ورود'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: RhythmoSpace.sm),
+                      TextButton(
+                        onPressed: _isBusy
+                            ? null
+                            : () => setState(() {
+                                  _isRegistering = !_isRegistering;
+                                  _error = null;
+                                }),
+                        child: Text(_isRegistering
+                            ? 'حساب داری؟ وارد شو'
+                            : 'حساب نداری؟ ثبت‌نام کن'),
+                      ),
+                      // Readable before signing up, as the stores expect.
+                      TextButton.icon(
+                        onPressed: () => openSitePage(context, '/privacy',
+                            siteUri: widget.siteUri, openLink: widget.openLink),
+                        icon: const Icon(RhythmoIcons.shieldCheck, size: 20),
+                        label: const Text('حریم خصوصی'),
                       ),
                     ],
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: _isBusy ? null : _submit,
-                      child: Text(_isRegistering ? 'ساخت حساب' : 'ورود'),
-                    ),
-                    TextButton(
-                      onPressed: _isBusy
-                          ? null
-                          : () => setState(() {
-                                _isRegistering = !_isRegistering;
-                                _error = null;
-                              }),
-                      child: Text(_isRegistering
-                          ? 'حساب داری؟ وارد شو'
-                          : 'حساب نداری؟ ثبت‌نام کن'),
-                    ),
-                    // Readable before signing up, as the stores expect.
-                    TextButton.icon(
-                      onPressed: () => openSitePage(context, '/privacy',
-                          siteUri: widget.siteUri, openLink: widget.openLink),
-                      icon: const Icon(RhythmoIcons.shieldCheck, size: 20),
-                      label: const Text('حریم خصوصی'),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),

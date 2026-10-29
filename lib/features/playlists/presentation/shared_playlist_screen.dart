@@ -49,7 +49,7 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
     if (!widget.controller.signedIn) {
       askToSignIn(
         context,
-        action: 'افزودن به کتابخانه',
+        action: 'افزودن به موسیقی من',
         onSignIn: widget.onSignIn,
       );
       return;
@@ -63,7 +63,7 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
       SnackBar(
         content: Text(switch (result) {
           SaveSharedResult.saved =>
-            'به فهرست‌های پخش و کتابخانه‌ات اضافه شد. این نسخه مال خودت است.',
+            'به فهرست‌های پخش و «موسیقی من» اضافه شد. این نسخه مال خودت است.',
           SaveSharedResult.alreadyYours => 'این فهرست پخش خودت است.',
           SaveSharedResult.noSpace =>
             'فضای کافی در حسابت نیست. چند آهنگ را حذف کن و دوباره امتحان کن.',
@@ -352,6 +352,7 @@ class _Contents extends StatelessWidget {
                 children: [
                   if (tracks.isNotEmpty)
                     FilledButton.icon(
+                      style: rhythmoPlayStyle(context),
                       onPressed: () => player.playFrom(tracks, 0),
                       icon: const Icon(RhythmoIcons.playFill),
                       label: const Text('پخش همه'),

@@ -84,10 +84,20 @@ abstract final class RhythmoIcons {
   static const IconData trash = IconData(0xe4a6, fontFamily: 'Phosphor');
   static const IconData uploadSimple = IconData(0xe4c0, fontFamily: 'Phosphor');
   static const IconData user = IconData(0xe4c2, fontFamily: 'Phosphor');
+  static const IconData userFill = IconData(0xe4c2, fontFamily: 'PhosphorFill');
+  static const IconData house = IconData(0xe2c2, fontFamily: 'Phosphor');
+  static const IconData houseFill =
+      IconData(0xe2c2, fontFamily: 'PhosphorFill');
+  static const IconData books = IconData(0xe758, fontFamily: 'Phosphor');
+  static const IconData booksFill =
+      IconData(0xe758, fontFamily: 'PhosphorFill');
   static const IconData userCircle = IconData(0xe4c4, fontFamily: 'Phosphor');
   static const IconData userCircleMinus =
       IconData(0xe4c8, fontFamily: 'Phosphor');
   static const IconData vinylRecord = IconData(0xecac, fontFamily: 'Phosphor');
+  static const IconData vinylRecordFill =
+      IconData(0xecac, fontFamily: 'PhosphorFill');
+  static const IconData signIn = IconData(0xe428, fontFamily: 'Phosphor');
   static const IconData warning = IconData(0xe4e0, fontFamily: 'Phosphor');
   static const IconData warningCircle =
       IconData(0xe4e2, fontFamily: 'Phosphor');

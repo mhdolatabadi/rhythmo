@@ -15,7 +15,9 @@ const rhythmoAmbientGradient = LinearGradient(
   stops: [0, 0.48, 1],
 );
 
-/// Atmospheric animated background shared by primary app surfaces.
+/// The aurora behind primary app surfaces: ember light from the top corner
+/// and violet from the opposite side, settling into night at the bottom.
+/// It is still; nothing in it moves.
 class RhythmoBackdrop extends StatelessWidget {
   const RhythmoBackdrop({super.key, required this.child});
 
@@ -23,9 +25,10 @@ class RhythmoBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: Theme.of(context).brightness == Brightness.dark
+        gradient: dark
             ? rhythmoAmbientGradient
             : LinearGradient(colors: [
                 Theme.of(context).colorScheme.surfaceContainerLow,
@@ -35,7 +38,7 @@ class RhythmoBackdrop extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          const IgnorePointer(child: _AmbientLight()),
+          if (dark) const IgnorePointer(child: _AmbientLight()),
           child,
         ],
       ),
@@ -43,78 +46,48 @@ class RhythmoBackdrop extends StatelessWidget {
   }
 }
 
-class _AmbientLight extends StatefulWidget {
+class _AmbientLight extends StatelessWidget {
   const _AmbientLight();
 
   @override
-  State<_AmbientLight> createState() => _AmbientLightState();
-}
-
-class _AmbientLightState extends State<_AmbientLight>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: RhythmoMotion.arrival,
-  )..forward();
-
-  late final Animation<double> _drift = CurvedAnimation(
-    parent: _controller,
-    curve: Curves.easeInOutCubic,
-  );
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    // With reduced motion the light is simply in place.
-    if (MediaQuery.maybeDisableAnimationsOf(context) == true &&
-        _controller.isAnimating) {
-      _controller.value = 1;
-    }
     return RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: _drift,
-        builder: (context, _) {
-          final value = _drift.value;
-          return Stack(
-            children: [
-              PositionedDirectional(
-                top: -170 + (value * 28),
-                end: -120 + (value * 22),
-                child: Transform.scale(
-                  scale: 1 + (value * 0.05),
-                  child: _Glow(
-                    size: 430,
-                    color: RhythmoColors.primary.withValues(alpha: 0.16),
-                  ),
+      child: Stack(
+        children: [
+          PositionedDirectional(
+            top: -150,
+            end: -130,
+            child: _Glow(
+              size: 420,
+              color: RhythmoColors.primary.withValues(alpha: 0.26),
+            ),
+          ),
+          PositionedDirectional(
+            top: 220,
+            start: -190,
+            child: _Glow(
+              size: 440,
+              color: RhythmoColors.secondary.withValues(alpha: 0.2),
+            ),
+          ),
+          // Night rises from the bottom so text and the mini player keep
+          // their contrast over the light.
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    RhythmoColors.transparent,
+                    RhythmoColors.ambientMiddle,
+                  ],
+                  stops: [0.45, 1],
                 ),
               ),
-              PositionedDirectional(
-                bottom: 20 + (value * 26),
-                start: -160 + (value * 18),
-                child: Transform.scale(
-                  scale: 1.04 - (value * 0.04),
-                  child: _Glow(
-                    size: 460,
-                    color: RhythmoColors.secondary.withValues(alpha: 0.14),
-                  ),
-                ),
-              ),
-              PositionedDirectional(
-                top: 170 - (value * 22),
-                start: 30 + (value * 36),
-                child: _Glow(
-                  size: 260,
-                  color: RhythmoColors.highlight.withValues(alpha: 0.045),
-                ),
-              ),
-            ],
-          );
-        },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -189,8 +162,9 @@ class GlassSurface extends StatelessWidget {
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
           colors: [
-            (tint ?? RhythmoColors.highlight).withValues(alpha: 0.16),
-            RhythmoColors.highlight.withValues(alpha: 0.055),
+            // A faint sheen, not a glare: the glass stays calm.
+            (tint ?? RhythmoColors.highlight).withValues(alpha: 0.07),
+            RhythmoColors.highlight.withValues(alpha: 0.03),
             (dark ? RhythmoColors.surface : scheme.surfaceContainerLow)
                 .withValues(alpha: 0.9),
           ],

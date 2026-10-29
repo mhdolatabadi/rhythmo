@@ -57,7 +57,7 @@ void main() {
       await _pump(tester, size, const []);
       expect(tester.takeException(), isNull);
       expect(find.byType(RhythmoStateView), findsWidgets);
-      expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+      expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
     });
 
     testWidgets('the mini player never covers the last track at $label',
@@ -113,7 +113,7 @@ void main() {
       ]);
       // No search field above the list; a 48 px header button instead.
       expect(find.byType(SearchBar), findsNothing);
-      final button = find.byTooltip('جست‌وجو در کتابخانه');
+      final button = find.byTooltip('جست‌وجو در موسیقی من');
       expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
       await tester.tap(button);
       await tester.pumpAndSettle();
@@ -143,7 +143,7 @@ void main() {
       await tester.tap(remove);
       await tester.pumpAndSettle();
       expect(find.text('جست‌وجوهای اخیر'), findsNothing);
-      expect(find.text('در همهٔ کتابخانه بگرد'), findsOneWidget);
+      expect(find.text('در همهٔ موسیقی‌ات بگرد'), findsOneWidget);
     });
 
     testWidgets(

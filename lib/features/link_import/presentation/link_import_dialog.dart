@@ -107,7 +107,7 @@ class _LinkImportDialogState extends State<_LinkImportDialog> {
 
   String _spotifyMessage(SpotifyImportResult result) => result.playlistId ==
           null
-      ? 'هیچ‌کدام از آهنگ‌های این لینک در کتابخانه‌ات نبود.'
+      ? 'هیچ‌کدام از آهنگ‌های این لینک در «موسیقی من» نبود.'
       : 'فهرست پخش «${result.name}» با ${persianDigits(result.matched.length)} آهنگ ساخته شد.';
 
   void _toggle(int index, bool? value) {
@@ -145,7 +145,7 @@ class _LinkImportDialogState extends State<_LinkImportDialog> {
               children: [
                 Text(hasCandidates
                     ? 'فایل‌های صوتی پیدا شده را انتخاب کن.'
-                    : 'لینک صفحه‌ی آهنگ، فایل صوتی، ویدیوی یوتیوب یا اینستاگرام را بچسبان. از لینک اسپاتیفای، آهنگ‌هایی که در کتابخانه داری در یک فهرست پخش جمع می‌شوند.'),
+                    : 'لینک صفحه‌ی آهنگ، فایل صوتی، ویدیوی یوتیوب یا اینستاگرام را بچسبان. از لینک اسپاتیفای، آهنگ‌هایی که در «موسیقی من» داری در یک فهرست پخش جمع می‌شوند.'),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _field,
@@ -330,7 +330,7 @@ class _SpotifyResultDialog extends StatelessWidget {
             if (missing.isNotEmpty) ...[
               const SizedBox(height: 16),
               Text(
-                '${persianDigits(missing.length)} آهنگ در کتابخانه‌ات پیدا نشد:',
+                '${persianDigits(missing.length)} آهنگ در «موسیقی من» پیدا نشد:',
                 style: theme.textTheme.titleSmall,
               ),
               const SizedBox(height: 8),

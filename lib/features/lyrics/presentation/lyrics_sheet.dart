@@ -299,7 +299,7 @@ class _LyricsViewState extends State<LyricsView> {
         return const LyricsMessage(
           icon: RhythmoIcons.vinylRecord,
           title: 'متن آهنگ‌های گنجینه هنوز نمایش داده نمی‌شود',
-          detail: 'آهنگ را به کتابخانه‌ات اضافه کن تا متنش را ببینی.',
+          detail: 'آهنگ را به «موسیقی من» اضافه کن تا متنش را ببینی.',
         );
       case null:
     }

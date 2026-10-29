@@ -1,8 +1,8 @@
+import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/features/journey/presentation/monthly_card_section.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:rhythmo/core/design/tokens.dart';
 import 'package:rhythmo/core/persian_digits.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/features/journey/application/listening_journey.dart';
@@ -27,7 +27,7 @@ class JourneySetting extends StatelessWidget {
             ),
             if (journey.enabled)
               SwitchListTile(
-                title: const Text('نمایش سفر شنیداری در کتابخانه'),
+                title: const Text('نمایش سفر شنیداری در «موسیقی من»'),
                 subtitle: const Text('کارت پیشرفت بالای فهرست آهنگ‌ها'),
                 value: !journey.hiddenInLibrary,
                 onChanged: journey.ready
@@ -181,7 +181,7 @@ class _CollapsedJourney extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: 'پنهان کردن از کتابخانه',
+              tooltip: 'پنهان کردن از «موسیقی من»',
               icon: const Icon(RhythmoIcons.x),
               onPressed: () => _hide(context),
             ),
@@ -205,7 +205,8 @@ class _JourneyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('سفر من')),
-        body: SafeArea(
+        body: RhythmoBackdrop(
+            child: SafeArea(
           child: ListenableBuilder(
             listenable: journey,
             builder: (context, _) {
@@ -222,7 +223,7 @@ class _JourneyScreen extends StatelessWidget {
                   child: ListView(
                     padding: const EdgeInsets.all(24),
                     children: [
-                      const Text('از کتابخانه‌ات دوباره کشف کن'),
+                      const Text('از «موسیقی من» دوباره کشف کن'),
                       const SizedBox(height: 8),
                       const Text(
                         'شنیدن کوتاه و جلو بردن آهنگ، پیشرفت حساب نمی‌شود. '
@@ -264,7 +265,7 @@ class _JourneyScreen extends StatelessWidget {
                       ),
                       for (final badge in [
                         (1, 'اولین کشف'),
-                        (10, 'کاوشگر کتابخانه'),
+                        (10, 'کاوشگر موسیقی'),
                         (50, 'گنجینهٔ شنیداری'),
                       ])
                         ListTile(
@@ -297,6 +298,6 @@ class _JourneyScreen extends StatelessWidget {
               );
             },
           ),
-        ),
+        )),
       );
 }
