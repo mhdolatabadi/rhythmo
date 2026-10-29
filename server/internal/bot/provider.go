@@ -12,9 +12,13 @@ import (
 // Update is one incoming message, already reduced to what rhythmo uses.
 type Update struct {
 	// ID is the provider's update ID; redeliveries repeat it.
-	ID        string
-	ChatID    string
-	Private   bool
+	ID      string
+	ChatID  string
+	Private bool
+	// Channel is a post in a channel the bot administers; ChatTitle is
+	// the channel's name.
+	Channel   bool
+	ChatTitle string
 	MessageID string
 	Text      string
 	File      *File

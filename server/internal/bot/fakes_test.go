@@ -21,6 +21,16 @@ type memStore struct {
 	imports map[string]*store.BotImport
 	fileIDs map[string]string
 	nextID  int
+	// Channel sync: codes for a playlist, linked channels, and who runs
+	// each playlist.
+	channelCodes map[string]memChannelCode
+	channels     map[string]store.BotChannel
+	managers     map[string]map[string]bool
+}
+
+type memChannelCode struct {
+	userID, playlistID string
+	expiresAt          time.Time
 }
 
 type memChat struct {
@@ -38,7 +48,95 @@ func newMemStore() *memStore {
 	return &memStore{
 		chats: map[string]*memChat{}, codes: map[string]memCode{},
 		updates: map[string]bool{}, imports: map[string]*store.BotImport{}, fileIDs: map[string]string{},
+		channelCodes: map[string]memChannelCode{}, channels: map[string]store.BotChannel{},
+		managers: map[string]map[string]bool{},
 	}
+}
+
+func (m *memStore) manages(userID, playlistID string) bool { return m.managers[playlistID][userID] }
+
+func (m *memStore) CreateChannelCode(_ context.Context, userID, playlistID string, hash []byte, expiresAt time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.manages(userID, playlistID) {
+		return store.ErrNotFound
+	}
+	if _, taken := m.channelCodes[string(hash)]; taken {
+		return store.ErrCodeCollision
+	}
+	m.channelCodes[string(hash)] = memChannelCode{userID, playlistID, expiresAt}
+	return nil
+}
+
+func (m *memStore) RedeemChannelCode(_ context.Context, provider, chatID, title string, hash []byte, now time.Time, maxFailures int, window time.Duration) (store.BotChannel, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c := m.chat(provider, chatID)
+	if now.Sub(c.since) >= window {
+		c.failures, c.since = 0, now
+	}
+	if c.failures >= maxFailures {
+		return store.BotChannel{}, store.ErrCodeAttempts
+	}
+	code, ok := m.channelCodes[string(hash)]
+	if !ok || !code.expiresAt.After(now) {
+		c.failures++
+		if c.failures >= maxFailures {
+			return store.BotChannel{}, store.ErrCodeAttempts
+		}
+		return store.BotChannel{}, store.ErrCodeInvalid
+	}
+	if !m.manages(code.userID, code.playlistID) {
+		return store.BotChannel{}, store.ErrNotFound
+	}
+	delete(m.channelCodes, string(hash))
+	c.failures = 0
+	link := store.BotChannel{Provider: provider, ChatID: chatID, PlaylistID: code.playlistID, UserID: code.userID, Title: title, LinkedAt: now}
+	m.channels[provider+"/"+chatID] = link
+	return link, nil
+}
+
+func (m *memStore) ChannelFor(_ context.Context, provider, chatID string) (store.BotChannel, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	link, ok := m.channels[provider+"/"+chatID]
+	if !ok {
+		return store.BotChannel{}, store.ErrNotFound
+	}
+	if !m.manages(link.UserID, link.PlaylistID) {
+		delete(m.channels, provider+"/"+chatID)
+		return store.BotChannel{}, store.ErrNotFound
+	}
+	return link, nil
+}
+
+func (m *memStore) UnlinkChannel(_ context.Context, provider, chatID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.channels, provider+"/"+chatID)
+	return nil
+}
+
+// fakePlaylists records what channel posts added.
+type fakePlaylists struct {
+	mu       sync.Mutex
+	names    map[string]string
+	appended []string
+}
+
+func (f *fakePlaylists) AppendSyncedTrack(_ context.Context, userID, playlistID, trackID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.appended = append(f.appended, userID+" "+playlistID+" "+trackID)
+	return nil
+}
+
+func (f *fakePlaylists) Name(_ context.Context, playlistID string) (string, error) {
+	name, ok := f.names[playlistID]
+	if !ok {
+		return "", store.ErrNotFound
+	}
+	return name, nil
 }
 
 func (m *memStore) chat(provider, chatID string) *memChat {

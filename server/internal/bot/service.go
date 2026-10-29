@@ -17,6 +17,20 @@ type UserLookup interface {
 	ByID(ctx context.Context, id string) (store.User, error)
 }
 
+// ChannelStore finds which rhythmo channel a messenger channel is synced
+// into (#430).
+type ChannelStore interface {
+	ChannelFor(ctx context.Context, provider, chatID string) (store.BotChannel, error)
+	UnlinkChannel(ctx context.Context, provider, chatID string) error
+}
+
+// PlaylistAppender adds an imported channel post to its rhythmo channel.
+type PlaylistAppender interface {
+	AppendSyncedTrack(ctx context.Context, userID, playlistID, trackID string) error
+	// Name is the playlist's name, for the confirmation in the channel.
+	Name(ctx context.Context, playlistID string) (string, error)
+}
+
 // Service is one provider's bot: it answers commands, links chats to
 // accounts and hands audio to the importer.
 type Service struct {
@@ -26,6 +40,9 @@ type Service struct {
 	users    UserLookup
 	importer *Importer
 	metrics  *Metrics
+	// channels and playlists sync channel posts; nil ignores channels.
+	channels  ChannelStore
+	playlists PlaylistAppender
 	// imports runs import work outside the webhook request; tests replace it.
 	imports func(func())
 }
@@ -35,6 +52,13 @@ func NewService(p Provider, updates UpdateStore, linker *Linker, users UserLooku
 		provider: p, updates: updates, linker: linker, users: users, importer: importer,
 		metrics: &Metrics{}, imports: func(work func()) { go work() },
 	}
+}
+
+// WithChannels syncs the channels the bot administers into rhythmo
+// channels.
+func (s *Service) WithChannels(channels ChannelStore, playlists PlaylistAppender) *Service {
+	s.channels, s.playlists = channels, playlists
+	return s
 }
 
 func (s *Service) Provider() Provider { return s.provider }
@@ -54,6 +78,9 @@ func (s *Service) Handle(ctx context.Context, u Update) error {
 	}
 	if u.ChatID == "" {
 		return nil
+	}
+	if u.Channel {
+		return s.handleChannelPost(ctx, u)
 	}
 	if !u.Private {
 		if u.File != nil || strings.HasPrefix(u.Text, "/") {
@@ -161,7 +188,7 @@ func (s *Service) handleFile(ctx context.Context, u Update) error {
 	if reason := s.importer.Check(s.provider, *u.File); reason != "" {
 		return s.reply(ctx, u, s.refused(reason))
 	}
-	job, err := s.importer.Queue(ctx, s.provider, u, *chat.UserID)
+	job, err := s.importer.Queue(ctx, s.provider, u, *chat.UserID, nil)
 	if errors.Is(err, store.ErrDuplicateImport) {
 		return nil
 	}
@@ -189,9 +216,90 @@ func (s *Service) Resume(ctx context.Context) {
 	}
 }
 
+// handleChannelPost syncs a post in a channel the bot administers. An
+// unlinked channel only listens for a channel code; a linked one imports
+// every audio file into the rhythmo channel, without answering, so the
+// channel isn't cluttered. "/disconnect" stops the sync.
+func (s *Service) handleChannelPost(ctx context.Context, u Update) error {
+	if s.channels == nil {
+		return nil
+	}
+	text := strings.TrimSpace(u.Text)
+	command, argument, isCommand := parseCommand(text)
+	link, err := s.channels.ChannelFor(ctx, s.provider.Name(), u.ChatID)
+	if errors.Is(err, store.ErrNotFound) {
+		code := text
+		if isCommand && (command == "connect" || command == "link" || command == "start") {
+			code = argument
+		}
+		if _, ok := NormalizeCode(code); !ok {
+			return nil
+		}
+		return s.linkChannel(ctx, u, code)
+	}
+	if err != nil {
+		return err
+	}
+	if isCommand && (command == "disconnect" || command == "unlink") {
+		if err := s.channels.UnlinkChannel(ctx, s.provider.Name(), u.ChatID); err != nil {
+			return err
+		}
+		return s.reply(ctx, u, msgChannelUnlinked)
+	}
+	if isCommand && (command == "connect" || command == "link") && argument != "" {
+		// Moving the channel to another rhythmo channel.
+		return s.linkChannel(ctx, u, argument)
+	}
+	if u.File == nil {
+		return nil
+	}
+	if reason := s.importer.Check(s.provider, *u.File); reason != "" {
+		s.metrics.ImportsFailed.Add(1)
+		slog.Info("channel post not imported", "provider", s.provider.Name(), "reason", reason)
+		return nil
+	}
+	job, err := s.importer.Queue(ctx, s.provider, u, link.UserID, &link.PlaylistID)
+	if errors.Is(err, store.ErrDuplicateImport) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	s.imports(func() { s.runImport(context.WithoutCancel(ctx), job.ID, false) })
+	return nil
+}
+
+func (s *Service) linkChannel(ctx context.Context, u Update, code string) error {
+	link, err := s.linker.RedeemChannel(ctx, s.provider.Name(), u.ChatID, u.ChatTitle, code)
+	if err == nil {
+		s.metrics.Links.Add(1)
+	} else {
+		s.metrics.LinkFailures.Add(1)
+	}
+	switch {
+	case errors.Is(err, ErrBadCode):
+		return s.reply(ctx, u, msgChannelBadCode)
+	case errors.Is(err, ErrLocked):
+		return s.reply(ctx, u, msgLocked)
+	case errors.Is(err, store.ErrNotFound):
+		return s.reply(ctx, u, msgChannelNotAdmin)
+	case err != nil:
+		return s.fail(ctx, u, err)
+	}
+	name, err := s.playlists.Name(ctx, link.PlaylistID)
+	if err != nil {
+		return s.fail(ctx, u, err)
+	}
+	return s.reply(ctx, u, msgChannelLinked(name))
+}
+
 func (s *Service) runImport(ctx context.Context, id string, interrupted bool) {
 	result, ok := s.importer.Run(ctx, s.provider, id, interrupted)
 	if !ok {
+		return
+	}
+	if playlistID := result.Import.PlaylistID; playlistID != nil {
+		s.finishChannelImport(ctx, result, *playlistID)
 		return
 	}
 	text := s.refused(result.Reason)
@@ -204,6 +312,24 @@ func (s *Service) runImport(ctx context.Context, id string, interrupted bool) {
 	if err := s.provider.Send(ctx, result.Import.ChatID, text); err != nil {
 		s.metrics.ReplyFailures.Add(1)
 		slog.Warn("bot import reply failed", "provider", s.provider.Name(), "error", err)
+	}
+}
+
+// finishChannelImport adds a channel post's track to its rhythmo channel.
+// Nothing is said in the channel either way.
+func (s *Service) finishChannelImport(ctx context.Context, result Result, playlistID string) {
+	if result.Track == nil {
+		s.metrics.ImportsFailed.Add(1)
+		slog.Warn("channel post import failed", "provider", s.provider.Name(), "reason", result.Reason)
+		return
+	}
+	s.metrics.ImportsDone.Add(1)
+	if s.playlists == nil {
+		return
+	}
+	if err := s.playlists.AppendSyncedTrack(ctx, result.Import.UserID, playlistID, result.Track.ID); err != nil {
+		// The track stays in the person's library; they can add it by hand.
+		slog.Warn("add channel post to playlist", "provider", s.provider.Name(), "error", err)
 	}
 }
 

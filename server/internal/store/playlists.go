@@ -845,6 +845,60 @@ func (p *Playlists) RemoveMember(ctx context.Context, actorID, playlistID, membe
 	})
 }
 
+// Name returns the playlist's name, or ErrNotFound.
+func (p *Playlists) Name(ctx context.Context, playlistID string) (string, error) {
+	var name string
+	err := p.pool.QueryRow(ctx, `SELECT name FROM playlists WHERE id::text = $1`, playlistID).Scan(&name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return name, err
+}
+
+// AppendSyncedTrack adds the user's ready track to the end of the playlist,
+// as a post in a synced messenger channel does (#430), and notifies its
+// subscribers. Adding a track that is already there changes nothing. The
+// owner and admins may; ErrNotFound covers anyone else and a track that
+// isn't the user's own ready one.
+func (p *Playlists) AppendSyncedTrack(ctx context.Context, userID, playlistID, trackID string) error {
+	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error {
+		var allowed bool
+		err := tx.QueryRow(ctx, `
+			SELECT `+canManage("playlists", "$2")+` FROM playlists WHERE playlists.id::text = $1 FOR UPDATE
+		`, playlistID, userID).Scan(&allowed)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !allowed) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		var present bool
+		if err := tx.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM playlist_tracks WHERE playlist_id::text = $1 AND track_id::text = $2)
+		`, playlistID, trackID).Scan(&present); err != nil || present {
+			return err
+		}
+		tag, err := tx.Exec(ctx, `
+			INSERT INTO playlist_tracks (playlist_id, track_id, position)
+			SELECT $1::uuid, tracks.id,
+				COALESCE((SELECT max(position) + 1 FROM playlist_tracks WHERE playlist_id = $1::uuid), 0)
+			FROM tracks
+			WHERE tracks.id::text = $2 AND tracks.owner_id::text = $3
+			  AND tracks.status = 'ready' AND tracks.moderated_at IS NULL
+		`, playlistID, trackID, userID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+		if _, err := tx.Exec(ctx, `UPDATE playlists SET updated_at = now() WHERE id = $1::uuid`, playlistID); err != nil {
+			return err
+		}
+		return notifySubscribers(ctx, tx, playlistID, userID, []string{trackID})
+	})
+}
+
 // SetMemberRole makes memberID an admin of the playlist or a plain member
 // again. Only the owner may do it; ErrNotFound covers a playlist the owner
 // doesn't own and someone who isn't a member.
