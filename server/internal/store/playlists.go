@@ -16,6 +16,8 @@ type Playlist struct {
 	ID      string
 	OwnerID string
 	Name    string
+	// Description is the channel's short blurb (#428); empty for none.
+	Description string
 	// ShareToken is set while the playlist is shared.
 	ShareToken *string
 	// IsPublic lists a shared playlist for everyone to discover; otherwise
@@ -36,14 +38,24 @@ type Playlist struct {
 	// OwnerEmail who owns it. Both are only loaded with the tracks.
 	Members    []Member
 	OwnerEmail string
+	// ViewerAdmin is whether the member viewing it is one of its admins.
+	ViewerAdmin bool
 }
 
 // Member is someone who joined a playlist by its collaboration link.
 type Member struct {
 	UserID   string
 	Email    string
+	Role     string
 	JoinedAt time.Time
 }
+
+// Member roles. An admin may also edit the playlist's name and description,
+// take out anyone's tracks and remove members who aren't admins (#428).
+const (
+	RoleMember = "member"
+	RoleAdmin  = "admin"
+)
 
 // ErrForbidden means the user may see the playlist but not make the change,
 // such as a member removing someone else's track.
@@ -53,7 +65,7 @@ var ErrForbidden = errors.New("not allowed")
 var ErrShareTokenTaken = errors.New("share token is already in use")
 
 // playlistColumnNames is the one list of columns scanPlaylist reads, in order.
-var playlistColumnNames = []string{"id::text", "owner_id::text", "name", "share_token", "is_public", "public_review", "collab_token", "created_at", "updated_at"}
+var playlistColumnNames = []string{"id::text", "owner_id::text", "name", "description", "share_token", "is_public", "public_review", "collab_token", "created_at", "updated_at"}
 
 var (
 	playlistColumns          = strings.Join(playlistColumnNames, ", ")
@@ -62,7 +74,7 @@ var (
 
 func scanPlaylist(row pgx.Row) (Playlist, error) {
 	var p Playlist
-	err := row.Scan(&p.ID, &p.OwnerID, &p.Name, &p.ShareToken, &p.IsPublic, &p.PublicReview, &p.CollabToken, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.OwnerID, &p.Name, &p.Description, &p.ShareToken, &p.IsPublic, &p.PublicReview, &p.CollabToken, &p.CreatedAt, &p.UpdatedAt)
 	return p, err
 }
 
@@ -72,6 +84,19 @@ func scanPlaylist(row pgx.Row) (Playlist, error) {
 func trackBelongs(tracks, pl string) string {
 	return `(` + tracks + `.moderated_at IS NULL AND (` + tracks + `.owner_id = ` + pl + `.owner_id OR EXISTS (
 		SELECT 1 FROM playlist_members m WHERE m.playlist_id = ` + pl + `.id AND m.user_id = ` + tracks + `.owner_id)))`
+}
+
+// canManage is true when user $N owns playlist pl or is one of its admins.
+func canManage(pl, user string) string {
+	return `(` + pl + `.owner_id::text = ` + user + ` OR EXISTS (
+		SELECT 1 FROM playlist_members m WHERE m.playlist_id = ` + pl + `.id AND m.user_id::text = ` + user + `
+		  AND m.role = 'admin'))`
+}
+
+// isAdmin is true when user $N is one of playlist pl's admin members.
+func isAdmin(pl, user string) string {
+	return `EXISTS (SELECT 1 FROM playlist_members m WHERE m.playlist_id = ` + pl + `.id
+		AND m.user_id::text = ` + user + ` AND m.role = 'admin')`
 }
 
 // canEdit is true when user $N owns playlist pl or is one of its members.
@@ -98,7 +123,8 @@ func (p *Playlists) ListForUser(ctx context.Context, userID string) ([]Playlist,
 			 JOIN tracks ON tracks.id = pt.track_id
 			 WHERE pt.playlist_id = playlists.id
 			   AND tracks.status = 'ready'
-			   AND `+trackBelongs("tracks", "playlists")+`)
+			   AND `+trackBelongs("tracks", "playlists")+`),
+			`+isAdmin("playlists", "$1")+`
 		FROM playlists
 		WHERE `+canEdit("playlists", "$1")+`
 		ORDER BY updated_at DESC, id
@@ -115,6 +141,7 @@ func (p *Playlists) ListForUser(ctx context.Context, userID string) ([]Playlist,
 			&playlist.ID,
 			&playlist.OwnerID,
 			&playlist.Name,
+			&playlist.Description,
 			&playlist.ShareToken,
 			&playlist.IsPublic,
 			&playlist.PublicReview,
@@ -122,6 +149,7 @@ func (p *Playlists) ListForUser(ctx context.Context, userID string) ([]Playlist,
 			&playlist.CreatedAt,
 			&playlist.UpdatedAt,
 			&playlist.TrackCount,
+			&playlist.ViewerAdmin,
 		); err != nil {
 			return nil, err
 		}
@@ -150,13 +178,20 @@ func (p *Playlists) ForUser(ctx context.Context, userID, playlistID string) (Pla
 	if err := p.pool.QueryRow(ctx, `SELECT email FROM users WHERE id = $1::uuid`, playlist.OwnerID).Scan(&playlist.OwnerEmail); err != nil {
 		return Playlist{}, err
 	}
-	playlist.Members, err = p.members(ctx, playlist.ID)
-	return playlist, err
+	if playlist.Members, err = p.members(ctx, playlist.ID); err != nil {
+		return Playlist{}, err
+	}
+	for _, m := range playlist.Members {
+		if m.UserID == userID && m.Role == RoleAdmin {
+			playlist.ViewerAdmin = true
+		}
+	}
+	return playlist, nil
 }
 
 func (p *Playlists) members(ctx context.Context, playlistID string) ([]Member, error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT users.id::text, users.email, m.joined_at
+		SELECT users.id::text, users.email, m.role, m.joined_at
 		FROM playlist_members m JOIN users ON users.id = m.user_id
 		WHERE m.playlist_id = $1::uuid
 		ORDER BY m.joined_at, users.id
@@ -168,7 +203,7 @@ func (p *Playlists) members(ctx context.Context, playlistID string) ([]Member, e
 	members := []Member{}
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.UserID, &m.Email, &m.JoinedAt); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Email, &m.Role, &m.JoinedAt); err != nil {
 			return nil, err
 		}
 		members = append(members, m)
@@ -209,31 +244,35 @@ func (p *Playlists) Create(ctx context.Context, ownerID, name string) (Playlist,
 		RETURNING `+playlistColumns, ownerID, name))
 }
 
-func (p *Playlists) Rename(ctx context.Context, ownerID, playlistID, name string) (Playlist, error) {
+// Rename sets the playlist's name, and its description unless that is nil.
+// The owner and admins may do it.
+func (p *Playlists) Rename(ctx context.Context, actorID, playlistID, name string, description *string) (Playlist, error) {
 	playlist, err := scanPlaylist(p.pool.QueryRow(ctx, `
-		UPDATE playlists SET name = $3, updated_at = now()
-		WHERE id::text = $1 AND owner_id::text = $2
-		RETURNING `+playlistColumns, playlistID, ownerID, name))
+		UPDATE playlists SET name = $3, description = COALESCE($4, description), updated_at = now()
+		WHERE id::text = $1 AND `+canManage("playlists", "$2")+`
+		RETURNING `+playlistColumns, playlistID, actorID, name, description))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Playlist{}, ErrNotFound
 	}
+	// Only the owner and admins get this far.
+	playlist.ViewerAdmin = err == nil && playlist.OwnerID != actorID
 	return playlist, err
 }
 
 // ReplaceTracks sets the playlist's tracks, in order. The owner and members
 // may add their own ready tracks and reorder any; a track already in the
-// playlist may only be taken out by the owner or by whoever added it.
+// playlist may only be taken out by the owner, an admin, or whoever added it.
 // ErrNotFound covers a playlist the user can't see and a track they can't
 // add; ErrForbidden a track they may not remove.
 func (p *Playlists) ReplaceTracks(ctx context.Context, userID, playlistID string, trackIDs []string) error {
 	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error {
 		// Locking the playlist row serializes edits by several members.
-		var ownerID string
+		var manager bool
 		err := tx.QueryRow(ctx, `
-			SELECT playlists.owner_id::text FROM playlists
+			SELECT `+canManage("playlists", "$2")+` FROM playlists
 			WHERE playlists.id::text = $1 AND `+canEdit("playlists", "$2")+`
 			FOR UPDATE
-		`, playlistID, userID).Scan(&ownerID)
+		`, playlistID, userID).Scan(&manager)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -268,7 +307,7 @@ func (p *Playlists) ReplaceTracks(ctx context.Context, userID, playlistID string
 			kept[id] = true
 		}
 		for trackID, trackOwner := range current {
-			if !kept[trackID] && userID != ownerID && trackOwner != userID {
+			if !kept[trackID] && !manager && trackOwner != userID {
 				return ErrForbidden
 			}
 		}
@@ -399,7 +438,7 @@ func (p *Playlists) ForShareToken(ctx context.Context, token string) (SharedPlay
 		SELECT `+qualifiedPlaylistColumns+`, users.email
 		FROM playlists JOIN users ON users.id = playlists.owner_id
 		WHERE playlists.share_token = $1
-	`, token).Scan(&shared.ID, &shared.OwnerID, &shared.Name, &shared.ShareToken,
+	`, token).Scan(&shared.ID, &shared.OwnerID, &shared.Name, &shared.Description, &shared.ShareToken,
 		&shared.IsPublic, &shared.PublicReview, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.OwnerEmail)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SharedPlaylist{}, ErrNotFound
@@ -749,34 +788,51 @@ func (p *Playlists) Join(ctx context.Context, userID, token string) (Playlist, e
 }
 
 // RemoveMember takes memberID out of the playlist, with the tracks they
-// added. The owner may remove anyone; a member may only remove themselves,
-// which is leaving. ErrNotFound covers a playlist the actor can't see and
-// someone who isn't a member.
+// added. The owner may remove anyone and an admin anyone who isn't an
+// admin; a member may only remove themselves, which is leaving. ErrNotFound
+// covers a playlist the actor can't see and someone who isn't a member.
 func (p *Playlists) RemoveMember(ctx context.Context, actorID, playlistID, memberID string) error {
 	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error {
 		var ownerID string
+		var actorAdmin bool
 		err := tx.QueryRow(ctx, `
-			SELECT playlists.owner_id::text FROM playlists
+			SELECT playlists.owner_id::text, `+isAdmin("playlists", "$2")+` FROM playlists
 			WHERE playlists.id::text = $1 AND `+canEdit("playlists", "$2")+`
 			FOR UPDATE
-		`, playlistID, actorID).Scan(&ownerID)
+		`, playlistID, actorID).Scan(&ownerID, &actorAdmin)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
 		if err != nil {
 			return err
 		}
-		if actorID != ownerID && actorID != memberID {
+		if actorID != ownerID && actorID != memberID && !actorAdmin {
 			return ErrForbidden
 		}
-		tag, err := tx.Exec(ctx, `
+		// An admin may not remove another admin; only the owner can.
+		var role string
+		err = tx.QueryRow(ctx, `
 			DELETE FROM playlist_members WHERE playlist_id = $1::uuid AND user_id::text = $2
-		`, playlistID, memberID)
+			  AND ($3 OR role <> 'admin')
+			RETURNING role
+		`, playlistID, memberID, actorID == ownerID || actorID == memberID).Scan(&role)
+		if errors.Is(err, pgx.ErrNoRows) {
+			var exists bool
+			if err := tx.QueryRow(ctx, `
+				SELECT EXISTS (SELECT 1 FROM playlist_members WHERE playlist_id = $1::uuid AND user_id::text = $2)
+			`, playlistID, memberID).Scan(&exists); err != nil {
+				return err
+			}
+			if exists {
+				return ErrForbidden
+			}
+			return ErrNotFound
+		}
 		if err != nil {
 			return err
 		}
-		if tag.RowsAffected() == 0 {
-			return ErrNotFound
+		if err != nil {
+			return err
 		}
 		if _, err := tx.Exec(ctx, `
 			DELETE FROM playlist_tracks pt USING tracks
@@ -787,6 +843,28 @@ func (p *Playlists) RemoveMember(ctx context.Context, actorID, playlistID, membe
 		_, err = tx.Exec(ctx, `UPDATE playlists SET updated_at = now() WHERE id = $1::uuid`, playlistID)
 		return err
 	})
+}
+
+// SetMemberRole makes memberID an admin of the playlist or a plain member
+// again. Only the owner may do it; ErrNotFound covers a playlist the owner
+// doesn't own and someone who isn't a member.
+func (p *Playlists) SetMemberRole(ctx context.Context, ownerID, playlistID, memberID, role string) error {
+	if role != RoleMember && role != RoleAdmin {
+		return fmt.Errorf("unknown member role %q", role)
+	}
+	tag, err := p.pool.Exec(ctx, `
+		UPDATE playlist_members m SET role = $4
+		FROM playlists
+		WHERE playlists.id = m.playlist_id AND m.playlist_id::text = $1
+		  AND playlists.owner_id::text = $2 AND m.user_id::text = $3
+	`, playlistID, ownerID, memberID, role)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // PlaylistTrack returns a ready track in a playlist the user owns or has
