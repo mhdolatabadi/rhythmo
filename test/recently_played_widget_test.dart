@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rhythmo/features/library/presentation/rhythmo_dock.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
@@ -117,12 +118,12 @@ void main() {
 
       expect(find.text('اخیراً پخش‌شده'), findsNothing);
       expect(tester.takeException(), isNull);
-      // Search lives behind the header button, not above the list.
+      // Search lives behind the dock's bubble, not above the list.
       expect(find.byType(SearchBar), findsNothing);
       _expectTouchTarget(tester, find.byTooltip('جست‌وجو در کتابخانه'));
-      final brand = tester.getRect(find.text('ریتمو'));
+      final dock = tester.getRect(find.byType(RhythmoDock));
       final search = tester.getRect(find.byTooltip('جست‌وجو در کتابخانه'));
-      expect((brand.center.dy - search.center.dy).abs(), lessThan(4));
+      expect(dock.contains(search.center), isTrue);
       expect(tester.getSize(_row(_longPersian)).height, lessThanOrEqualTo(72));
       _expectTouchTarget(tester, _row(_longPersian));
 

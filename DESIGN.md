@@ -208,6 +208,14 @@ height; Arabic-script marks must not collide.
   stay compact visually but every touch target is still at least 48px.
 - **Direction:** RTL by default. Time and transport stay left to right, as
   on every player. Each lyric line takes the direction of its own text.
+- **The dock** (`RhythmoDock`): the main screens end in the mini player
+  above a pill of destinations (خانه، کتابخانه، پسندیده‌ها، حساب) and a
+  separate search bubble, capped at 520px and centred on wide windows.
+  The selected destination is a white pill with its name; the others show
+  only their icon, each a 48px target. The pills are flat and nearly
+  opaque, not blurred, so the mini player keeps the blur budget. The app
+  opens on the library; خانه greets, offers «ادامه بده», the newest tracks
+  and what was played lately.
 
 ## Elevation & Depth
 

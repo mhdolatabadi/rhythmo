@@ -4,6 +4,7 @@ import 'package:rhythmo/features/settings/presentation/settings_screen.dart';
 import 'package:flutter/gestures.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rhythmo/features/library/presentation/rhythmo_dock.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
@@ -1521,6 +1522,55 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('the dock moves between home, library and liked at 360 px',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pumpApp(
+      tester,
+      tokenStore: MemoryTokenStore('valid-token'),
+      tracks: FakeTracksApi(const [
+        Track(
+            id: 's1', title: 'First', contentType: 'audio/mpeg', sizeBytes: 1),
+      ]),
+    );
+
+    // The app opens on the library, with every destination a 48 px target.
+    expect(find.text('آهنگ‌ها'), findsOneWidget);
+    for (final label in ['خانه', 'کتابخانه', 'پسندیده‌ها', 'حساب']) {
+      final size = tester.getSize(find.byTooltip(label));
+      expect(size.width, greaterThanOrEqualTo(48), reason: label);
+      expect(size.height, greaterThanOrEqualTo(48), reason: label);
+    }
+    expect(find.text('کتابخانه'), findsOneWidget,
+        reason: 'the selected destination shows its name');
+
+    await tester.tap(find.byTooltip('خانه'));
+    await tester.pumpAndSettle();
+    expect(find.text('تازه اضافه‌شده'), findsOneWidget);
+    expect(find.text('First'), findsOneWidget);
+    expect(find.text('آهنگ‌ها'), findsNothing);
+    await tester.tap(find.text('First'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MiniPlayer), findsOneWidget);
+    expect(find.text('ادامه بده'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('پسندیده‌ها'));
+    await tester.pumpAndSettle();
+    expect(find.text('هنوز آهنگی را پسند نکرده‌ای'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('کتابخانه'));
+    await tester.pumpAndSettle();
+    expect(find.text('آهنگ‌ها'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('حساب'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the mini player stays a bar and leaves the library usable',
       (tester) async {
     for (final size in const [Size(360, 740), Size(1280, 800)]) {
@@ -1549,7 +1599,11 @@ void main() {
 
       final bar = tester.getRect(find.byType(MiniPlayer));
       expect(bar.height, lessThan(160), reason: '$size');
-      expect(bar.bottom, size.height, reason: '$size');
+      // The player sits on the dock, which ends at the bottom edge.
+      final dock = tester.getRect(find.byType(RhythmoDock));
+      expect(dock.bottom, size.height, reason: '$size');
+      expect(bar.bottom, lessThan(dock.bottom), reason: '$size');
+      expect(dock.height - bar.height, lessThan(80), reason: '$size');
       // The rest of the library can still be tapped.
       await tester.tap(find.text('Second'));
       await tester.pumpAndSettle();
