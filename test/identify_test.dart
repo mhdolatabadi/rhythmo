@@ -343,12 +343,12 @@ void main() {
       await tester.scrollUntilVisible(find.text('آهنگ دیگر'), 100);
       expectFits(tester, find.widgetWithText(TextButton, 'آهنگ دیگر'));
 
-      await tester.scrollUntilVisible(find.text('افزودن به کتابخانه'), -100);
-      await tester.tap(find.text('افزودن به کتابخانه'));
+      await tester.scrollUntilVisible(find.text('افزودن به موسیقی من'), -100);
+      await tester.tap(find.text('افزودن به موسیقی من'));
       await tester.pumpAndSettle();
       expect(api.saved.single.track.id, 'song');
-      expect(find.text('در کتابخانهٔ شما'), findsOneWidget);
-      expect(find.text('به کتابخانه اضافه شد.'), findsOneWidget);
+      expect(find.text('در «موسیقی من»'), findsOneWidget);
+      expect(find.text('به «موسیقی من» اضافه شد.'), findsOneWidget);
 
       await tester.scrollUntilVisible(find.text('پخش'), -100);
       await tester.tap(find.widgetWithText(FilledButton, 'پخش'));
@@ -372,7 +372,7 @@ void main() {
       recorder.finish();
       await tester.pumpAndSettle();
       expect(find.text('مال من'), findsOneWidget);
-      expect(find.text('افزودن به کتابخانه'), findsNothing);
+      expect(find.text('افزودن به موسیقی من'), findsNothing);
     });
 
     testWidgets('a refused microphone explains how to allow it',

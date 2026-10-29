@@ -1,3 +1,4 @@
+import 'package:rhythmo/core/design/design.dart';
 import 'package:flutter/material.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/persian_digits.dart';
@@ -111,68 +112,78 @@ class _SongReportsScreenState extends State<SongReportsScreen> {
             onPressed: _loading || _saving != null || _denied ? null : _load,
             icon: const Icon(RhythmoIcons.arrowsClockwise))
       ]),
-      body: SafeArea(
-          child: Center(
-              child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 900),
-                  child: _loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : ListView(padding: const EdgeInsets.all(16), children: [
-                          if (_error != null || _denied)
-                            Text(_error ?? 'دسترسی مدیریت نداری.'),
-                          if (_error != null && !_denied)
-                            TextButton(
-                                onPressed: _load,
-                                child: const Text('تلاش دوباره')),
-                          if (_reports.isEmpty && _error == null && !_denied)
-                            const Text('گزارش بازی وجود ندارد.'),
-                          for (final report in _reports)
-                            Padding(
-                                padding: const EdgeInsets.only(bottom: 24),
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      Text(report.track.title,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium),
-                                      if (report.track.artist != null)
-                                        Text(report.track.artist!),
-                                      Text(
-                                          '${_reason(report.reason)} · ${persianDigits(report.count)} گزارش'),
-                                      if (report.details?.isNotEmpty == true)
-                                        Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                                vertical: 8),
-                                            child: Text(report.details!)),
-                                      Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: [
-                                            OutlinedButton(
-                                                onPressed: _saving != null ||
-                                                        _denied
-                                                    ? null
-                                                    : () =>
-                                                        _decide(report, false),
-                                                child: const Text(
-                                                    'بستن گزارش‌ها')),
-                                            TextButton.icon(
-                                                onPressed: _saving != null ||
-                                                        _denied
-                                                    ? null
-                                                    : () =>
-                                                        _decide(report, true),
-                                                icon: const Icon(
-                                                    RhythmoIcons.trash),
-                                                label: const Text(
-                                                    'حذف از استور و فهرست‌ها'))
-                                          ]),
-                                      if (_saving == report.track.id)
-                                        const LinearProgressIndicator(),
-                                    ])),
-                        ])))));
+      body: RhythmoBackdrop(
+          child: SafeArea(
+              child: Center(
+                  child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 900),
+                      child: _loading
+                          ? const Center(child: CircularProgressIndicator())
+                          : ListView(
+                              padding: const EdgeInsets.all(16),
+                              children: [
+                                  if (_error != null || _denied)
+                                    Text(_error ?? 'دسترسی مدیریت نداری.'),
+                                  if (_error != null && !_denied)
+                                    TextButton(
+                                        onPressed: _load,
+                                        child: const Text('تلاش دوباره')),
+                                  if (_reports.isEmpty &&
+                                      _error == null &&
+                                      !_denied)
+                                    const Text('گزارش بازی وجود ندارد.'),
+                                  for (final report in _reports)
+                                    Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 24),
+                                        child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              Text(report.track.title,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleMedium),
+                                              if (report.track.artist != null)
+                                                Text(report.track.artist!),
+                                              Text(
+                                                  '${_reason(report.reason)} · ${persianDigits(report.count)} گزارش'),
+                                              if (report.details?.isNotEmpty ==
+                                                  true)
+                                                Padding(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(vertical: 8),
+                                                    child:
+                                                        Text(report.details!)),
+                                              Wrap(
+                                                  spacing: 8,
+                                                  runSpacing: 8,
+                                                  children: [
+                                                    OutlinedButton(
+                                                        onPressed: _saving !=
+                                                                    null ||
+                                                                _denied
+                                                            ? null
+                                                            : () => _decide(
+                                                                report, false),
+                                                        child: const Text(
+                                                            'بستن گزارش‌ها')),
+                                                    TextButton.icon(
+                                                        onPressed: _saving !=
+                                                                    null ||
+                                                                _denied
+                                                            ? null
+                                                            : () => _decide(
+                                                                report, true),
+                                                        icon: const Icon(
+                                                            RhythmoIcons.trash),
+                                                        label: const Text(
+                                                            'حذف از استور و فهرست‌ها'))
+                                                  ]),
+                                              if (_saving == report.track.id)
+                                                const LinearProgressIndicator(),
+                                            ])),
+                                ]))))));
 }
 
 String _reason(String reason) => switch (reason) {

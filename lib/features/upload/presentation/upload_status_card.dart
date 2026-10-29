@@ -51,8 +51,8 @@ class UploadStatusCard extends StatelessWidget {
           UploadPhase.verifying => ('$stepدر حال بررسی «$name»…', null, false),
           UploadPhase.done => (
               controller.batchTotal > 1
-                  ? '${persianDigits(controller.batchCompleted)} فایل به کتابخانه اضافه شد.'
-                  : '«${controller.uploaded?.title ?? name}» به کتابخانه اضافه شد.',
+                  ? '${persianDigits(controller.batchCompleted)} فایل به «موسیقی من» اضافه شد.'
+                  : '«${controller.uploaded?.title ?? name}» به «موسیقی من» اضافه شد.',
               1.0,
               true,
             ),

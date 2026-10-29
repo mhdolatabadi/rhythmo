@@ -80,8 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showRhythmoConfirm(
       context,
       title: 'کش پاک شود؟',
-      message:
-          'موسیقی‌های کتابخانه‌ات در فضای ابری می‌مانند و دفعه‌ی بعد دوباره '
+      message: 'آهنگ‌های «موسیقی من» در فضای ابری می‌مانند و دفعه‌ی بعد دوباره '
           'از اینترنت پخش می‌شوند.',
       confirmLabel: 'پاک کن',
       destructive: false,
@@ -137,7 +136,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('تنظیمات')),
       // Centred and capped on desktop, so rows never span the window.
-      body: Center(
+      body: RhythmoBackdrop(
+          child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: RhythmoSpace.listWidth),
           child: ListView(
@@ -276,7 +276,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 }

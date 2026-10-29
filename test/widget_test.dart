@@ -304,7 +304,7 @@ void main() {
       await tester.tap(find.text('افزودن به حساب من'));
       await tester.pumpAndSettle();
       expect(
-          find.text('برای افزودن به کتابخانه وارد حسابت شو.'), findsOneWidget);
+          find.text('برای افزودن به موسیقی من وارد حسابت شو.'), findsOneWidget);
     });
 
     testWidgets('signing in from the guest home lands in the library',
@@ -353,7 +353,7 @@ void main() {
 
     await _submit(tester, 'listener@example.com', 'correct horse');
 
-    expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
     expect(await tokens.read(), 'valid-token');
     // The header shows the account by its icon; the address is only the
     // tooltip.
@@ -386,7 +386,7 @@ void main() {
     expect(find.text('با این ایمیل قبلاً حساب ساخته شده است.'), findsOneWidget);
 
     await _submit(tester, 'new@example.com', 'long enough');
-    expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
   });
 
   testWidgets('a common password and too many attempts are explained', (
@@ -429,7 +429,7 @@ void main() {
   testWidgets('a saved valid token restores the session', (tester) async {
     await _pumpApp(tester, tokenStore: MemoryTokenStore('valid-token'));
 
-    expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
   });
 
   testWidgets('a rejected saved token is cleared and sign-in is shown', (
@@ -547,10 +547,10 @@ void main() {
     await tester.tap(find.text('افزودن از فایل'));
     await tester.pumpAndSettle();
 
-    expect(find.text('«Song» به کتابخانه اضافه شد.'), findsOneWidget);
+    expect(find.text('«Song» به «موسیقی من» اضافه شد.'), findsOneWidget);
     await tester.tap(find.byTooltip('بستن'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('به کتابخانه اضافه شد'), findsNothing);
+    expect(find.textContaining('به «موسیقی من» اضافه شد'), findsNothing);
   });
 
   testWidgets('an unsupported file shows an error', (tester) async {
@@ -621,7 +621,7 @@ void main() {
     expect(find.textContaining('مگابایت'), findsNothing);
     // Storage use lives in the account screen, not above the tracks.
     expect(find.textContaining('از ۵.۰ گیگابایت'), findsNothing);
-    expect(find.text('کتابخانهٔ شما خالی است'), findsNothing);
+    expect(find.text('«موسیقی من» خالی است'), findsNothing);
   });
 
   testWidgets('settings opens playlists even when their tab is hidden',
@@ -768,7 +768,7 @@ void main() {
     expect(find.text('۲ آهنگ'), findsOneWidget);
     // The library list has no search field of its own.
     expect(find.byType(SearchBar), findsNothing);
-    await tester.tap(find.byTooltip('جست‌وجو در کتابخانه'));
+    await tester.tap(find.byTooltip('جست‌وجو در موسیقی من'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(SearchBar), 'missing');
     await tester.pumpAndSettle();
@@ -777,7 +777,7 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, 'پاک کردن جست‌وجو'));
     await tester.pumpAndSettle();
 
-    expect(find.text('در همهٔ کتابخانه بگرد'), findsOneWidget);
+    expect(find.text('در همهٔ موسیقی‌ات بگرد'), findsOneWidget);
   });
 
   testWidgets(
@@ -1062,7 +1062,7 @@ void main() {
       expect(api.submitted, isEmpty);
       expect(find.text('فهرست پخش «Road Trip» با ۱ آهنگ ساخته شد.'),
           findsOneWidget);
-      expect(find.text('۲ آهنگ در کتابخانه‌ات پیدا نشد:'), findsOneWidget);
+      expect(find.text('۲ آهنگ در «موسیقی من» پیدا نشد:'), findsOneWidget);
       expect(find.text('Somebody، Somebody Else'), findsOneWidget);
       expect(find.text('آهنگ پیدا نشده'), findsOneWidget);
       final dialog = tester.getRect(find.byType(AlertDialog));
@@ -1283,7 +1283,7 @@ void main() {
         openRead: () => Stream.value([1, 2, 3, 4]),
       )),
     );
-    expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
 
     await tester.tap(find.byTooltip('افزودن موسیقی'));
     await tester.pumpAndSettle();
@@ -1291,7 +1291,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(ListTile, 'Song'), findsOneWidget);
-    expect(find.text('کتابخانهٔ شما خالی است'), findsNothing);
+    expect(find.text('«موسیقی من» خالی است'), findsNothing);
   });
 
   testWidgets('deleting a cloud track requires confirmation and removes it', (
@@ -1371,7 +1371,7 @@ void main() {
       tokenStore: MemoryTokenStore('valid-token'),
       tracks: tracks,
     );
-    expect(find.text('کتابخانه دریافت نشد'), findsOneWidget);
+    expect(find.text('«موسیقی من» دریافت نشد'), findsOneWidget);
 
     tracks.listError = null;
     await tester.tap(find.text('تلاش دوباره'));
@@ -1400,13 +1400,13 @@ void main() {
     await _submit(tester, 'listener@example.com', 'correct horse');
 
     expect(find.text('Private'), findsNothing);
-    expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
   });
 
   testWidgets('the interface is right-to-left Persian', (tester) async {
     await _pumpApp(tester, tokenStore: MemoryTokenStore('valid-token'));
 
-    final context = tester.element(find.text('کتابخانهٔ شما خالی است'));
+    final context = tester.element(find.text('«موسیقی من» خالی است'));
     expect(Directionality.of(context), TextDirection.rtl);
     expect(Localizations.localeOf(context), const Locale('fa'));
     // In RTL the floating button sits on the left and the logout action on
@@ -1474,7 +1474,7 @@ void main() {
       ]),
     );
     expect(find.text('پخش تصادفی'), findsOneWidget);
-    await tester.tap(find.byTooltip('جست‌وجو در کتابخانه'));
+    await tester.tap(find.byTooltip('جست‌وجو در موسیقی من'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(SearchBar), 'Beta');
     await tester.pump();
@@ -1539,12 +1539,12 @@ void main() {
 
     // The app opens on the library, with every destination a 48 px target.
     expect(find.text('آهنگ‌ها'), findsOneWidget);
-    for (final label in ['خانه', 'کتابخانه', 'پسندیده‌ها', 'حساب']) {
+    for (final label in ['خانه', 'موسیقی من', 'پسندیده‌ها', 'حساب']) {
       final size = tester.getSize(find.byTooltip(label));
       expect(size.width, greaterThanOrEqualTo(48), reason: label);
       expect(size.height, greaterThanOrEqualTo(48), reason: label);
     }
-    expect(find.text('کتابخانه'), findsOneWidget,
+    expect(find.text('موسیقی من'), findsOneWidget,
         reason: 'the selected destination shows its name');
 
     await tester.tap(find.byTooltip('خانه'));
@@ -1561,7 +1561,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('هنوز آهنگی را پسند نکرده‌ای'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('کتابخانه'));
+    await tester.tap(find.byTooltip('موسیقی من'));
     await tester.pumpAndSettle();
     expect(find.text('آهنگ‌ها'), findsOneWidget);
 

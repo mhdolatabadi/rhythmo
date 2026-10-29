@@ -1,3 +1,4 @@
+import 'package:rhythmo/core/design/design.dart';
 import 'package:flutter/material.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/core/widgets/app_loading_screen.dart';
@@ -53,7 +54,8 @@ class _ConfigurationRequiredScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: Center(
+      body: RhythmoBackdrop(
+          child: Center(
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
@@ -62,7 +64,7 @@ class _ConfigurationRequiredScreen extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
         ),
-      ),
+      )),
     );
   }
 }
@@ -75,7 +77,8 @@ class _BackendUnavailableScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
+      body: RhythmoBackdrop(
+          child: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -102,7 +105,7 @@ class _BackendUnavailableScreen extends StatelessWidget {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 }

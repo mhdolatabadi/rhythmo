@@ -185,7 +185,7 @@ class _PopularPlaylistsScreenState extends State<PopularPlaylistsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('پاک کردن فهرست پخش؟'),
         content: Text('«${playlist.name}» برای همیشه پاک می‌شود و لینکش '
-            'دیگر کار نمی‌کند. آهنگ‌هایش در کتابخانهٔ صاحبانشان می‌مانند. '
+            'دیگر کار نمی‌کند. آهنگ‌هایش پیش صاحبانشان می‌مانند. '
             'این کار برگشت‌پذیر نیست.'),
         actions: [
           TextButton(

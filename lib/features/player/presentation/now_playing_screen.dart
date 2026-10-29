@@ -824,7 +824,7 @@ class QueueSheet extends StatelessWidget {
                           icon: RhythmoIcons.playlist,
                           title: 'آهنگ دیگری در صف نیست.',
                           message:
-                              'آهنگ بعدی را از کتابخانه یا فهرست پخش انتخاب کنید.',
+                              'آهنگ بعدی را از «موسیقی من» یا فهرست پخش انتخاب کنید.',
                         )
                       : ListView.builder(
                           padding: rhythmoListBottomPadding(context),

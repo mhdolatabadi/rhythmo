@@ -1,3 +1,4 @@
+import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/presentation/admin_screen.dart';
@@ -302,7 +303,8 @@ class _RestoreFailedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
+      body: RhythmoBackdrop(
+          child: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -318,7 +320,7 @@ class _RestoreFailedScreen extends StatelessWidget {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 }

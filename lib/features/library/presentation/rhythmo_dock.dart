@@ -7,7 +7,7 @@ import 'package:rhythmo/features/player/presentation/mini_player.dart';
 /// Where the dock's pill takes the listener.
 enum DockDestination {
   home('خانه', RhythmoIcons.house, RhythmoIcons.houseFill),
-  library('کتابخانه', RhythmoIcons.books, RhythmoIcons.booksFill),
+  library('موسیقی من', RhythmoIcons.books, RhythmoIcons.booksFill),
   liked('پسندیده‌ها', RhythmoIcons.heart, RhythmoIcons.heartFill),
   account('حساب', RhythmoIcons.user, RhythmoIcons.userFill);
 
@@ -83,7 +83,7 @@ class RhythmoDock extends StatelessWidget {
                     const SizedBox(width: RhythmoSpace.sm),
                     _DockPill(
                       child: IconButton(
-                        tooltip: 'جست‌وجو در کتابخانه',
+                        tooltip: 'جست‌وجو در موسیقی من',
                         onPressed: onSearch,
                         icon: const Icon(RhythmoIcons.magnifyingGlass),
                       ),

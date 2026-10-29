@@ -1197,7 +1197,7 @@ class _RhythmoBrand extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'کتابخانهٔ موسیقی',
+                          'موسیقی شخصی تو',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -2602,7 +2602,7 @@ class _EmptyLibrary extends StatelessWidget {
         ],
         const _LibraryState(
           icon: RhythmoIcons.musicNotes,
-          title: 'کتابخانهٔ شما خالی است',
+          title: '«موسیقی من» خالی است',
           message:
               'با «افزودن موسیقی» آهنگ آپلود کن یا اجازه بده ریتمو آهنگ‌های دستگاه را هم همین‌جا نشان بدهد.',
         ),
@@ -2622,7 +2622,7 @@ class _LoadError extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: _LibraryState(
         icon: RhythmoIcons.cloudSlash,
-        title: 'کتابخانه دریافت نشد',
+        title: '«موسیقی من» دریافت نشد',
         message: 'اتصال اینترنت را بررسی کن و دوباره تلاش کن.',
         action: FilledButton.icon(
           onPressed: onRetry,
@@ -2979,7 +2979,7 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
       }
       return centered(const _LibraryState(
         icon: RhythmoIcons.magnifyingGlass,
-        title: 'در همهٔ کتابخانه بگرد',
+        title: 'در همهٔ موسیقی‌ات بگرد',
         message:
             'آهنگ‌ها، فهرست‌های پخش خودت و فهرست‌های محبوب، همه با یک جست‌وجو.',
       ));

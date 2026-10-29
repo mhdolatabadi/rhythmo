@@ -88,7 +88,7 @@ class HomeView extends StatelessWidget {
                       padding: const EdgeInsets.only(top: RhythmoSpace.xxxl),
                       child: RhythmoStateView(
                         icon: RhythmoIcons.musicNote,
-                        title: 'کتابخانه‌ات هنوز خالی است.',
+                        title: '«موسیقی من» هنوز خالی است.',
                         message: 'آهنگ‌هایت را اضافه کن تا اینجا پیدا شوند.',
                         action: FilledButton.icon(
                           onPressed: onAddMusic,

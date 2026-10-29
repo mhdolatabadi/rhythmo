@@ -8,18 +8,18 @@ import (
 
 // Everything the bots say, in one place.
 const (
-	msgWelcome     = "سلام! این ربات ریتمو است. فایل‌های صوتی را اینجا بفرستید تا به کتابخانهٔ ریتمو شما اضافه شوند.\n\n" + msgHowToLink
+	msgWelcome     = "سلام! این ربات ریتمو است. فایل‌های صوتی را اینجا بفرستید تا به «موسیقی من» در ریتمو اضافه شوند.\n\n" + msgHowToLink
 	msgHowToLink   = "برای اتصال حساب ریتمو: در اپ ریتمو به «تنظیمات ← اتصال به بات» بروید، «دریافت کد» را بزنید و کد ۸ رقمی را همین‌جا بفرستید."
 	msgBadCode     = "این کد درست نیست یا منقضی شده است. از اپ ریتمو کد تازه بگیرید و دوباره بفرستید."
 	msgLocked      = "چند بار کد اشتباه فرستاده‌اید. یک ساعت دیگر دوباره امتحان کنید."
 	msgUnlinked    = "اتصال این گفتگو به حساب ریتمو قطع شد. برای اتصال دوباره، از اپ ریتمو کد تازه بگیرید."
 	msgNotLinked   = "این گفتگو هنوز به حساب ریتمو وصل نیست.\n\n" + msgHowToLink
 	msgPrivateOnly = "ربات ریتمو فقط در گفتگوی خصوصی کار می‌کند."
-	msgHelp        = "فایل صوتی (mp3، m4a، flac، ogg، wav و …) بفرستید تا به کتابخانهٔ ریتمو اضافه شود.\n\n" +
+	msgHelp        = "فایل صوتی (mp3، m4a، flac، ogg، wav و …) بفرستید تا به «موسیقی من» در ریتمو اضافه شود.\n\n" +
 		"/status حساب متصل\n/logout قطع اتصال\n/help همین راهنما\n\n" + msgHowToLink
 	msgTryAgain  = "مشکلی پیش آمد. کمی بعد دوباره امتحان کنید."
 	msgSendAudio = "فایل صوتی بفرستید، یا /help را ببینید."
-	msgQueued    = "فایل دریافت شد و در حال اضافه شدن به کتابخانه است…"
+	msgQueued    = "فایل دریافت شد و در حال اضافه شدن به «موسیقی من» است…"
 )
 
 func msgLinked(email string) string {
@@ -27,11 +27,11 @@ func msgLinked(email string) string {
 }
 
 func msgStatus(email string) string {
-	return fmt.Sprintf("این گفتگو به حساب %s وصل است. فایل‌های صوتی که می‌فرستید به کتابخانهٔ همین حساب اضافه می‌شوند.", email)
+	return fmt.Sprintf("این گفتگو به حساب %s وصل است. فایل‌های صوتی که می‌فرستید به «موسیقی من» در همین حساب اضافه می‌شوند.", email)
 }
 
 func msgImported(title string) string {
-	return fmt.Sprintf("«%s» به کتابخانهٔ ریتمو اضافه شد.", title)
+	return fmt.Sprintf("«%s» به «موسیقی من» در ریتمو اضافه شد.", title)
 }
 
 func msgRefused(reason string, maxMB int64) string {
@@ -41,7 +41,7 @@ func msgRefused(reason string, maxMB int64) string {
 	case ReasonTooLarge:
 		return fmt.Sprintf("حجم فایل بیشتر از %s مگابایت است و از طریق ربات قابل دریافت نیست.", display.PersianDigits(maxMB))
 	case ReasonQuota:
-		return "فضای کتابخانهٔ شما پر است. برای افزودن آهنگ تازه، چند آهنگ را از کتابخانه حذف کنید."
+		return "فضای «موسیقی من» پر است. برای افزودن آهنگ تازه، چند آهنگ را از آن حذف کنید."
 	case ReasonPending:
 		return "چند فایل در حال اضافه شدن است. صبر کنید تمام شوند و دوباره بفرستید."
 	case ReasonDisabled:

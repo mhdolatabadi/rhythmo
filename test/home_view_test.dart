@@ -118,10 +118,10 @@ void main() {
     ));
 
     expect(find.text('خانه'), findsOneWidget);
-    expect(find.text('کتابخانه'), findsNothing);
+    expect(find.text('موسیقی من'), findsNothing);
     await tester.tap(find.byTooltip('پسندیده‌ها'));
     expect(picked, DockDestination.liked);
-    await tester.tap(find.byTooltip('جست‌وجو در کتابخانه'));
+    await tester.tap(find.byTooltip('جست‌وجو در موسیقی من'));
     expect(searched, isTrue);
     expect(
         tester.getSemantics(find.byTooltip('خانه')),

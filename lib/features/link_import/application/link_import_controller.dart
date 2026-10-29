@@ -76,7 +76,7 @@ class LinkImportController extends ChangeNotifier {
       return (
         queued: true,
         message:
-            'در حال اضافه کردن «${job.fileName}»؛ وقتی آماده شد در کتابخانه می‌آید.',
+            'در حال اضافه کردن «${job.fileName}»؛ وقتی آماده شد در «موسیقی من» می‌آید.',
       );
     } on ApiException catch (e) {
       return (queued: false, message: linkImportMessage(e.code));
@@ -108,8 +108,8 @@ class LinkImportController extends ChangeNotifier {
       return (
         queued: true,
         message: jobs.length == 1
-            ? 'در حال اضافه کردن «${jobs.single.fileName}»؛ وقتی آماده شد در کتابخانه می‌آید.'
-            : '${jobs.length} فایل در حال اضافه شدن است؛ وقتی آماده شوند در کتابخانه می‌آیند.',
+            ? 'در حال اضافه کردن «${jobs.single.fileName}»؛ وقتی آماده شد در «موسیقی من» می‌آید.'
+            : '${jobs.length} فایل در حال اضافه شدن است؛ وقتی آماده شوند در «موسیقی من» می‌آیند.',
       );
     } on ApiException catch (e) {
       return (queued: false, message: linkImportMessage(e.code));
