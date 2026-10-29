@@ -215,6 +215,33 @@ class PlaylistsController extends ChangeNotifier {
     }
   }
 
+  /// Mutes or unmutes a subscribed channel, the same way as [setSubscription].
+  Future<LikeResult> setMuted(String shareToken, PlaylistSubscription current,
+      {required void Function(PlaylistSubscription subscription)
+          onChange}) async {
+    final token = _token();
+    final api = _subscriptions;
+    if (token == null || api == null || _subscribing.contains(shareToken)) {
+      return LikeResult.failed;
+    }
+    _subscribing.add(shareToken);
+    onChange(current.withMuted(!current.muted));
+    notifyListeners();
+    try {
+      onChange(await api.setPlaylistMuted(token, shareToken, !current.muted));
+      return LikeResult.done;
+    } on ApiException catch (e) {
+      onChange(current);
+      return e.statusCode == 404 ? LikeResult.gone : LikeResult.failed;
+    } catch (_) {
+      onChange(current);
+      return LikeResult.failed;
+    } finally {
+      _subscribing.remove(shareToken);
+      notifyListeners();
+    }
+  }
+
   Future<bool> load() async {
     final token = _token();
     if (token == null) return false;
@@ -408,11 +435,12 @@ class PlaylistsController extends ChangeNotifier {
     }
   }
 
-  Future<bool> rename(String id, String name) async {
+  /// Renames the playlist, and sets its description unless that is null.
+  Future<bool> rename(String id, String name, {String? description}) async {
     final token = _token();
     if (token == null) return false;
     try {
-      await _api.renamePlaylist(token, id, name);
+      await _api.renamePlaylist(token, id, name, description: description);
       await load();
       return true;
     } catch (_) {
@@ -465,7 +493,12 @@ class PlaylistsController extends ChangeNotifier {
     }
   }
 
-  /// The owner takes a member out, with the tracks they added.
+  /// The owner makes a member an admin of the channel, or takes it back.
+  Future<bool> setMemberAdmin(String id, String memberId, bool admin) =>
+      _attempt(
+          (token) => _api.setPlaylistMemberAdmin(token, id, memberId, admin));
+
+  /// The owner or an admin takes a member out, with the tracks they added.
   Future<bool> removeMember(String id, String memberId) =>
       _attempt((token) => _api.removePlaylistMember(token, id, memberId));
 

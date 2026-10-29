@@ -37,6 +37,21 @@ class FakeNotificationsApi implements NotificationsApi {
         subscribed: subscribed, subscriberCount: who.length);
   }
 
+  final muted = <String>{};
+
+  @override
+  Future<PlaylistSubscription> setPlaylistMuted(
+      String t, String shareToken, bool mute) async {
+    if (subscribeStatus != null) {
+      throw ApiException('$subscribeStatus', statusCode: subscribeStatus);
+    }
+    mute ? muted.add(shareToken) : muted.remove(shareToken);
+    return PlaylistSubscription(
+        subscribed: true,
+        subscriberCount: subscribers[shareToken]?.length ?? 1,
+        muted: mute);
+  }
+
   @override
   Future<List<SubscribedPlaylist>> listSubscriptions(String t) async =>
       channels;

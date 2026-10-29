@@ -237,7 +237,11 @@ class _ChannelList extends StatelessWidget {
               return _Row(
                 key: ValueKey(channel.shareToken),
                 title: channel.name,
-                subtitle: '${persianDigits(channel.trackCount)} آهنگ',
+                subtitle: [
+                  '${persianDigits(channel.trackCount)} آهنگ',
+                  if (channel.muted) 'بی‌صدا',
+                ].join(' · '),
+                muted: channel.muted,
                 unread: channel.unreadCount > 0,
                 badge: channel.unreadCount > 0
                     ? persianDigits(channel.unreadCount)
@@ -284,8 +288,11 @@ class _Row extends StatelessWidget {
     required this.onTap,
     this.trailing,
     this.badge,
+    this.muted = false,
   });
 
+  /// A muted channel's badge is grey, as in a messenger.
+  final bool muted;
   final String title;
   final String subtitle;
   final bool unread;
@@ -331,7 +338,12 @@ class _Row extends StatelessWidget {
               ? Semantics(
                   label: '$badge صوت خوانده‌نشده',
                   excludeSemantics: true,
-                  child: Badge(label: Text(badge!)),
+                  child: Badge(
+                    label: Text(badge!),
+                    backgroundColor:
+                        muted ? scheme.surfaceContainerHighest : null,
+                    textColor: muted ? scheme.onSurfaceVariant : null,
+                  ),
                 )
               : trailing == null
                   ? null

@@ -134,6 +134,33 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
     );
   }
 
+  Future<void> _mute() async {
+    final current = _playlist?.subscription;
+    if (current == null || !current.subscribed) return;
+    final result = await widget.controller.setMuted(
+      widget.shareToken,
+      current,
+      onChange: (subscription) {
+        if (mounted) {
+          setState(() => _playlist = _playlist?.withSubscription(subscription));
+        }
+      },
+    );
+    if (!mounted) return;
+    final now = _playlist?.subscription;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(switch (result) {
+          LikeResult.done => now?.muted == true
+              ? 'بی‌صدا شد. صوت‌های تازه در اعلان‌ها می‌مانند ولی خبرت نمی‌کنیم.'
+              : 'صدادار شد. صوت‌های تازه را خبرت می‌کنیم.',
+          LikeResult.gone => 'این فهرست پخش دیگر عمومی نیست.',
+          LikeResult.failed => 'تغییر اعلان ثبت نشد. دوباره تلاش کن.',
+        }),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -202,6 +229,9 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
                 onSubscribe: widget.controller.isSubscribing(widget.shareToken)
                     ? null
                     : _subscribe,
+                onMute: widget.controller.isSubscribing(widget.shareToken)
+                    ? null
+                    : _mute,
               ),
             ),
         },
@@ -218,10 +248,14 @@ class _Contents extends StatelessWidget {
     this.onSave,
     this.onLike,
     this.onSubscribe,
+    this.onMute,
     this.onSignIn,
   });
 
   final VoidCallback? onSignIn;
+
+  /// Mutes or unmutes the subscription; null while a change is on its way.
+  final VoidCallback? onMute;
 
   /// Subscribes or unsubscribes; null while one is on its way.
   final VoidCallback? onSubscribe;
@@ -295,6 +329,15 @@ class _Contents extends StatelessWidget {
                           ].join(' · '),
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
+                        if (playlist.description.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            playlist.description,
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -319,6 +362,12 @@ class _Contents extends StatelessWidget {
                     PlaylistSubscribeButton(
                       subscription: playlist.subscription!,
                       onPressed: onSubscribe,
+                    ),
+                  if (playlist.subscription?.subscribed == true &&
+                      !playlist.isOwner)
+                    PlaylistMuteButton(
+                      subscription: playlist.subscription!,
+                      onPressed: onMute,
                     ),
                   PlaylistLikeButton(likes: playlist.likes, onPressed: onLike),
                   if (onSave != null && tracks.isNotEmpty)
@@ -491,6 +540,31 @@ class PlaylistSubscribeButton extends StatelessWidget {
               icon: const Icon(RhythmoIcons.bell),
               label: const Text('عضویت'),
             ),
+    );
+  }
+}
+
+/// Mutes a subscribed channel, or unmutes it. Muted shows a struck bell
+/// and says so in its tooltip, so the state never rests on color alone.
+class PlaylistMuteButton extends StatelessWidget {
+  const PlaylistMuteButton({
+    super.key,
+    required this.subscription,
+    required this.onPressed,
+  });
+
+  final PlaylistSubscription subscription;
+
+  /// Null while a change is on its way.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = subscription.muted;
+    return IconButton.outlined(
+      tooltip: muted ? 'صدادار کردن اعلان‌ها' : 'بی‌صدا کردن اعلان‌ها',
+      onPressed: onPressed,
+      icon: Icon(muted ? RhythmoIcons.bellSlash : RhythmoIcons.bell),
     );
   }
 }
