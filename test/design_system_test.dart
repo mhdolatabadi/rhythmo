@@ -78,6 +78,9 @@ void main() {
         // Light text stays readable on every artwork tint.
         expect(contrast(RhythmoColors.onSurfaceVariant, artworkTint('seed-$i')),
             greaterThanOrEqualTo(4.5));
+        // Only the brand's two lights and what lies between them.
+        final hue = HSLColor.fromColor(artworkTint('seed-$i')).hue;
+        expect(hue, inInclusiveRange(247, 359));
       }
     });
 

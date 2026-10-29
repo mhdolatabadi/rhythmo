@@ -71,6 +71,8 @@ class RhythmoTrackRow extends StatelessWidget {
     this.leadingIcon = RhythmoIcons.musicNote,
     this.onTap,
     this.trailing,
+    this.contentPadding = const EdgeInsetsDirectional.fromSTEB(
+        RhythmoSpace.lg, 0, RhythmoSpace.xs, 0),
   });
 
   /// The track's id, which picks its artwork colour.
@@ -86,13 +88,15 @@ class RhythmoTrackRow extends StatelessWidget {
   final VoidCallback? onTap;
   final Widget? trailing;
 
+  /// Insets around the row; zero where it sits in a padded column.
+  final EdgeInsetsGeometry contentPadding;
+
   @override
   Widget build(BuildContext context) {
     final line = detail == null ? subtitle : '$subtitle · $detail';
     return ListTile(
       minTileHeight: 56,
-      contentPadding: const EdgeInsetsDirectional.fromSTEB(
-          RhythmoSpace.lg, 0, RhythmoSpace.xs, 0),
+      contentPadding: contentPadding,
       onTap: onTap,
       selected: active,
       leading: RhythmoArtworkTile(

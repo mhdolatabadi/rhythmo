@@ -304,13 +304,15 @@ class RhythmoTokens extends ThemeExtension<RhythmoTokens> {
   }
 }
 
-/// A dark, saturated colour picked from [seed], standing in for cover art
-/// until tracks have it. Every hue stays dark enough for light text on it.
+/// A dark colour picked from [seed], standing in for cover art until tracks
+/// have it. Hues stay between violet and ember, the brand's two lights, and
+/// dark enough for light text on them.
 Color artworkTint(String seed) {
   // FNV-1a, so a track keeps its colour across launches.
   var hash = 0x811c9dc5;
   for (final unit in seed.codeUnits) {
     hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
   }
-  return HSLColor.fromAHSL(1, (hash % 360).toDouble(), 0.42, 0.2).toColor();
+  final hue = 248 + hash % 110;
+  return HSLColor.fromAHSL(1, hue % 360.0, 0.42, 0.2).toColor();
 }

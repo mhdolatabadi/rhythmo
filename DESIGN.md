@@ -131,9 +131,12 @@ thing that moves on its own.
 A near-black night with one warm and one cool light.
 
 ### Primary
-- **Ember** (#FF626A): primary buttons, the play control, the playing line
-  in lyrics, sliders, focus rings and the active tab. Text on it is
-  **On-ember** (#250005).
+- **Ember** (#FF626A): primary buttons, the playing line in lyrics,
+  sliders, focus rings and the active tab. Text on it is **On-ember**
+  (#250005). The play control is the exception: it is white (Text on
+  night), the brightest thing on the player.
+- **Artwork tints** (`artworkTint`): tiles standing in for missing cover
+  art take dark hues between violet and ember only, never green or blue.
 - **Ember Container** (#462026) with **On-ember Container** (#FFDADB): the
   playing track's artwork tile and other "now" highlights.
 
@@ -156,8 +159,10 @@ A near-black night with one warm and one cool light.
 - **Glass Border** (white at 20%) and **Glass Border Soft** (white at 12%).
 
 ### Named Rules
-**The One Light Rule.** A screen has one ember-filled control at a time:
-the action that matters most. Everything else is tonal, outlined or text.
+**The One Light Rule.** A screen has one bright filled control at a time:
+the action that matters most. On the now-playing screen and the mini
+player that is the white play button; elsewhere it is ember. Everything
+else is tonal, outlined or text.
 
 **The No-Grey-On-Colour Rule.** Text on a tint or container uses that
 container's own "on" colour, never a generic grey.
@@ -217,7 +222,9 @@ Depth is a hybrid of tonal glass and a few soft shadows. Three glass levels
 
 ### Shadow Vocabulary
 - **Lift** (`0 12px 32px #00000073`): chrome and panels only.
-- **Artwork** (`0 18px 42px #00000073`): the now-playing artwork.
+- **Artwork** (`0 16px 32px -12px #00000073`): the now-playing artwork,
+  about 80% of the column wide, with an 18px radius. It holds still while
+  playing and paused alike.
 
 ### Named Rules
 **The Blur Budget Rule.** At most two blurred layers are on screen at once,
