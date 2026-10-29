@@ -9,7 +9,7 @@ import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/app/app_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
-import 'package:rhythmo/core/widgets/rhythmo_mark.dart';
+import 'package:rhythmo/core/widgets/rhythmo_brand.dart';
 import 'package:rhythmo/app/app_configuration.dart';
 import 'package:rhythmo/core/search_text.dart';
 import 'package:rhythmo/features/auth/presentation/email_verification_screen.dart';
@@ -25,6 +25,8 @@ import 'package:rhythmo/features/library/application/track_groups.dart';
 import 'package:rhythmo/features/library/application/track_sort.dart';
 import 'package:rhythmo/features/library/application/local_audio_controller.dart';
 import 'package:rhythmo/features/library/data/track.dart';
+import 'package:rhythmo/features/library/presentation/home_view.dart';
+import 'package:rhythmo/features/library/presentation/rhythmo_dock.dart';
 import 'package:rhythmo/features/library/presentation/track_metadata_editor.dart';
 import 'package:rhythmo/features/player/application/favorite_tracks.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
@@ -142,6 +144,9 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   late TabController _tabs;
   List<LibraryTab> _visibleTabs = [];
+
+  /// The dock's selection; the app opens on the library.
+  DockDestination _destination = DockDestination.library;
   late final RecentSearchesController _recentSearches =
       widget.recentSearches ?? RecentSearchesController();
 
@@ -692,11 +697,6 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   List<Widget> _accountActions(BuildContext context) {
     final wideActions = widget.onAdmin == null ? 720 : 960;
-    final search = IconButton(
-      tooltip: 'جست‌وجو در کتابخانه',
-      onPressed: _openSearch,
-      icon: const Icon(RhythmoIcons.magnifyingGlass),
-    );
     final identify = widget.identify;
     final identifySong = identify == null
         ? null
@@ -725,7 +725,6 @@ class _LibraryScreenState extends State<LibraryScreen>
         if (popular != null) popular,
         if (storeButton != null) storeButton,
         if (identifySong != null) identifySong,
-        search,
         const SizedBox(width: 8),
         _AccountChip(email: widget.email, verified: widget.verified),
         if (widget.onAdmin != null)
@@ -752,7 +751,6 @@ class _LibraryScreenState extends State<LibraryScreen>
       if (popular != null) popular,
       if (storeButton != null) storeButton,
       if (identifySong != null) identifySong,
-      search,
       PopupMenuButton<_HeaderAction>(
         tooltip: 'حساب و تنظیمات',
         icon: AccountAvatar(verified: widget.verified),
@@ -846,37 +844,106 @@ class _LibraryScreenState extends State<LibraryScreen>
       splashBorderRadius: BorderRadius.circular(RhythmoRadii.pill),
       tabs: [for (final tab in _visibleTabs) _TabLabel(tab.label)],
     );
-    final bar = wide
+    return SliverOverlapAbsorber(
+      handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+      sliver: _appBar(context, bottom: tabs),
+    );
+  }
+
+  /// The brand and actions, over every dock destination; the library adds
+  /// its category tabs as [bottom].
+  Widget _appBar(BuildContext context, {PreferredSizeWidget? bottom}) {
+    final wide = MediaQuery.sizeOf(context).width >= 720;
+    return wide
         ? SliverAppBar(
             pinned: true,
             toolbarHeight: 76,
             titleSpacing: 32,
-            title: const _RhythmoBrand(compact: false),
+            title: const RhythmoBrand(compact: false),
             actions: _accountActions(context),
-            bottom: tabs,
+            bottom: bottom,
           )
         : SliverAppBar(
             pinned: true,
             titleSpacing: 16,
-            title: const _RhythmoBrand(compact: true),
+            title: const RhythmoBrand(compact: true),
             // Opaque, because the lists scroll underneath it.
             backgroundColor: Theme.of(context).colorScheme.surface,
             actions: _accountActions(context),
-            bottom: tabs,
+            bottom: bottom,
           );
-    return SliverOverlapAbsorber(
-      handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-      sliver: bar,
-    );
   }
+
+  void _selectDestination(DockDestination destination) {
+    if (destination == DockDestination.account) {
+      // Account and settings open as their own page.
+      _openSettings();
+      return;
+    }
+    setState(() => _destination = destination);
+  }
+
+  Widget _destinationBody(BuildContext context) => switch (_destination) {
+        DockDestination.home => HomeView(
+            header: _appBar(context),
+            player: widget.player,
+            changes: _libraryChanges,
+            tracks: _unifiedTracks,
+            recent: widget.recent,
+            onAddMusic: _showAddMenu,
+          ),
+        DockDestination.liked => _likedView(context),
+        DockDestination.library || DockDestination.account => NestedScrollView(
+            headerSliverBuilder: (context, _) => [_header(context)],
+            body: TabBarView(
+              controller: _tabs,
+              physics: libraryTabViewPhysics(),
+              children: [
+                for (final tab in _visibleTabs)
+                  _Tab(key: ValueKey(tab), child: _tabBody(tab))
+              ],
+            ),
+          ),
+      };
+
+  /// «پسندیده‌ها» from the dock: the liked songs with the library's row
+  /// actions.
+  Widget _likedView(BuildContext context) => NestedScrollView(
+        headerSliverBuilder: (context, _) => [
+          SliverOverlapAbsorber(
+            handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+            sliver: _appBar(context),
+          ),
+        ],
+        body: Builder(builder: (context) => _favoritesBody()),
+      );
+
+  Widget _favoritesBody() => ListenableBuilder(
+      listenable: Listenable.merge([_libraryChanges, widget.player.favorites]),
+      builder: (context, _) {
+        final tracks = widget.player.favorites.likedFrom(_unifiedTracks());
+        return tracks.isEmpty
+            ? const RhythmoStateView(
+                icon: RhythmoIcons.heart,
+                title: 'هنوز آهنگی را پسند نکرده‌ای',
+                message: 'با قلب کنار هر آهنگ، اینجا جمعش کن.',
+              )
+            : _trackList(tracks);
+      });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       extendBody: true,
-      bottomNavigationBar: MiniPlayer(player: widget.player),
+      bottomNavigationBar: RhythmoDock(
+        player: widget.player,
+        selected: _destination,
+        onSelect: _selectDestination,
+        onSearch: _openSearch,
+      ),
       floatingActionButtonLocation: const _LibraryAddButtonLocation(),
-      floatingActionButton: _visibleTabs[_tabs.index] != LibraryTab.tracks
+      floatingActionButton: _destination != DockDestination.library ||
+              _visibleTabs[_tabs.index] != LibraryTab.tracks
           ? null
           : FloatingActionButton(
               heroTag: 'add-music',
@@ -884,19 +951,7 @@ class _LibraryScreenState extends State<LibraryScreen>
               onPressed: _showAddMenu,
               child: const Icon(RhythmoIcons.plus),
             ),
-      body: RhythmoBackdrop(
-        child: NestedScrollView(
-          headerSliverBuilder: (context, _) => [_header(context)],
-          body: TabBarView(
-            controller: _tabs,
-            physics: libraryTabViewPhysics(),
-            children: [
-              for (final tab in _visibleTabs)
-                _Tab(key: ValueKey(tab), child: _tabBody(tab))
-            ],
-          ),
-        ),
-      ),
+      body: RhythmoBackdrop(child: _destinationBody(context)),
     );
   }
 
@@ -912,16 +967,7 @@ class _LibraryScreenState extends State<LibraryScreen>
         LibraryTab.newOnDevice => _newOnDeviceTab(),
         LibraryTab.albums => _groupsTab(albums: true),
         LibraryTab.artists => _groupsTab(albums: false),
-        LibraryTab.favorites => ListenableBuilder(
-            listenable:
-                Listenable.merge([_libraryChanges, widget.player.favorites]),
-            builder: (context, _) {
-              final tracks =
-                  widget.player.favorites.likedFrom(_unifiedTracks());
-              return tracks.isEmpty
-                  ? const Center(child: Text('هنوز آهنگی را پسند نکرده‌ای'))
-                  : _trackList(tracks);
-            }),
+        LibraryTab.favorites => _favoritesBody(),
       };
 
   /// The device's music added in the last 30 days, newest first, with the
@@ -1124,62 +1170,6 @@ enum _TrackAction {
   like,
   publish,
   delete,
-}
-
-class _RhythmoBrand extends StatelessWidget {
-  const _RhythmoBrand({required this.compact});
-
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final showSubtitle = !compact && constraints.maxWidth >= 220;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            RhythmoMark(size: compact ? 32 : 44),
-            const SizedBox(width: 12),
-            Flexible(
-              child: showSubtitle
-                  ? const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'ریتمو',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Text(
-                          'کتابخانهٔ موسیقی',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    )
-                  : const Text(
-                      'ریتمو',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }
 
 class _AccountChip extends StatelessWidget {
@@ -1485,6 +1475,7 @@ class _TrackGroupScreen extends StatelessWidget {
                                     alignment: WrapAlignment.center,
                                     children: [
                                       FilledButton.icon(
+                                        style: rhythmoPlayStyle(context),
                                         onPressed: () =>
                                             player.playFrom(groupTracks, 0),
                                         icon: const Icon(RhythmoIcons.playFill),
@@ -2560,7 +2551,7 @@ class _EmptyLibrary extends StatelessWidget {
         ],
         const _LibraryState(
           icon: RhythmoIcons.musicNotes,
-          title: 'کتابخانهٔ شما خالی است',
+          title: '«موسیقی من» خالی است',
           message:
               'با «افزودن موسیقی» آهنگ آپلود کن یا اجازه بده ریتمو آهنگ‌های دستگاه را هم همین‌جا نشان بدهد.',
         ),
@@ -2580,7 +2571,7 @@ class _LoadError extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: _LibraryState(
         icon: RhythmoIcons.cloudSlash,
-        title: 'کتابخانه دریافت نشد',
+        title: '«موسیقی من» دریافت نشد',
         message: 'اتصال اینترنت را بررسی کن و دوباره تلاش کن.',
         action: FilledButton.icon(
           onPressed: onRetry,
@@ -2630,6 +2621,7 @@ class _PlayAllHeader extends StatelessWidget {
             ),
           ),
           FilledButton.icon(
+            style: rhythmoPlayStyle(context),
             onPressed: count == 0 ? null : onPlay,
             icon: const Icon(RhythmoIcons.playFill),
             label: const Text('پخش همه'),
@@ -2937,7 +2929,7 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
       }
       return centered(const _LibraryState(
         icon: RhythmoIcons.magnifyingGlass,
-        title: 'در همهٔ کتابخانه بگرد',
+        title: 'در همهٔ موسیقی‌ات بگرد',
         message:
             'آهنگ‌ها، فهرست‌های پخش خودت و فهرست‌های محبوب، همه با یک جست‌وجو.',
       ));

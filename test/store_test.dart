@@ -540,10 +540,10 @@ void main() {
       await pump(tester, onSignIn: () => signIns++);
       await tester.tap(find.byTooltip('گزینه‌های آهنگ').first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('افزودن به کتابخانه‌ی من'));
+      await tester.tap(find.text('افزودن به موسیقی من'));
       await tester.pumpAndSettle();
       expect(
-          find.text('برای افزودن به کتابخانه وارد حسابت شو.'), findsOneWidget);
+          find.text('برای افزودن به موسیقی من وارد حسابت شو.'), findsOneWidget);
       await tester.tap(find.text('ورود'));
       expect(signIns, 1);
       await tester.tap(find.byTooltip('گزینه‌های آهنگ').first);
@@ -562,10 +562,10 @@ void main() {
       await pump(tester);
       await tester.tap(find.byTooltip('گزینه‌های آهنگ').first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('افزودن به کتابخانه‌ی من'));
+      await tester.tap(find.text('افزودن به موسیقی من'));
       await tester.pumpAndSettle();
       expect(api.calls, contains('save:tok:entry-0'));
-      expect(find.textContaining('به کتابخانه‌ات اضافه شد'), findsOneWidget);
+      expect(find.textContaining('به «موسیقی من» اضافه شد'), findsOneWidget);
 
       await tester.tap(find.byTooltip('گزینه‌های آهنگ').at(1));
       await tester.pumpAndSettle();

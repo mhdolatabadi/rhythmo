@@ -184,11 +184,13 @@ abstract final class RhythmoTheme {
           borderRadius: BorderRadius.circular(RhythmoRadii.sm),
         ),
         padding: const EdgeInsets.symmetric(
-            horizontal: RhythmoSpace.sm, vertical: RhythmoSpace.xs + 2),
+            horizontal: RhythmoSpace.sm, vertical: RhythmoSpace.xxs),
       ),
       listTileTheme: ListTileThemeData(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        minVerticalPadding: 8,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        minVerticalPadding: 6,
+        minLeadingWidth: 32,
+        horizontalTitleGap: 12,
         iconColor: colors.onSurfaceVariant,
         textColor: colors.onSurface,
         selectedColor: colors.onSecondaryContainer,
@@ -199,7 +201,7 @@ abstract final class RhythmoTheme {
         filled: true,
         fillColor: field,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: outline,
         enabledBorder: outline,
         focusedBorder: outline.copyWith(
@@ -228,9 +230,9 @@ abstract final class RhythmoTheme {
           ),
         ),
         padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 16),
+          EdgeInsets.symmetric(horizontal: 12),
         ),
-        constraints: const BoxConstraints(minHeight: 56),
+        constraints: const BoxConstraints(minHeight: 48),
         hintStyle: WidgetStatePropertyAll(
           base.textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant),
         ),
@@ -243,7 +245,7 @@ abstract final class RhythmoTheme {
           side: ring(null),
           minimumSize: const WidgetStatePropertyAll(Size(64, 48)),
           padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           ),
           shape: WidgetStatePropertyAll(controlShape),
           textStyle: WidgetStatePropertyAll(
@@ -255,7 +257,7 @@ abstract final class RhythmoTheme {
         style: ButtonStyle(
           minimumSize: const WidgetStatePropertyAll(Size(64, 48)),
           padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           ),
           shape: WidgetStatePropertyAll(controlShape),
           side: ring(BorderSide(color: colors.outline)),
@@ -264,12 +266,25 @@ abstract final class RhythmoTheme {
           ),
         ),
       ),
+      // Text buttons are quiet: light text, not ember, so the one ember
+      // action on a screen stands out.
       textButtonTheme: TextButtonThemeData(
         style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.resolveWith((states) =>
+              states.contains(WidgetState.disabled)
+                  ? colors.onSurface.withValues(alpha: 0.38)
+                  : colors.onSurface),
+          overlayColor: WidgetStateProperty.resolveWith((states) =>
+              states.contains(WidgetState.pressed)
+                  ? colors.onSurface.withValues(alpha: 0.12)
+                  : states.contains(WidgetState.hovered) ||
+                          states.contains(WidgetState.focused)
+                      ? colors.onSurface.withValues(alpha: 0.08)
+                      : null),
           side: ring(null),
           minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
           padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
           shape: WidgetStatePropertyAll(controlShape),
         ),
@@ -278,7 +293,7 @@ abstract final class RhythmoTheme {
         style: ButtonStyle(
           side: ring(null),
           minimumSize: const WidgetStatePropertyAll(Size.square(48)),
-          iconSize: const WidgetStatePropertyAll(22),
+          iconSize: const WidgetStatePropertyAll(20),
           shape: const WidgetStatePropertyAll(CircleBorder()),
         ),
       ),
@@ -293,11 +308,25 @@ abstract final class RhythmoTheme {
           borderRadius: BorderRadius.circular(RhythmoRadii.lg),
         ),
       ),
+      // Settings controls are white when on, as the dock's selected item
+      // is, so ember stays the one light on a screen.
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? colors.surface
+              : colors.outline,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? colors.onSurface
+              : colors.surfaceContainerHighest,
+        ),
+      ),
       sliderTheme: base.sliderTheme.copyWith(
-        activeTrackColor: colors.primary,
+        activeTrackColor: colors.onSurface,
         inactiveTrackColor: colors.surfaceContainerHighest,
-        thumbColor: colors.primary,
-        overlayColor: colors.primary.withValues(alpha: 0.12),
+        thumbColor: colors.onSurface,
+        overlayColor: colors.onSurface.withValues(alpha: 0.12),
         trackHeight: 3,
       ),
       scrollbarTheme: ScrollbarThemeData(

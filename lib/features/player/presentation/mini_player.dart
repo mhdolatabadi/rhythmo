@@ -7,7 +7,8 @@ import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/presentation/now_playing_screen.dart';
 
 /// Responsive now-playing surface with track identity, playback controls,
-/// and progress.
+/// and progress: a slim glass bar whose only bright control is the white
+/// play button.
 class MiniPlayer extends StatefulWidget {
   const MiniPlayer({super.key, required this.player});
 
@@ -48,11 +49,11 @@ class _MiniPlayerState extends State<MiniPlayer> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 960),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              padding: const EdgeInsets.fromLTRB(
+                  RhythmoSpace.md, 0, RhythmoSpace.md, RhythmoSpace.sm),
               child: GlassSurface(
-                radius: 24,
+                radius: RhythmoRadii.lg,
                 blur: 24,
-                tint: RhythmoColors.primary,
                 child: SafeArea(
                   top: false,
                   child: LayoutBuilder(
@@ -151,6 +152,12 @@ class _MiniPlayerState extends State<MiniPlayer> {
   }
 }
 
+/// White on the dark glass, as on the now-playing screen.
+ButtonStyle miniPlayButtonStyle(ColorScheme colors) => IconButton.styleFrom(
+      backgroundColor: colors.onSurface,
+      foregroundColor: colors.surface,
+    );
+
 class _CompactMiniPlayer extends StatelessWidget {
   const _CompactMiniPlayer({
     required this.track,
@@ -176,7 +183,7 @@ class _CompactMiniPlayer extends StatelessWidget {
     return Stack(
       children: [
         Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(10, 4, 8, 8),
+          padding: const EdgeInsetsDirectional.fromSTEB(4, 2, 4, 4),
           child: Row(
             children: [
               InkWell(
@@ -185,11 +192,11 @@ class _CompactMiniPlayer extends StatelessWidget {
                 child: SizedBox.square(
                   dimension: 48,
                   child: Center(
-                    child: _MiniArtwork(track: track, status: status, size: 40),
+                    child: _MiniArtwork(track: track, status: status, size: 36),
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: RhythmoSpace.xs),
               Expanded(
                 child: InkWell(
                   borderRadius: BorderRadius.circular(RhythmoRadii.sm),
@@ -229,6 +236,7 @@ class _CompactMiniPlayer extends StatelessWidget {
                             : playing
                                 ? 'توقف'
                                 : 'پخش',
+                        style: miniPlayButtonStyle(colors),
                         onPressed: player.toggle,
                         icon: Icon(
                           status == PlayerStatus.error
@@ -251,9 +259,9 @@ class _CompactMiniPlayer extends StatelessWidget {
         ),
         if (progress case final value?)
           PositionedDirectional(
-            start: 18,
-            end: 18,
-            bottom: 4,
+            start: RhythmoSpace.lg,
+            end: RhythmoSpace.lg,
+            bottom: 2,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(RhythmoRadii.pill),
               child: Directionality(
@@ -261,7 +269,8 @@ class _CompactMiniPlayer extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: value,
                   minHeight: 2,
-                  backgroundColor: colors.surfaceContainerHighest,
+                  color: colors.onSurface,
+                  backgroundColor: colors.onSurface.withValues(alpha: 0.14),
                 ),
               ),
             ),
@@ -321,23 +330,17 @@ class _MiniArtwork extends StatelessWidget {
         : track.isLocal
             ? RhythmoIcons.deviceMobile
             : RhythmoIcons.musicNote;
+    final radius = size >= 44 ? RhythmoRadii.sm : RhythmoRadii.xs;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(size >= 44 ? 14 : 12),
-        boxShadow: [
-          BoxShadow(
-            color: RhythmoColors.primary.withValues(alpha: 0.18),
-            offset: const Offset(0, 7),
-            blurRadius: 18,
-          ),
-        ],
+        borderRadius: BorderRadius.circular(radius),
       ),
       child: TrackCover(
           track: track,
-          radius: size >= 44 ? 14 : 12,
+          radius: radius,
           child: Icon(
             icon,
             size: size * 0.36,
@@ -446,6 +449,7 @@ class _PlaybackControls extends StatelessWidget {
                       ? 'توقف'
                       : 'پخش',
               iconSize: 28,
+              style: miniPlayButtonStyle(Theme.of(context).colorScheme),
               onPressed: player.toggle,
               icon: Icon(
                 status == PlayerStatus.error

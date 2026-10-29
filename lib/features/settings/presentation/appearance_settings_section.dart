@@ -1,3 +1,4 @@
+import 'package:rhythmo/core/design/design.dart';
 import 'package:flutter/material.dart';
 import 'package:rhythmo/app/app_preferences.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
@@ -22,7 +23,7 @@ class AppearanceSettingsSection extends StatelessWidget {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('ظاهر و کتابخانه',
+                    Text('ظاهر و موسیقی من',
                         style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 8),
                     Card(
@@ -53,7 +54,7 @@ class AppearanceSettingsSection extends StatelessWidget {
                       ListTile(
                           title: const Text('مدیریت تب‌ها'),
                           subtitle: const Text(
-                              'نمایش، پنهان‌کردن و جابه‌جایی بخش‌های کتابخانه'),
+                              'نمایش، پنهان‌کردن و جابه‌جایی بخش‌های «موسیقی من»'),
                           onTap: () => Navigator.of(context).push(
                               MaterialPageRoute<void>(
                                   builder: (_) => ManageTabsScreen(
@@ -70,54 +71,55 @@ class ManageTabsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('مدیریت تب‌ها')),
-        body: ListenableBuilder(
-            listenable: preferences,
-            builder: (context, _) {
-              final settings = preferences.value;
-              return ReorderableListView.builder(
-                  padding: EdgeInsets.only(
-                      bottom: 24 + MediaQuery.paddingOf(context).bottom),
-                  buildDefaultDragHandles: false,
-                  itemCount: settings.order.length,
-                  onReorderItem: (oldIndex, newIndex) {
-                    final order = [...settings.order];
-                    order.insert(newIndex, order.removeAt(oldIndex));
-                    preferences.update(order: order);
-                  },
-                  itemBuilder: (context, index) {
-                    final tab = settings.order[index];
-                    return ListTile(
-                        key: ValueKey(tab),
-                        title: Text(tab.label),
-                        subtitle: switch (tab) {
-                          LibraryTab.tracks =>
-                            const Text('همیشه نمایش داده می‌شود'),
-                          LibraryTab.newOnDevice =>
-                            const Text('فقط در اپ اندروید'),
-                          _ => null,
-                        },
-                        leading: Checkbox(
-                            value: !settings.hidden.contains(tab),
-                            onChanged: tab == LibraryTab.tracks
-                                ? null
-                                : (show) {
-                                    final hidden = {...settings.hidden};
-                                    if (show == true) {
-                                      hidden.remove(tab);
-                                    } else {
-                                      hidden.add(tab);
-                                    }
-                                    preferences.update(hidden: hidden);
-                                  }),
-                        trailing: ReorderableDragStartListener(
-                            index: index,
-                            child: const Tooltip(
-                                message: 'برای جابه‌جایی بکش',
-                                child: SizedBox.square(
-                                    dimension: 48,
-                                    child:
-                                        Icon(RhythmoIcons.dotsSixVertical)))));
-                  });
-            }),
+        body: RhythmoBackdrop(
+            child: ListenableBuilder(
+                listenable: preferences,
+                builder: (context, _) {
+                  final settings = preferences.value;
+                  return ReorderableListView.builder(
+                      padding: EdgeInsets.only(
+                          bottom: 24 + MediaQuery.paddingOf(context).bottom),
+                      buildDefaultDragHandles: false,
+                      itemCount: settings.order.length,
+                      onReorderItem: (oldIndex, newIndex) {
+                        final order = [...settings.order];
+                        order.insert(newIndex, order.removeAt(oldIndex));
+                        preferences.update(order: order);
+                      },
+                      itemBuilder: (context, index) {
+                        final tab = settings.order[index];
+                        return ListTile(
+                            key: ValueKey(tab),
+                            title: Text(tab.label),
+                            subtitle: switch (tab) {
+                              LibraryTab.tracks =>
+                                const Text('همیشه نمایش داده می‌شود'),
+                              LibraryTab.newOnDevice =>
+                                const Text('فقط در اپ اندروید'),
+                              _ => null,
+                            },
+                            leading: Checkbox(
+                                value: !settings.hidden.contains(tab),
+                                onChanged: tab == LibraryTab.tracks
+                                    ? null
+                                    : (show) {
+                                        final hidden = {...settings.hidden};
+                                        if (show == true) {
+                                          hidden.remove(tab);
+                                        } else {
+                                          hidden.add(tab);
+                                        }
+                                        preferences.update(hidden: hidden);
+                                      }),
+                            trailing: ReorderableDragStartListener(
+                                index: index,
+                                child: const Tooltip(
+                                    message: 'برای جابه‌جایی بکش',
+                                    child: SizedBox.square(
+                                        dimension: 48,
+                                        child: Icon(
+                                            RhythmoIcons.dotsSixVertical)))));
+                      });
+                })),
       );
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rhythmo/features/library/presentation/rhythmo_dock.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
@@ -117,12 +118,12 @@ void main() {
 
       expect(find.text('اخیراً پخش‌شده'), findsNothing);
       expect(tester.takeException(), isNull);
-      // Search lives behind the header button, not above the list.
+      // Search lives behind the dock's bubble, not above the list.
       expect(find.byType(SearchBar), findsNothing);
-      _expectTouchTarget(tester, find.byTooltip('جست‌وجو در کتابخانه'));
-      final brand = tester.getRect(find.text('ریتمو'));
-      final search = tester.getRect(find.byTooltip('جست‌وجو در کتابخانه'));
-      expect((brand.center.dy - search.center.dy).abs(), lessThan(4));
+      _expectTouchTarget(tester, find.byTooltip('جست‌وجو در موسیقی من'));
+      final dock = tester.getRect(find.byType(RhythmoDock));
+      final search = tester.getRect(find.byTooltip('جست‌وجو در موسیقی من'));
+      expect(dock.contains(search.center), isTrue);
       expect(tester.getSize(_row(_longPersian)).height, lessThanOrEqualTo(72));
       _expectTouchTarget(tester, _row(_longPersian));
 
@@ -304,8 +305,8 @@ void main() {
           ]),
           history: history,
           playlists: playlists);
-      _expectTouchTarget(tester, find.byTooltip('جست‌وجو در کتابخانه'));
-      await tester.tap(find.byTooltip('جست‌وجو در کتابخانه'));
+      _expectTouchTarget(tester, find.byTooltip('جست‌وجو در موسیقی من'));
+      await tester.tap(find.byTooltip('جست‌وجو در موسیقی من'));
       await tester.pumpAndSettle();
     }
 
@@ -314,7 +315,7 @@ void main() {
         'and ZWNJ, on a 360 px phone', (tester) async {
       _phone(tester);
       await openSearch(tester);
-      expect(find.text('در همهٔ کتابخانه بگرد'), findsOneWidget);
+      expect(find.text('در همهٔ موسیقی‌ات بگرد'), findsOneWidget);
 
       // «کلاسیک» with Persian letters finds «كلاسيك» spelled the Arabic way,
       // and «کلاسیکهای» without ZWNJ the popular «کلاسیک‌های».
@@ -390,7 +391,7 @@ void main() {
           tracks: FakeTracksApi([_cloud('a', 'Alpha')]),
           history: history,
           playlists: playlists);
-      await tester.tap(find.byTooltip('جست‌وجو در کتابخانه'));
+      await tester.tap(find.byTooltip('جست‌وجو در موسیقی من'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await tester.enterText(_searchField, 'alpha');

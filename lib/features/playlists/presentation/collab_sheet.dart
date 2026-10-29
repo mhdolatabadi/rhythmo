@@ -114,7 +114,7 @@ class _CollabSheetState extends State<_CollabSheet> {
             ),
             const SizedBox(height: 8),
             const Text(
-                'هر کسی که لینک دعوت را باز کند عضو می‌شود و از کتابخانه‌ی خودش آهنگ اضافه می‌کند. هر آهنگ از فضای کسی کم می‌شود که اضافه‌اش کرده.'),
+                'هر کسی که لینک دعوت را باز کند عضو می‌شود و از موسیقی خودش آهنگ اضافه می‌کند. هر آهنگ از فضای کسی کم می‌شود که اضافه‌اش کرده.'),
             const SizedBox(height: 16),
             if (link != null) ...[
               Directionality(

@@ -30,7 +30,7 @@ const _tracks = [
       sizeBytes: 1),
 ];
 
-// Playback has a continuous background animation; advance finite transitions.
+// Advances the finite transitions: the slide in, ink and sheets.
 Future<void> advanceUi(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 600));
@@ -150,7 +150,7 @@ void main() {
       (tester) async {
     await open(tester);
 
-    await tester.tap(find.text('صف پخش · ۲'));
+    await tester.tap(find.text('صف پخش (۲)'));
     await advanceUi(tester);
 
     final sheet = find.byType(QueueSheet);
@@ -168,6 +168,39 @@ void main() {
     // The sheet follows along: Third is now playing and nothing is next.
     expect(find.text('در حال پخش · Artist C'), findsOneWidget);
     expect(find.text('آهنگ دیگری در صف نیست.'), findsOneWidget);
+  });
+
+  testWidgets('the screen is still: nothing animates while it plays',
+      (tester) async {
+    await open(tester);
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(player.status, PlayerStatus.playing);
+    expect(tester.binding.transientCallbackCount, 0);
+  });
+
+  testWidgets('the play button is the one white control', (tester) async {
+    await open(tester);
+
+    final play = tester.widget<IconButton>(find.ancestor(
+        of: find.byTooltip('توقف'), matching: find.byType(IconButton)));
+    final scheme = RhythmoTheme.dark().colorScheme;
+    expect(play.style?.backgroundColor?.resolve({}), scheme.onSurface);
+    expect(play.style?.foregroundColor?.resolve({}), scheme.surface);
+  });
+
+  testWidgets('«بعدی در صف» shows the next track and opens the queue',
+      (tester) async {
+    await open(tester);
+
+    final next = find.byKey(const ValueKey('up-next'));
+    expect(find.text('بعدی در صف'), findsOneWidget);
+    expect(find.descendant(of: next, matching: find.text('Second')),
+        findsOneWidget);
+
+    await tester.tap(next);
+    await advanceUi(tester);
+    expect(find.byType(QueueSheet), findsOneWidget);
   });
 
   testWidgets('the details sheet shows the file and its size', (tester) async {
@@ -240,7 +273,7 @@ void main() {
           screen.contains(rect.topLeft) && rect.right <= screen.right, isTrue,
           reason: '$tooltip is on screen');
     }
-    final queue = tester.getRect(find.text('صف پخش · ۲'));
+    final queue = tester.getRect(find.text('صف پخش (۲)'));
     expect(queue.bottom, lessThanOrEqualTo(640 - 34),
         reason: 'the bottom row clears the gesture bar');
     final title = tester.getRect(find.text(_tracks[0].title));
@@ -248,7 +281,7 @@ void main() {
     expect(title.left, greaterThanOrEqualTo(0));
 
     // The queue sheet also fits, and its last row clears the inset.
-    await tester.tap(find.text('صف پخش · ۲'));
+    await tester.tap(find.text('صف پخش (۲)'));
     await advanceUi(tester);
     expect(tester.takeException(), isNull);
     expect(

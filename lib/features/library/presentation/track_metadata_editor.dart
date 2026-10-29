@@ -303,7 +303,8 @@ class _TrackMetadataEditorState extends State<TrackMetadataEditor> {
           bottomInset: bottomInset,
           onSave: _save,
         ),
-        body: Form(
+        body: RhythmoBackdrop(
+            child: Form(
           key: _form,
           child: Center(
             child: ConstrainedBox(
@@ -461,7 +462,7 @@ class _TrackMetadataEditorState extends State<TrackMetadataEditor> {
               ),
             ),
           ),
-        ),
+        )),
       ),
     );
   }

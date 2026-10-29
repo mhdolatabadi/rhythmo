@@ -117,6 +117,7 @@ class _StoreScreenState extends State<StoreScreen>
             ),
             const SizedBox(height: RhythmoSpace.xl),
             FilledButton.icon(
+              style: rhythmoPlayStyle(context),
               onPressed: () {
                 Navigator.of(context).pop();
                 widget.player.play(found);
@@ -131,7 +132,7 @@ class _StoreScreenState extends State<StoreScreen>
                 _save(found);
               },
               icon: const Icon(RhythmoIcons.plusCircle),
-              label: const Text('افزودن به کتابخانه‌ی من'),
+              label: const Text('افزودن به موسیقی من'),
             ),
           ],
         ),
@@ -461,7 +462,7 @@ Future<void> saveStoreSong(
     BuildContext context, StoreController controller, Track song,
     {VoidCallback? onSignIn}) async {
   if (!controller.signedIn) {
-    askToSignIn(context, action: 'افزودن به کتابخانه', onSignIn: onSignIn);
+    askToSignIn(context, action: 'افزودن به موسیقی من', onSignIn: onSignIn);
     return;
   }
   final messenger = ScaffoldMessenger.of(context);
@@ -471,8 +472,8 @@ Future<void> saveStoreSong(
     ..showSnackBar(SnackBar(
       content: Text(switch (result) {
         StoreSaveResult.saved =>
-          '«${song.title}» به کتابخانه‌ات اضافه شد. این نسخه مال خودت است.',
-        StoreSaveResult.alreadyYours => 'این آهنگ در کتابخانه‌ی خودت هست.',
+          '«${song.title}» به «موسیقی من» اضافه شد. این نسخه مال خودت است.',
+        StoreSaveResult.alreadyYours => 'این آهنگ در «موسیقی من» هست.',
         StoreSaveResult.noSpace =>
           'فضای کافی در حسابت نیست. چند آهنگ را حذف کن و دوباره امتحان کن.',
         StoreSaveResult.uploadsDisabled =>
@@ -710,7 +711,7 @@ class _SongMenu extends StatelessWidget {
           child: ListTile(
             contentPadding: EdgeInsets.zero,
             leading: Icon(RhythmoIcons.plusCircle),
-            title: Text('افزودن به کتابخانه‌ی من'),
+            title: Text('افزودن به موسیقی من'),
           ),
         ),
         PopupMenuItem(

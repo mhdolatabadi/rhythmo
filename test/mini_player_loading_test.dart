@@ -53,4 +53,26 @@ void main() {
     expect(find.text('در حال بارگذاری…'), findsNothing);
     expect(find.text('خواننده'), findsOneWidget);
   });
+
+  testWidgets('the mini player\'s play button is white, not ember',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final player = PlayerController(
+        api: FakeTracksApi(), engine: FakeAudioEngine(), token: () => 't');
+    addTearDown(player.dispose);
+    await tester.pumpWidget(MaterialApp(
+      theme: RhythmoTheme.dark(),
+      home: Scaffold(bottomNavigationBar: MiniPlayer(player: player)),
+    ));
+    await tester.runAsync(() => player.playFrom(const [_track], 0));
+    await tester.pump();
+
+    final play = tester.widget<IconButton>(find.ancestor(
+        of: find.byTooltip('توقف'), matching: find.byType(IconButton)));
+    final scheme = RhythmoTheme.dark().colorScheme;
+    expect(play.style?.backgroundColor?.resolve({}), scheme.onSurface);
+    expect(play.style?.foregroundColor?.resolve({}), scheme.surface);
+  });
 }

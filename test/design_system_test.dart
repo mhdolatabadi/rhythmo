@@ -78,6 +78,9 @@ void main() {
         // Light text stays readable on every artwork tint.
         expect(contrast(RhythmoColors.onSurfaceVariant, artworkTint('seed-$i')),
             greaterThanOrEqualTo(4.5));
+        // Only the brand's two lights and what lies between them.
+        final hue = HSLColor.fromColor(artworkTint('seed-$i')).hue;
+        expect(hue, inInclusiveRange(247, 359));
       }
     });
 
@@ -218,7 +221,7 @@ void main() {
       expect(find.bySemanticsLabel('در حال بارگذاری…'), findsOneWidget);
     });
 
-    testWidgets('a track row truncates long titles and stays 64 px tall',
+    testWidgets('a track row truncates long titles and stays 56 px tall',
         (tester) async {
       tester.view.physicalSize = const Size(360, 640);
       tester.view.devicePixelRatio = 1;
@@ -237,8 +240,18 @@ void main() {
       )));
       expect(tester.takeException(), isNull);
       final row = tester.getRect(find.byType(RhythmoTrackRow));
-      expect(row.height, greaterThanOrEqualTo(64));
+      expect(row.height, greaterThanOrEqualTo(56));
       expect(find.text('هنرمند · ۳ مگابایت'), findsOneWidget);
+    });
+
+    testWidgets('the backdrop is still: it schedules no animation',
+        (tester) async {
+      await tester.pumpWidget(_app(const Scaffold(
+        body: RhythmoBackdrop(child: SizedBox.expand()),
+      )));
+      await tester.pump();
+      expect(tester.binding.transientCallbackCount, 0);
+      expect(tester.binding.hasScheduledFrame, isFalse);
     });
 
     testWidgets('confirming asks with a safe default', (tester) async {

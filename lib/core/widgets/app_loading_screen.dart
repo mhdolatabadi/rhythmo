@@ -9,7 +9,8 @@ class AppLoadingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: Center(
+      body: RhythmoBackdrop(
+          child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -29,7 +30,7 @@ class AppLoadingScreen extends StatelessWidget {
             ),
           ],
         ),
-      ),
+      )),
     );
   }
 }

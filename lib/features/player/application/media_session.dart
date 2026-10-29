@@ -168,7 +168,7 @@ class RhythmoAudioHandler extends BaseAudioHandler with SeekHandler {
           ? 'پخش از فایل‌های دستگاه'
           : switch (track.importedFrom) {
               final from? => 'واردشده از $from',
-              null => 'پخش از کتابخانهٔ ریتمو',
+              null => 'پخش از ریتمو',
             },
       extras: {
         'source': track.source ?? (track.isLocal ? 'device' : 'upload'),

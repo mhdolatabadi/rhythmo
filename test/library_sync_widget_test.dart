@@ -263,6 +263,9 @@ void main() {
         findsOneWidget);
 
     tracks.createError = null;
+    // The failure's snack bar floats above the dock, over the only row.
+    ScaffoldMessenger.of(tester.element(_row('Song'))).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
     await _openMenu(tester, 'Song');
     await tester.tap(find.text('تلاش دوباره برای آپلود'));
     await tester.pumpAndSettle();

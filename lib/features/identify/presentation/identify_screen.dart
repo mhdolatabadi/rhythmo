@@ -57,14 +57,14 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
   Future<void> _save() async {
     if (!_controller.signedIn) {
       askToSignIn(context,
-          action: 'افزودن به کتابخانه', onSignIn: widget.onSignIn);
+          action: 'افزودن به موسیقی من', onSignIn: widget.onSignIn);
       return;
     }
     final track = await _controller.save();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(track != null
-          ? 'به کتابخانه اضافه شد.'
+          ? 'به «موسیقی من» اضافه شد.'
           : _controller.error ?? 'آهنگ اضافه نشد.'),
     ));
   }
@@ -167,10 +167,10 @@ class _IdentifyScreenState extends State<IdentifyScreen> {
           icon: RhythmoIcons.musicNotesMinus,
           title: 'پیدا نشد',
           detail: _controller.signedIn
-              ? 'فقط آهنگ‌هایی شناخته می‌شوند که در کتابخانهٔ شما، '
+              ? 'فقط آهنگ‌هایی شناخته می‌شوند که در «موسیقی من»، '
                   'فهرست‌های پخش مشترک شما یا فهرست‌های پخش عمومی ریتمو هستند.'
               : 'فقط آهنگ‌های گنجینه ریتمو شناخته می‌شوند. با ورود به حساب، '
-                  'کتابخانه و فهرست‌های پخش شما هم جستجو می‌شوند.',
+                  '«موسیقی من» و فهرست‌های پخش شما هم جستجو می‌شوند.',
           action: retry,
         );
       case IdentifyPhase.failed:
@@ -224,7 +224,7 @@ class _Intro extends StatelessWidget {
         Text(
           signedIn
               ? 'ریتمو ${persianDigits(snippetLength.inSeconds)} ثانیه با '
-                  'میکروفون گوش می‌دهد و صدا را با آهنگ‌های کتابخانهٔ شما و '
+                  'میکروفون گوش می‌دهد و صدا را با آهنگ‌های «موسیقی من» و '
                   'فهرست‌های پخشی که به آن‌ها دسترسی دارید مقایسه می‌کند.'
               : 'ریتمو ${persianDigits(snippetLength.inSeconds)} ثانیه با '
                   'میکروفون گوش می‌دهد و صدا را با آهنگ‌های گنجینه ریتمو '
@@ -370,7 +370,7 @@ class _Result extends StatelessWidget {
     final colors = theme.colorScheme;
     final track = match.track;
     final where = switch (match.source) {
-      SongMatchSource.library => 'در کتابخانهٔ شما',
+      SongMatchSource.library => 'در «موسیقی من»',
       SongMatchSource.playlist => 'در یک فهرست پخش مشترک',
       SongMatchSource.public => 'در یک فهرست پخش عمومی',
       SongMatchSource.store => 'در گنجینه ریتمو',
@@ -439,7 +439,8 @@ class _Result extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         FilledButton.icon(
-          style: FilledButton.styleFrom(minimumSize: const Size(48, 52)),
+          style: rhythmoPlayStyle(
+              context, FilledButton.styleFrom(minimumSize: const Size(48, 52))),
           onPressed: onPlay,
           icon: const Icon(RhythmoIcons.playFill),
           label: const Text('پخش'),
@@ -451,10 +452,10 @@ class _Result extends StatelessWidget {
             onPressed: saving || saved ? null : onSave,
             icon: Icon(saved ? RhythmoIcons.check : RhythmoIcons.plus),
             label: Text(saved
-                ? 'در کتابخانهٔ شما'
+                ? 'در «موسیقی من»'
                 : saving
                     ? 'در حال افزودن…'
-                    : 'افزودن به کتابخانه'),
+                    : 'افزودن به موسیقی من'),
           ),
         ],
         const SizedBox(height: 12),

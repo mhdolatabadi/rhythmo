@@ -61,11 +61,12 @@ class PlaylistsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('فهرست‌های پخش')),
-      body: PlaylistsView(
+      body: RhythmoBackdrop(
+          child: PlaylistsView(
         controller: controller,
         libraryTracks: libraryTracks,
         player: player,
-      ),
+      )),
     );
   }
 }
@@ -518,7 +519,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       context,
       title: 'ترک فهرست پخش؟',
       message:
-          'آهنگ‌هایی که به این فهرست پخش اضافه کرده‌ای از آن بیرون می‌روند؛ در کتابخانه‌ات می‌مانند.',
+          'آهنگ‌هایی که به این فهرست پخش اضافه کرده‌ای از آن بیرون می‌روند؛ در «موسیقی من» می‌مانند.',
       confirmLabel: 'ترک',
       destructive: true,
     );
@@ -578,7 +579,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     final confirmed = await showRhythmoConfirm(
       context,
       title: 'حذف فهرست پخش؟',
-      message: 'آهنگ‌های کتابخانه حذف نمی‌شوند.',
+      message: 'آهنگ‌های «موسیقی من» حذف نمی‌شوند.',
       confirmLabel: 'حذف',
       destructive: true,
     );
@@ -811,7 +812,7 @@ class _PlaylistBody extends StatelessWidget {
               hasScrollBody: false,
               child: _PlaylistEmptyState(
                 message: 'برای این فهرست پخش آهنگ انتخاب کن.',
-                action: 'انتخاب از کتابخانه',
+                action: 'انتخاب از موسیقی من',
                 onPressed: onSelectTracks,
               ),
             )
@@ -923,8 +924,11 @@ class _PlaylistDetailHeader extends StatelessWidget {
             children: [
               FilledButton.icon(
                 onPressed: empty ? null : onPlay,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(112, RhythmoSpace.target),
+                style: rhythmoPlayStyle(
+                  context,
+                  FilledButton.styleFrom(
+                    minimumSize: const Size(112, RhythmoSpace.target),
+                  ),
                 ),
                 icon: const Icon(RhythmoIcons.playFill, size: 20),
                 label: const Text('پخش'),
@@ -1237,7 +1241,7 @@ class _TrackPickerState extends State<_TrackPicker> {
             const SizedBox(height: 12),
             Expanded(
               child: widget.tracks.isEmpty
-                  ? const Center(child: Text('کتابخانه خالی است.'))
+                  ? const Center(child: Text('«موسیقی من» خالی است.'))
                   : tracks.isEmpty
                       ? const Center(
                           child: Text('آهنگی با این جست‌وجو پیدا نشد.'))

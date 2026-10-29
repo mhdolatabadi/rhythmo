@@ -162,11 +162,11 @@ class IdentifyController extends ChangeNotifier {
       _error = switch (error.code) {
         'quota_exceeded' => 'فضای کافی در حساب شما نیست.',
         'uploads_disabled' => 'افزودن آهنگ الان ممکن نیست.',
-        _ => 'آهنگ به کتابخانه اضافه نشد. دوباره امتحان کنید.',
+        _ => 'آهنگ به «موسیقی من» اضافه نشد. دوباره امتحان کنید.',
       };
       return null;
     } catch (_) {
-      _error = 'آهنگ به کتابخانه اضافه نشد. دوباره امتحان کنید.';
+      _error = 'آهنگ به «موسیقی من» اضافه نشد. دوباره امتحان کنید.';
       return null;
     } finally {
       _saving = false;

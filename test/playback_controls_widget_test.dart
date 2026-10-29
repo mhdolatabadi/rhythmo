@@ -122,7 +122,7 @@ void main() {
       expectTarget(tester, find.byTooltip('جزئیات آهنگ'), 'details');
       expect(find.text('۱٫۷۵×'), findsOneWidget);
       final queueLabel =
-          tester.renderObject<RenderParagraph>(find.text('صف پخش · ۲'));
+          tester.renderObject<RenderParagraph>(find.text('صف پخش (۲)'));
       expect(queueLabel.didExceedMaxLines, isFalse,
           reason: 'the queue label is not cut off');
       final status = tester.getRect(find.byKey(const ValueKey('sleep-status')));
