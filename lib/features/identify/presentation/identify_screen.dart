@@ -439,7 +439,8 @@ class _Result extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         FilledButton.icon(
-          style: FilledButton.styleFrom(minimumSize: const Size(48, 52)),
+          style: rhythmoPlayStyle(
+              context, FilledButton.styleFrom(minimumSize: const Size(48, 52))),
           onPressed: onPlay,
           icon: const Icon(RhythmoIcons.playFill),
           label: const Text('پخش'),

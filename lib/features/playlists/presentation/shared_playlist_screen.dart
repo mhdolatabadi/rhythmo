@@ -309,6 +309,7 @@ class _Contents extends StatelessWidget {
                 children: [
                   if (tracks.isNotEmpty)
                     FilledButton.icon(
+                      style: rhythmoPlayStyle(context),
                       onPressed: () => player.playFrom(tracks, 0),
                       icon: const Icon(RhythmoIcons.playFill),
                       label: const Text('پخش همه'),

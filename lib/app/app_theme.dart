@@ -266,8 +266,21 @@ abstract final class RhythmoTheme {
           ),
         ),
       ),
+      // Text buttons are quiet: light text, not ember, so the one ember
+      // action on a screen stands out.
       textButtonTheme: TextButtonThemeData(
         style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.resolveWith((states) =>
+              states.contains(WidgetState.disabled)
+                  ? colors.onSurface.withValues(alpha: 0.38)
+                  : colors.onSurface),
+          overlayColor: WidgetStateProperty.resolveWith((states) =>
+              states.contains(WidgetState.pressed)
+                  ? colors.onSurface.withValues(alpha: 0.12)
+                  : states.contains(WidgetState.hovered) ||
+                          states.contains(WidgetState.focused)
+                      ? colors.onSurface.withValues(alpha: 0.08)
+                      : null),
           side: ring(null),
           minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
           padding: const WidgetStatePropertyAll(

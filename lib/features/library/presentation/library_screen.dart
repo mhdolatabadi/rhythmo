@@ -9,7 +9,7 @@ import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/app/app_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
-import 'package:rhythmo/core/widgets/rhythmo_mark.dart';
+import 'package:rhythmo/core/widgets/rhythmo_brand.dart';
 import 'package:rhythmo/app/app_configuration.dart';
 import 'package:rhythmo/core/search_text.dart';
 import 'package:rhythmo/features/auth/presentation/email_verification_screen.dart';
@@ -859,14 +859,14 @@ class _LibraryScreenState extends State<LibraryScreen>
             pinned: true,
             toolbarHeight: 76,
             titleSpacing: 32,
-            title: const _RhythmoBrand(compact: false),
+            title: const RhythmoBrand(compact: false),
             actions: _accountActions(context),
             bottom: bottom,
           )
         : SliverAppBar(
             pinned: true,
             titleSpacing: 16,
-            title: const _RhythmoBrand(compact: true),
+            title: const RhythmoBrand(compact: true),
             // Opaque, because the lists scroll underneath it.
             backgroundColor: Theme.of(context).colorScheme.surface,
             actions: _accountActions(context),
@@ -1166,62 +1166,6 @@ enum _TrackAction {
   like,
   publish,
   delete,
-}
-
-class _RhythmoBrand extends StatelessWidget {
-  const _RhythmoBrand({required this.compact});
-
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final showSubtitle = !compact && constraints.maxWidth >= 220;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            RhythmoMark(size: compact ? 32 : 44),
-            const SizedBox(width: 12),
-            Flexible(
-              child: showSubtitle
-                  ? const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'ریتمو',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Text(
-                          'موسیقی شخصی تو',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    )
-                  : const Text(
-                      'ریتمو',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }
 
 class _AccountChip extends StatelessWidget {
@@ -1527,6 +1471,7 @@ class _TrackGroupScreen extends StatelessWidget {
                                     alignment: WrapAlignment.center,
                                     children: [
                                       FilledButton.icon(
+                                        style: rhythmoPlayStyle(context),
                                         onPressed: () =>
                                             player.playFrom(groupTracks, 0),
                                         icon: const Icon(RhythmoIcons.playFill),
@@ -2672,6 +2617,7 @@ class _PlayAllHeader extends StatelessWidget {
             ),
           ),
           FilledButton.icon(
+            style: rhythmoPlayStyle(context),
             onPressed: count == 0 ? null : onPlay,
             icon: const Icon(RhythmoIcons.playFill),
             label: const Text('پخش همه'),

@@ -924,8 +924,11 @@ class _PlaylistDetailHeader extends StatelessWidget {
             children: [
               FilledButton.icon(
                 onPressed: empty ? null : onPlay,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(112, RhythmoSpace.target),
+                style: rhythmoPlayStyle(
+                  context,
+                  FilledButton.styleFrom(
+                    minimumSize: const Size(112, RhythmoSpace.target),
+                  ),
                 ),
                 icon: const Icon(RhythmoIcons.playFill, size: 20),
                 label: const Text('پخش'),

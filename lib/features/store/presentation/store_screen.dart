@@ -117,6 +117,7 @@ class _StoreScreenState extends State<StoreScreen>
             ),
             const SizedBox(height: RhythmoSpace.xl),
             FilledButton.icon(
+              style: rhythmoPlayStyle(context),
               onPressed: () {
                 Navigator.of(context).pop();
                 widget.player.play(found);

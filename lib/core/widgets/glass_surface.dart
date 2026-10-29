@@ -162,8 +162,9 @@ class GlassSurface extends StatelessWidget {
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
           colors: [
-            (tint ?? RhythmoColors.highlight).withValues(alpha: 0.16),
-            RhythmoColors.highlight.withValues(alpha: 0.055),
+            // A faint sheen, not a glare: the glass stays calm.
+            (tint ?? RhythmoColors.highlight).withValues(alpha: 0.07),
+            RhythmoColors.highlight.withValues(alpha: 0.03),
             (dark ? RhythmoColors.surface : scheme.surfaceContainerLow)
                 .withValues(alpha: 0.9),
           ],

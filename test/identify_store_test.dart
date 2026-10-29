@@ -128,7 +128,8 @@ void main() {
     await tester.scrollUntilVisible(find.text('افزودن به موسیقی من'), 100);
     await tester.tap(find.text('افزودن به موسیقی من'));
     await tester.pumpAndSettle();
-    expect(find.text('برای افزودن به موسیقی من وارد حسابت شو.'), findsOneWidget);
+    expect(
+        find.text('برای افزودن به موسیقی من وارد حسابت شو.'), findsOneWidget);
     expect(api.saved, isEmpty);
     await tester.tap(find.text('ورود'));
     expect(signIns, 1);

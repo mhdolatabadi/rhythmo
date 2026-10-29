@@ -4,7 +4,15 @@ import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/presentation/mini_player.dart';
 
-/// Where the dock's pill takes the listener.
+/// One place in a dock's pill: its name and its resting and selected icons.
+class DockItem {
+  const DockItem(this.label, this.icon, this.selectedIcon);
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+}
+
+/// Where the signed-in dock's pill takes the listener.
 enum DockDestination {
   home('خانه', RhythmoIcons.house, RhythmoIcons.houseFill),
   library('موسیقی من', RhythmoIcons.books, RhythmoIcons.booksFill),
@@ -15,15 +23,15 @@ enum DockDestination {
   final String label;
   final IconData icon;
   final IconData selectedIcon;
+
+  DockItem get item => DockItem(label, icon, selectedIcon);
 }
 
 /// The widest the dock's navigation row grows; it stays a phone-sized pill
 /// in the middle of wide windows.
 const dockNavWidth = 520.0;
 
-/// The bottom of the main screens: the mini player above a pill of
-/// destinations and, apart from it, the search bubble. The selected
-/// destination is a white pill with its name; the others show their icon.
+/// The signed-in app's dock: [DockDestination]s and library search.
 class RhythmoDock extends StatelessWidget {
   const RhythmoDock({
     super.key,
@@ -37,6 +45,39 @@ class RhythmoDock extends StatelessWidget {
   final DockDestination selected;
   final ValueChanged<DockDestination> onSelect;
   final VoidCallback onSearch;
+
+  @override
+  Widget build(BuildContext context) => RhythmoDockBar(
+        player: player,
+        items: [for (final d in DockDestination.values) d.item],
+        selected: selected.index,
+        onSelect: (index) => onSelect(DockDestination.values[index]),
+        onSearch: onSearch,
+        searchLabel: 'جست‌وجو در موسیقی من',
+      );
+}
+
+/// The bottom of the main screens, signed in or not: the mini player above
+/// a pill of [items] and, apart from it, the search bubble when there is
+/// [onSearch]. The selected item is a white pill with its name; the others
+/// show their icon.
+class RhythmoDockBar extends StatelessWidget {
+  const RhythmoDockBar({
+    super.key,
+    required this.player,
+    required this.items,
+    required this.selected,
+    required this.onSelect,
+    this.onSearch,
+    this.searchLabel = 'جست‌وجو',
+  });
+
+  final PlayerController player;
+  final List<DockItem> items;
+  final int selected;
+  final ValueChanged<int> onSelect;
+  final VoidCallback? onSearch;
+  final String searchLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -65,29 +106,31 @@ class RhythmoDock extends StatelessWidget {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            for (final destination in DockDestination.values)
+                            for (final (index, item) in items.indexed)
                               // The selected name gives way on a narrow
                               // phone, so every icon stays in the pill.
                               Flexible(
-                                flex: destination == selected ? 1 : 0,
+                                flex: index == selected ? 1 : 0,
                                 child: _DockItem(
-                                  destination: destination,
-                                  selected: destination == selected,
-                                  onTap: () => onSelect(destination),
+                                  item: item,
+                                  selected: index == selected,
+                                  onTap: () => onSelect(index),
                                 ),
                               ),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(width: RhythmoSpace.sm),
-                    _DockPill(
-                      child: IconButton(
-                        tooltip: 'جست‌وجو در موسیقی من',
-                        onPressed: onSearch,
-                        icon: const Icon(RhythmoIcons.magnifyingGlass),
+                    if (onSearch != null) ...[
+                      const SizedBox(width: RhythmoSpace.sm),
+                      _DockPill(
+                        child: IconButton(
+                          tooltip: searchLabel,
+                          onPressed: onSearch,
+                          icon: const Icon(RhythmoIcons.magnifyingGlass),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -127,12 +170,12 @@ class _DockPill extends StatelessWidget {
 
 class _DockItem extends StatelessWidget {
   const _DockItem({
-    required this.destination,
+    required this.item,
     required this.selected,
     required this.onTap,
   });
 
-  final DockDestination destination;
+  final DockItem item;
   final bool selected;
   final VoidCallback onTap;
 
@@ -145,11 +188,11 @@ class _DockItem extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: destination.label,
+      label: item.label,
       excludeSemantics: true,
       onTap: onTap,
       child: Tooltip(
-        message: destination.label,
+        message: item.label,
         excludeFromSemantics: true,
         child: InkWell(
           customBorder: const StadiumBorder(),
@@ -166,7 +209,7 @@ class _DockItem extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  selected ? destination.selectedIcon : destination.icon,
+                  selected ? item.selectedIcon : item.icon,
                   size: 20,
                   color: foreground,
                 ),
@@ -174,7 +217,7 @@ class _DockItem extends StatelessWidget {
                   const SizedBox(width: RhythmoSpace.xs),
                   Flexible(
                     child: Text(
-                      destination.label,
+                      item.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.labelLarge?.copyWith(

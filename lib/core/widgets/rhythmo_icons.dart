@@ -92,6 +92,9 @@ abstract final class RhythmoIcons {
   static const IconData userCircleMinus =
       IconData(0xe4c8, fontFamily: 'Phosphor');
   static const IconData vinylRecord = IconData(0xecac, fontFamily: 'Phosphor');
+  static const IconData vinylRecordFill =
+      IconData(0xecac, fontFamily: 'PhosphorFill');
+  static const IconData signIn = IconData(0xe428, fontFamily: 'Phosphor');
   static const IconData warning = IconData(0xe4e0, fontFamily: 'Phosphor');
   static const IconData warningCircle =
       IconData(0xe4e2, fontFamily: 'Phosphor');

@@ -149,6 +149,7 @@ class LikedSongsScreen extends StatelessWidget {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             FilledButton.icon(
+                              style: rhythmoPlayStyle(context),
                               onPressed: () => player.playFrom(songs, 0),
                               icon: const Icon(RhythmoIcons.playFill),
                               label: const Text('پخش همه'),
