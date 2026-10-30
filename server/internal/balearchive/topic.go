@@ -90,9 +90,12 @@ func ordinal(s string) int {
 	}
 	tens := map[string]int{"بیست": 20, "سی": 30, "چهل": 40, "پنجاه": 50, "شصت": 60, "هفتاد": 70, "هشتاد": 80, "نود": 90, "صد": 100}
 	for prefix, n := range tens {
-		if rest, ok := strings.CutPrefix(s, prefix+" و "); ok {
-			if k := ordinal(rest); k > 0 && k < 20 {
-				return n + k
+		if rest, ok := strings.CutPrefix(s, prefix); ok {
+			rest = strings.TrimSpace(rest)
+			if tail, hasAnd := strings.CutPrefix(rest, "و"); hasAnd {
+				if k := ordinal(strings.TrimSpace(tail)); k > 0 && k < 20 {
+					return n + k
+				}
 			}
 		}
 	}
