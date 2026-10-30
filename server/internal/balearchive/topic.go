@@ -14,7 +14,7 @@ const ProviderName = "bale_archive"
 
 var fullTagRE = regexp.MustCompile(`#سخنرانی_کامل(?:$|[^\pL\pN_‌])`)
 
-var sessionRE = regexp.MustCompile(`(?:[؛;،,:：\-–—]\s*|\s+)جلسه(?:\s|‌|ٔ|ی|\.)*`)
+var sessionRE = regexp.MustCompile(`(?:[؛;،,:：\-–—]\s*|\s+)جلسه[\s.]+(?:ی\s+)?`)
 var sessionTailRE = regexp.MustCompile(`\s*[-–—:؛(（].*$`)
 
 var digitsRE = regexp.MustCompile(`^[0-9]+$`)
