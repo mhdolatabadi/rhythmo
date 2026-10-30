@@ -10,6 +10,9 @@ import 'package:rhythmo/features/player/presentation/now_playing_screen.dart';
 const homeShelfLength = 12;
 const homeRecentLength = 5;
 
+/// The widest «خانه»'s content grows, matching the library's list.
+const homeMaxWidth = 880.0;
+
 /// «صبح بخیر» and so on, for the hour of [now].
 String homeGreeting(DateTime now) => switch (now.hour) {
       >= 5 && < 12 => 'صبح بخیر',
@@ -31,8 +34,9 @@ List<Track> newestTracks(List<Track> tracks, {int limit = homeShelfLength}) {
   return dated.take(limit).toList();
 }
 
-/// «خانه»: a greeting, what to pick up again, the newest tracks and what
-/// was played lately. Everything on it plays with one tap.
+/// «خانه»: a greeting, what to pick up again, the ways to find new music
+/// (popular playlists, گنجینه, «این آهنگ چیه؟»), the newest tracks and what
+/// was played lately. Those three places open only from here.
 class HomeView extends StatelessWidget {
   const HomeView({
     super.key,
@@ -43,6 +47,9 @@ class HomeView extends StatelessWidget {
     required this.onAddMusic,
     this.recent,
     this.now,
+    this.onPopular,
+    this.onStore,
+    this.onIdentify,
   });
 
   /// The app bar, as a sliver.
@@ -54,6 +61,12 @@ class HomeView extends StatelessWidget {
   final List<Track> Function() tracks;
   final VoidCallback onAddMusic;
   final RecentlyPlayedController? recent;
+
+  /// Opens popular playlists, گنجینه and song identification; a null one
+  /// hides its card.
+  final VoidCallback? onPopular;
+  final VoidCallback? onStore;
+  final VoidCallback? onIdentify;
 
   /// The clock for the greeting; the real one by default.
   final DateTime Function()? now;
@@ -70,12 +83,25 @@ class HomeView extends StatelessWidget {
             (recent?.tracks ?? const <Track>[]).take(homeRecentLength).toList();
         final newest = newestTracks(library);
         final resume = player.track ?? played.firstOrNull;
+        final discover = [
+          if (onPopular case final open?)
+            _DiscoverCard('محبوب‌ها', RhythmoIcons.fire, open),
+          if (onStore case final open?)
+            _DiscoverCard('گنجینه', RhythmoIcons.vinylRecord, open),
+          if (onIdentify case final open?)
+            _DiscoverCard('این آهنگ چیه؟', RhythmoIcons.microphoneStage, open),
+        ];
+        // As wide as «موسیقی من»'s list: 880 px at most, centred.
+        final width = MediaQuery.sizeOf(context).width;
+        final gutter = width >= 900
+            ? ((width - homeMaxWidth) / 2).clamp(40.0, double.infinity)
+            : RhythmoSpace.lg;
         return CustomScrollView(
           slivers: [
             header,
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(RhythmoSpace.lg, RhythmoSpace.sm,
-                  RhythmoSpace.lg, MediaQuery.paddingOf(context).bottom + 24),
+              padding: EdgeInsets.fromLTRB(gutter, RhythmoSpace.sm, gutter,
+                  MediaQuery.paddingOf(context).bottom + 24),
               sliver: SliverList.list(
                 children: [
                   Text(
@@ -105,6 +131,17 @@ class HomeView extends StatelessWidget {
                           ? player.toggle()
                           : player.playFrom(played, 0),
                     ),
+                  if (discover.isNotEmpty) ...[
+                    const _Heading('کشف'),
+                    Row(
+                      children: [
+                        for (final (index, card) in discover.indexed) ...[
+                          if (index > 0) const SizedBox(width: RhythmoSpace.sm),
+                          Expanded(child: card),
+                        ],
+                      ],
+                    ),
+                  ],
                   if (newest.isNotEmpty) ...[
                     const _Heading('تازه اضافه‌شده'),
                     SizedBox(
@@ -275,6 +312,46 @@ class _ShelfItem extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A way to find new music on «خانه»: an icon and a name on flat glass.
+class _DiscoverCard extends StatelessWidget {
+  const _DiscoverCard(this.label, this.icon, this.onTap);
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GlassSurface(
+      radius: RhythmoRadii.md,
+      blur: 0,
+      shadow: false,
+      child: InkWell(
+        borderRadius: RhythmoRadii.control,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              horizontal: RhythmoSpace.sm, vertical: RhythmoSpace.md),
+          child: Column(
+            children: [
+              Icon(icon, size: 22, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(height: RhythmoSpace.xs),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelLarge,
+              ),
+            ],
+          ),
         ),
       ),
     );

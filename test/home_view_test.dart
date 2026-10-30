@@ -104,7 +104,6 @@ void main() {
         api: FakeTracksApi(), engine: FakeAudioEngine(), token: () => 't');
     addTearDown(player.dispose);
     DockDestination? picked;
-    var searched = false;
     await tester.pumpWidget(MaterialApp(
       theme: RhythmoTheme.dark(),
       home: Scaffold(
@@ -112,17 +111,16 @@ void main() {
           player: player,
           selected: DockDestination.home,
           onSelect: (d) => picked = d,
-          onSearch: () => searched = true,
         ),
       ),
     ));
 
     expect(find.text('خانه'), findsOneWidget);
     expect(find.text('موسیقی من'), findsNothing);
-    await tester.tap(find.byTooltip('پسندیده‌ها'));
-    expect(picked, DockDestination.liked);
-    await tester.tap(find.byTooltip('جست‌وجو در موسیقی من'));
-    expect(searched, isTrue);
+    // Liked songs are a tab of «موسیقی من», not a second way in.
+    expect(find.byTooltip('پسندیده‌ها'), findsNothing);
+    await tester.tap(find.byTooltip('جست‌وجو'));
+    expect(picked, DockDestination.search);
     expect(
         tester.getSemantics(find.byTooltip('خانه')),
         matchesSemantics(
@@ -132,5 +130,34 @@ void main() {
             hasSelectedState: true,
             hasTapAction: true));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the dock is one pill centred on a wide window', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final player = PlayerController(
+        api: FakeTracksApi(), engine: FakeAudioEngine(), token: () => 't');
+    addTearDown(player.dispose);
+    await tester.pumpWidget(MaterialApp(
+      theme: RhythmoTheme.dark(),
+      home: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          bottomNavigationBar: RhythmoDock(
+            player: player,
+            selected: DockDestination.home,
+            onSelect: (_) {},
+          ),
+        ),
+      ),
+    ));
+
+    final first = tester.getRect(find.byTooltip('خانه'));
+    final last = tester.getRect(find.byTooltip('حساب'));
+    final middle = (first.right + last.left) / 2;
+    expect((middle - 700).abs(), lessThan(1));
+    // Not stretched to the 520 px cap: the items sit together.
+    expect(first.right - last.left, lessThan(400));
   });
 }

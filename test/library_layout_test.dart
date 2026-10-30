@@ -45,12 +45,10 @@ void main() {
       expect(rect.left, closeTo(gutter, 1));
       expect(rect.width, greaterThanOrEqualTo(48));
       expect(tester.takeException(), isNull);
-      if (size.width >= 960) {
-        expect(find.text('تنظیمات'), findsNothing);
-        expect(find.text('خروج'), findsNothing);
-        expect(find.byTooltip('تنظیمات'), findsOneWidget);
-        expect(find.byTooltip('خروج'), findsOneWidget);
-      }
+      // Settings and sign-out live behind «حساب», not in the header.
+      expect(find.byTooltip('حساب'), findsOneWidget);
+      expect(find.byTooltip('خروج'), findsNothing);
+      expect(find.byTooltip('گنجینه'), findsNothing);
     });
 
     testWidgets('an empty library says what to do at $label', (tester) async {
@@ -113,7 +111,7 @@ void main() {
       ]);
       // No search field above the list; a 48 px header button instead.
       expect(find.byType(SearchBar), findsNothing);
-      final button = find.byTooltip('جست‌وجو در موسیقی من');
+      final button = find.byTooltip('جست‌وجو');
       expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
       await tester.tap(button);
       await tester.pumpAndSettle();

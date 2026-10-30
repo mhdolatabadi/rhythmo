@@ -387,8 +387,7 @@ void main() {
     });
   });
 
-  testWidgets('the library offers «این آهنگ چیه؟» on a narrow phone',
-      (tester) async {
+  testWidgets('خانه offers «این آهنگ چیه؟» on a narrow phone', (tester) async {
     tester.view.physicalSize = const Size(360, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -406,11 +405,12 @@ void main() {
       snippetRecorder: recorder,
     ));
     await tester.pumpAndSettle();
-    final action = tester.getRect(find.byTooltip('این آهنگ چیه؟'));
-    expect(action.width, greaterThanOrEqualTo(48));
+    await tester.tap(find.byTooltip('خانه'));
+    await tester.pumpAndSettle();
+    final action = tester.getRect(find.text('این آهنگ چیه؟'));
     expect(action.left, greaterThanOrEqualTo(0));
     expect(action.right, lessThanOrEqualTo(360));
-    await tester.tap(find.byTooltip('این آهنگ چیه؟'));
+    await tester.tap(find.text('این آهنگ چیه؟'));
     await tester.pumpAndSettle();
     expect(find.byType(IdentifyScreen), findsOneWidget);
     expect(tester.takeException(), isNull);

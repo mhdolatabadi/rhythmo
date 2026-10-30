@@ -120,9 +120,9 @@ void main() {
       expect(tester.takeException(), isNull);
       // Search lives behind the dock's bubble, not above the list.
       expect(find.byType(SearchBar), findsNothing);
-      _expectTouchTarget(tester, find.byTooltip('جست‌وجو در موسیقی من'));
+      _expectTouchTarget(tester, find.byTooltip('جست‌وجو'));
       final dock = tester.getRect(find.byType(RhythmoDock));
-      final search = tester.getRect(find.byTooltip('جست‌وجو در موسیقی من'));
+      final search = tester.getRect(find.byTooltip('جست‌وجو'));
       expect(dock.contains(search.center), isTrue);
       expect(tester.getSize(_row(_longPersian)).height, lessThanOrEqualTo(72));
       _expectTouchTarget(tester, _row(_longPersian));
@@ -305,8 +305,8 @@ void main() {
           ]),
           history: history,
           playlists: playlists);
-      _expectTouchTarget(tester, find.byTooltip('جست‌وجو در موسیقی من'));
-      await tester.tap(find.byTooltip('جست‌وجو در موسیقی من'));
+      _expectTouchTarget(tester, find.byTooltip('جست‌وجو'));
+      await tester.tap(find.byTooltip('جست‌وجو'));
       await tester.pumpAndSettle();
     }
 
@@ -391,7 +391,7 @@ void main() {
           tracks: FakeTracksApi([_cloud('a', 'Alpha')]),
           history: history,
           playlists: playlists);
-      await tester.tap(find.byTooltip('جست‌وجو در موسیقی من'));
+      await tester.tap(find.byTooltip('جست‌وجو'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await tester.enterText(_searchField, 'alpha');

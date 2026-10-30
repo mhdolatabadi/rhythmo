@@ -215,16 +215,23 @@ height; Arabic-script marks must not collide.
   screens included, sits on the aurora under the same brand header
   (`RhythmoBrand`), with forms and welcomes in flat glass cards. The
   listener's own collection is called «موسیقی من», never «کتابخانه».
-- **The dock** (`RhythmoDock`, built on `RhythmoDockBar`): the main
-  screens end in the mini player above a pill of destinations (خانه،
-  موسیقی من، پسندیده‌ها، حساب) and a
-  separate search bubble, capped at 520px and centred on wide windows.
-  The selected destination is a white pill with its name; the others show
-  only their icon, each a 48px target. The pills are flat and opaque, not
-  blurred, so the mini player keeps the blur budget and white buttons do
-  not show through. Guests get the same dock with خانه، گنجینه and ورود.
-  The app opens on «موسیقی من»; خانه greets, offers «ادامه بده», the newest tracks
-  and what was played lately.
+- **One way in.** Each place has a single entry point.
+  - **Header:** the brand and the notifications bell, nothing else.
+  - **Dock** (`RhythmoDock`, built on `RhythmoDockBar`): the main
+    navigation. The mini player sits above one pill of خانه، جست‌وجو،
+    موسیقی من and حساب. The pill is as wide as its items, centred, with an
+    equal gap between items. The selected item is a white pill with its
+    name; the others show only their icon, each a 48px target. The pill is
+    flat and opaque, not blurred. Guests get the same dock with خانه،
+    گنجینه and ورود.
+  - **خانه:** greets, offers «ادامه بده», and holds the «کشف» cards for
+    محبوب‌ها، گنجینه and «این آهنگ چیه؟». It also shows the newest tracks
+    and what was played lately. It is capped at 880px like the library.
+  - **موسیقی من:** its tabs hold پسندیده‌ها, and the «+» add button lives
+    only here.
+  - **حساب:** opens the account (address, admin, sign-out) above the
+    settings.
+- The app opens on «موسیقی من».
 
 ## Elevation & Depth
 

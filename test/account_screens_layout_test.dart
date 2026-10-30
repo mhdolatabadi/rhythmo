@@ -31,14 +31,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      if (size.width < 720) {
-        // On a phone, settings is in the account menu.
-        await tester.tap(find.byTooltip('حساب و تنظیمات'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('تنظیمات').last);
-      } else {
-        await tester.tap(find.byTooltip('تنظیمات'));
-      }
+      // «حساب» in the dock is the one way to settings.
+      await tester.tap(find.byTooltip('حساب'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
 

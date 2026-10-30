@@ -31,6 +31,9 @@ class SettingsScreen extends StatefulWidget {
     this.player,
     this.onManagePlaylists,
     this.email,
+    this.verified = false,
+    this.onAdmin,
+    this.onLogout,
     this.onDeleteAccount,
     this.onSignOutEverywhere,
     this.siteUri = AppConfiguration.sitePage,
@@ -40,6 +43,13 @@ class SettingsScreen extends StatefulWidget {
   /// The signed-in account; null hides the account section.
   final VoidCallback? onFeedback;
   final String? email;
+  final bool verified;
+
+  /// Opens account management for admins; null hides it.
+  final VoidCallback? onAdmin;
+
+  /// Signs out of this device; null hides it.
+  final VoidCallback? onLogout;
 
   /// Deletes the account; null hides the option.
   final Future<void> Function(String password)? onDeleteAccount;
@@ -134,7 +144,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final error = Theme.of(context).colorScheme.error;
     return Scaffold(
-      appBar: AppBar(title: const Text('تنظیمات')),
+      appBar: AppBar(title: const Text('حساب و تنظیمات')),
       // Centred and capped on desktop, so rows never span the window.
       body: RhythmoBackdrop(
           child: Center(
@@ -146,6 +156,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
               bottom: 24 + MediaQuery.paddingOf(context).bottom,
             ),
             children: [
+              // The account first: «حساب» in the dock is the one way here.
+              if (widget.email case final email?)
+                ListTile(
+                  leading: AccountAvatar(verified: widget.verified, size: 32),
+                  title: Text(
+                    email,
+                    textDirection: TextDirection.ltr,
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle:
+                      widget.verified ? const Text('حساب تأییدشده') : null,
+                ),
+              if (widget.onAdmin case final admin?)
+                ListTile(
+                  leading: const Icon(RhythmoIcons.usersFill),
+                  title: const Text('مدیریت حساب‌ها'),
+                  onTap: admin,
+                ),
               if (widget.onFeedback != null)
                 ListTile(
                     leading: const Icon(Icons.feedback_outlined),
@@ -223,18 +253,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     builder: (_) => AboutScreen(openPage: _openPage))),
               ),
               ListTile(
-                title: const Text('حساب کاربری'),
-                subtitle: widget.email == null
-                    ? null
-                    : Text(
-                        widget.email!,
-                        textDirection: TextDirection.ltr,
-                        textAlign: TextAlign.end,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-              ),
-              ListTile(
                 leading: const Icon(RhythmoIcons.shieldCheck),
                 title: const Text('حریم خصوصی'),
                 subtitle:
@@ -242,6 +260,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: const Icon(RhythmoIcons.arrowSquareOut, size: 20),
                 onTap: () => _openPage('/privacy'),
               ),
+              if (widget.onLogout case final logout?)
+                ListTile(
+                  leading: const Icon(RhythmoIcons.signOut),
+                  title: const Text('خروج از حساب'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    logout();
+                  },
+                ),
               if (widget.onSignOutEverywhere case final signOut?)
                 ListTile(
                   leading: const Icon(RhythmoIcons.signOut),
