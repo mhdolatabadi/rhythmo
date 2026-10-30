@@ -23,13 +23,49 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
   bool _done = false, _loading = false, _importing = false, _polling = false;
   String? _error;
   Timer? _timer;
+  DateTime? _cooldownUntil;
+  bool _scanned = false, _retryRestart = false;
+  List<BaleLecture>? _retryImports;
+
+  int get _cooldownSeconds {
+    final left = _cooldownUntil?.difference(DateTime.now()).inMilliseconds ?? 0;
+    return left > 0 ? (left / 1000).ceil() : 0;
+  }
+
+  bool get _busy => _loading || _importing || _cooldownSeconds > 0;
+
+  void _failed(Object error) {
+    _error = _message(error);
+    if (error is ApiException && error.code == 'rate_limited') {
+      final raw = error.details['retryAfterSeconds'];
+      final seconds = raw is num ? raw.toInt() : 30;
+      _cooldownUntil =
+          DateTime.now().add(Duration(seconds: seconds.clamp(1, 3600).toInt()));
+    }
+  }
+
+  void _retry() {
+    final pending = _retryImports;
+    if (pending != null) {
+      _import(pending);
+    } else {
+      _load(restart: _retryRestart);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _load();
     _refreshJobs();
-    _timer = Timer.periodic(const Duration(seconds: 6), (_) => _refreshJobs());
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (timer.tick % 6 == 0) _refreshJobs();
+      if (_cooldownUntil != null && mounted) {
+        setState(() {
+          if (_cooldownSeconds == 0) _cooldownUntil = null;
+        });
+      }
+    });
   }
 
   @override
@@ -61,12 +97,14 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
   }
 
   Future<void> _load({bool restart = false}) async {
-    if (_loading || _importing) return;
+    if (_busy) return;
     final token = widget.token();
     if (token == null) return;
     setState(() {
       _loading = true;
       _error = null;
+      _retryImports = null;
+      _retryRestart = restart;
     });
     try {
       final page = await widget.api.previewBaleArchive(
@@ -80,9 +118,10 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
         }
         _before = page.nextBefore == 0 ? null : page.nextBefore;
         _done = page.done;
+        _scanned = true;
       });
     } catch (error) {
-      if (mounted) setState(() => _error = _message(error));
+      if (mounted) setState(() => _failed(error));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -94,7 +133,13 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
     _polling = true;
     try {
       final jobs = await widget.api.baleArchiveJobs(token);
-      if (mounted) setState(() => _jobs = jobs);
+      if (mounted)
+        setState(() {
+          _jobs = jobs;
+          for (final job in jobs) {
+            if (job.messageId.isNotEmpty) _submitted[job.messageId] = job.id;
+          }
+        });
     } catch (_) {
       // A transient status failure must not discard a successful submission.
     } finally {
@@ -104,10 +149,11 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
 
   Future<void> _import(List<BaleLecture> entries) async {
     final token = widget.token();
-    if (token == null || _importing || _loading) return;
+    if (token == null || _busy) return;
     setState(() {
       _importing = true;
       _error = null;
+      _retryImports = List.of(entries);
     });
     try {
       for (final entry in entries) {
@@ -116,11 +162,21 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
         if (!mounted) return;
         setState(() {
           _submitted[entry.id] = job.id;
+          _retryImports?.removeWhere((e) => e.id == entry.id);
+          _jobs = [
+            BaleArchiveJob(job.id, job.state, job.fileName, job.error,
+                messageId: entry.id,
+                date: entry.date,
+                title: entry.title,
+                topic: entry.topic,
+                session: entry.session),
+            ..._jobs.where((old) => old.id != job.id)
+          ];
         });
       }
       await _refreshJobs();
     } catch (error) {
-      if (mounted) setState(() => _error = _message(error));
+      if (mounted) setState(() => _failed(error));
     } finally {
       if (mounted) setState(() => _importing = false);
     }
@@ -198,7 +254,7 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
   BaleArchiveJob? _jobFor(BaleLecture entry) {
     final id = _submitted[entry.id];
     for (final job in _jobs) {
-      if (job.id == id) return job;
+      if (job.id == id || job.messageId == entry.id) return job;
     }
     return null;
   }
@@ -218,7 +274,13 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
   @override
   Widget build(BuildContext context) {
     final groups = <String, List<BaleLecture>>{};
-    for (final entry in _entries.values) {
+    final known = Map<String, BaleLecture>.of(_entries);
+    for (final job in _jobs) {
+      if (job.messageId.isNotEmpty && job.date > 0) {
+        known.putIfAbsent(job.messageId, () => job.lecture);
+      }
+    }
+    for (final entry in known.values) {
       groups
           .putIfAbsent(
             entry.topic.isEmpty ? 'نیازمند بررسی' : entry.topic,
@@ -235,8 +297,7 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
         actions: [
           IconButton(
             tooltip: 'بررسی پست‌های جدید',
-            onPressed:
-                _loading || _importing ? null : () => _load(restart: true),
+            onPressed: _busy ? null : () => _load(restart: true),
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -258,23 +319,33 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
                   if (_error != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        _error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(_error!,
+                                style: TextStyle(
+                                    color:
+                                        Theme.of(context).colorScheme.error)),
+                            Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: TextButton(
+                                  onPressed: _busy ? null : _retry,
+                                  child: Text(_cooldownSeconds > 0
+                                      ? 'تلاش دوباره در ${persianDigits(_cooldownSeconds)} ثانیه'
+                                      : 'تلاش دوباره'),
+                                )),
+                          ]),
                     ),
                   if (_loading)
                     const Padding(
                       padding: EdgeInsets.all(16),
                       child: Center(child: CircularProgressIndicator()),
                     ),
-                  if (!_loading && _entries.isEmpty)
+                  if (!_loading && _error == null && _scanned && known.isEmpty)
                     const Padding(
                       padding: EdgeInsets.all(16),
                       child: Text(
-                        'در پست‌های بررسی‌شده سخنرانی کاملی نبود. پست‌های قدیمی‌تر را بررسی کن.',
+                        'در این بخش از تاریخچه سخنرانی کاملی نبود. پست‌های قدیمی‌تر را بررسی کن.',
                       ),
                     ),
                   for (final group in groups.entries)
@@ -298,7 +369,7 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
                                       _jobFor(e)?.state == 'failed'),
                             ))
                               TextButton(
-                                onPressed: _loading || _importing
+                                onPressed: _busy
                                     ? null
                                     : () => _import(
                                           group.value
@@ -324,27 +395,10 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
                   const SizedBox(height: 16),
                   if (!_done)
                     OutlinedButton(
-                      onPressed: _loading || _importing ? null : () => _load(),
+                      onPressed: _busy ? null : () => _load(),
                       child: const Text('بررسی پست‌های قدیمی‌تر'),
                     ),
                   if (_done) const Text('به پایان تاریخچهٔ عمومی رسیدیم.'),
-                  if (_jobs.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    Text(
-                      'وضعیت واردکردن',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    for (final job in _jobs)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          job.fileName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(_state(job)),
-                      ),
-                  ],
                 ],
               ),
             ),
@@ -380,14 +434,13 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
               if (job != null) Text(_state(job)),
               if (!submitted)
                 TextButton(
-                  onPressed: _importing ? null : () => _review(entry),
+                  onPressed: _busy ? null : () => _review(entry),
                   child: const Text('اصلاح'),
                 ),
               FilledButton.tonal(
-                onPressed:
-                    _loading || _importing || entry.needsReview || submitted
-                        ? null
-                        : () => _import([entry]),
+                onPressed: _busy || entry.needsReview || submitted
+                    ? null
+                    : () => _import([entry]),
                 child: Text(
                   submitted
                       ? 'ثبت شد'

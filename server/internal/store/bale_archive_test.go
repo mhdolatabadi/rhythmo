@@ -39,7 +39,7 @@ func TestBaleTopicIdentityOrderingRetryAndPrivacy(t *testing.T) {
 	}
 	var ids []string
 	for _, job := range []BotImport{first, second} {
-		tr, err := tracks.Create(ctx, owner.ID, NewTrack{Title: "lecture", FileName: "lecture.mp3", ContentType: "audio/mpeg", SizeBytes: 100})
+		tr, err := tracks.Create(ctx, owner.ID, NewTrack{Title: *job.Title, FileName: "lecture.mp3", ContentType: "audio/mpeg", SizeBytes: 100})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -87,4 +87,21 @@ func TestBaleTopicIdentityOrderingRetryAndPrivacy(t *testing.T) {
 	if err != nil || done.TrackID == nil || *done.TrackID != ids[0] {
 		t.Fatalf("done duplicate %+v %v", done, err)
 	}
+	recent, err := b.RecentBale(ctx, owner.ID)
+	if err != nil || len(recent) != 3 {
+		t.Fatalf("recent %v %v", recent, err)
+	}
+	byMessage := map[string]BaleArchiveImport{}
+	for _, j := range recent {
+		byMessage[j.MessageID] = j
+	}
+	if j := byMessage["13"]; j.Topic != "مهدویت" || j.Session != 13 || j.Title != "مهدویت" || j.State != ImportDone || j.Date != 13000 {
+		t.Fatalf("lost persistent metadata: %+v", j)
+	}
+	stranger, _ := NewUsers(pool).Create(ctx, "stranger@example.com", "hash")
+	hidden, err := b.RecentBale(ctx, stranger.ID)
+	if err != nil || len(hidden) != 0 {
+		t.Fatalf("archive leaked to another owner: %+v %v", hidden, err)
+	}
+
 }

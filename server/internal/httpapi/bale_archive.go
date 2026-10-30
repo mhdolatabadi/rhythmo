@@ -16,7 +16,7 @@ import (
 type BaleArchive interface {
 	Preview(context.Context, int64) (balearchive.Page, error)
 	Submit(context.Context, string, string, int64, string, int) (store.BotImport, error)
-	Recent(context.Context, string) ([]store.BotImport, error)
+	Recent(context.Context, string) ([]store.BaleArchiveImport, error)
 }
 
 func (h *AdminHandlers) WithBaleArchive(archive BaleArchive, rate *RateLimiter) *AdminHandlers {
@@ -111,9 +111,5 @@ func (h *AdminHandlers) recentBale(w http.ResponseWriter, r *http.Request) {
 		internalError(w, "list bale archive", err)
 		return
 	}
-	out := make([]map[string]any, 0, len(jobs))
-	for _, j := range jobs {
-		out = append(out, map[string]any{"id": j.ID, "state": j.State, "fileName": j.FileName, "trackId": j.TrackID, "playlistId": j.PlaylistID, "error": j.Error})
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"imports": out})
+	writeJSON(w, http.StatusOK, map[string]any{"imports": jobs})
 }

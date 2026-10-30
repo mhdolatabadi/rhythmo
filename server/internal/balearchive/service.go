@@ -21,7 +21,7 @@ var ErrSession = errors.New("session needs review")
 type ArchiveStore interface {
 	bot.ImportStore
 	QueueBale(context.Context, string, store.BaleLecture, int) (store.BotImport, error)
-	RecentImports(context.Context, string, string, int) ([]store.BotImport, error)
+	RecentBale(context.Context, string) ([]store.BaleArchiveImport, error)
 }
 type Source interface {
 	BaleHistory(context.Context, int64) (linkimport.BalePage, error)
@@ -119,8 +119,8 @@ func (s *Service) Submit(ctx context.Context, userID, rid string, date int64, to
 	}
 	return s.imports.QueueBale(ctx, userID, store.BaleLecture{MessageID: rid, Date: date, FileName: audio.SafeFileName(name), Title: title, Caption: d.Caption.Text, Topic: e.Topic, TopicKey: Normalize(e.Topic), SourceURL: e.SourceURL, Session: e.Session, SizeBytes: d.FileSize, DurationMS: e.DurationMS}, s.maxActive)
 }
-func (s *Service) Recent(ctx context.Context, userID string) ([]store.BotImport, error) {
-	return s.imports.RecentImports(ctx, userID, ProviderName, 50)
+func (s *Service) Recent(ctx context.Context, userID string) ([]store.BaleArchiveImport, error) {
+	return s.imports.RecentBale(ctx, userID)
 }
 
 // Run polls the durable queue, one download at a time. Reclaim only jobs

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/mhdolatabadi/rhythmo/server/internal/auth"
 	"github.com/mhdolatabadi/rhythmo/server/internal/balearchive"
@@ -28,9 +29,9 @@ func (f *fakeBaleArchive) Submit(_ context.Context, _, _ string, _ int64, topic 
 	f.session = session
 	return store.BotImport{ID: "job", State: store.ImportQueued}, nil
 }
-func (f *fakeBaleArchive) Recent(context.Context, string) ([]store.BotImport, error) {
+func (f *fakeBaleArchive) Recent(context.Context, string) ([]store.BaleArchiveImport, error) {
 	f.calls++
-	return []store.BotImport{}, nil
+	return []store.BaleArchiveImport{{ID: "job", MessageID: "-123", Date: 1234, Title: "فاطمیه؛ جلسه اول", Topic: "فاطمیه", Session: 1, State: store.ImportDone}}, nil
 }
 func TestBaleAdminAuthorizationAndInput(t *testing.T) {
 	api := newTestAPI(t)
@@ -76,4 +77,20 @@ func TestBaleAdminAuthorizationAndInput(t *testing.T) {
 	if source.calls != calls {
 		t.Fatal("invalid input reached source")
 	}
+	// Import status is independent of preview throttling and includes the
+	// persisted source/topic metadata needed to restore a reopened screen.
+	api.handler = NewHandler(Config{Admin: NewAdminHandlers(h, &fakeAdminStore{}).WithBaleArchive(source, NewRateLimiter(RateLimit{Requests: 1, Window: time.Minute}, 10))})
+	r = api.do(t, "GET", "/api/v1/admin/bale-archive/preview", "", at)
+	if r.Code != http.StatusOK {
+		t.Fatal(r.Body)
+	}
+	expectError(t, api.do(t, "GET", "/api/v1/admin/bale-archive/preview", "", at), 429, "rate_limited")
+	r = api.do(t, "GET", "/api/v1/admin/bale-archive/imports", "", at)
+	result := decode[struct {
+		Imports []store.BaleArchiveImport `json:"imports"`
+	}](t, r)
+	if r.Code != 200 || len(result.Imports) != 1 || result.Imports[0].Topic != "فاطمیه" || result.Imports[0].Session != 1 || result.Imports[0].MessageID != "-123" {
+		t.Fatalf("lost archive metadata: %s", r.Body)
+	}
+
 }
