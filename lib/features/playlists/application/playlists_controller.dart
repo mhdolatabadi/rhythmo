@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/core/api/api_client.dart';
+import 'package:rhythmo/features/bots/data/messenger_bot.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/features/notifications/data/notifications.dart';
@@ -32,9 +33,11 @@ class PlaylistsController extends ChangeNotifier {
       bool Function()? isAdmin,
       DevicePlaylistStore? deviceStore,
       NotificationsApi? subscriptions,
+      BotChannelsApi? channels,
       String? Function()? accountId})
       : _api = api,
         _subscriptions = subscriptions,
+        _channels = channels,
         _token = token,
         _isAdmin = isAdmin,
         _deviceStore = deviceStore ?? MemoryDevicePlaylistStore(),
@@ -61,7 +64,45 @@ class PlaylistsController extends ChangeNotifier {
 
   final PlaylistsApi _api;
   final NotificationsApi? _subscriptions;
+  final BotChannelsApi? _channels;
   final String? Function() _token;
+
+  /// Whether Telegram and Bale channels can be synced into playlists.
+  bool get canSyncChannels => _channels != null;
+
+  /// A code to post in a messenger channel so it syncs into the playlist,
+  /// or null when that failed.
+  Future<BotLinkCode?> createChannelCode(String id) async {
+    final token = _token();
+    final api = _channels;
+    if (token == null || api == null) return null;
+    try {
+      return await api.createChannelCode(token, id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The messenger channels synced into the playlist, or null when they
+  /// couldn't be loaded.
+  Future<List<SyncedChannel>?> syncedChannels(String id) async {
+    final token = _token();
+    final api = _channels;
+    if (token == null || api == null) return null;
+    try {
+      return await api.listSyncedChannels(token, id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Stops syncing a messenger channel into the playlist.
+  Future<bool> removeSyncedChannel(String id, SyncedChannel channel) {
+    final api = _channels;
+    if (api == null) return Future.value(false);
+    return _attempt((token) => api.removeSyncedChannel(token, id, channel));
+  }
+
   final bool Function()? _isAdmin;
 
   /// Whether the signed-in account may take playlists out of the popular
@@ -202,6 +243,33 @@ class PlaylistsController extends ChangeNotifier {
     try {
       onChange(await api.setPlaylistSubscription(
           token, shareToken, wanted.subscribed));
+      return LikeResult.done;
+    } on ApiException catch (e) {
+      onChange(current);
+      return e.statusCode == 404 ? LikeResult.gone : LikeResult.failed;
+    } catch (_) {
+      onChange(current);
+      return LikeResult.failed;
+    } finally {
+      _subscribing.remove(shareToken);
+      notifyListeners();
+    }
+  }
+
+  /// Mutes or unmutes a subscribed channel, the same way as [setSubscription].
+  Future<LikeResult> setMuted(String shareToken, PlaylistSubscription current,
+      {required void Function(PlaylistSubscription subscription)
+          onChange}) async {
+    final token = _token();
+    final api = _subscriptions;
+    if (token == null || api == null || _subscribing.contains(shareToken)) {
+      return LikeResult.failed;
+    }
+    _subscribing.add(shareToken);
+    onChange(current.withMuted(!current.muted));
+    notifyListeners();
+    try {
+      onChange(await api.setPlaylistMuted(token, shareToken, !current.muted));
       return LikeResult.done;
     } on ApiException catch (e) {
       onChange(current);
@@ -408,11 +476,12 @@ class PlaylistsController extends ChangeNotifier {
     }
   }
 
-  Future<bool> rename(String id, String name) async {
+  /// Renames the playlist, and sets its description unless that is null.
+  Future<bool> rename(String id, String name, {String? description}) async {
     final token = _token();
     if (token == null) return false;
     try {
-      await _api.renamePlaylist(token, id, name);
+      await _api.renamePlaylist(token, id, name, description: description);
       await load();
       return true;
     } catch (_) {
@@ -465,7 +534,12 @@ class PlaylistsController extends ChangeNotifier {
     }
   }
 
-  /// The owner takes a member out, with the tracks they added.
+  /// The owner makes a member an admin of the channel, or takes it back.
+  Future<bool> setMemberAdmin(String id, String memberId, bool admin) =>
+      _attempt(
+          (token) => _api.setPlaylistMemberAdmin(token, id, memberId, admin));
+
+  /// The owner or an admin takes a member out, with the tracks they added.
   Future<bool> removeMember(String id, String memberId) =>
       _attempt((token) => _api.removePlaylistMember(token, id, memberId));
 

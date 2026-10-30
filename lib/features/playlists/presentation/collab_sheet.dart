@@ -7,8 +7,9 @@ import 'package:rhythmo/app/app_configuration.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 
-/// Lets the owner invite people to add their own tracks to [playlist], and
-/// manage who has joined.
+/// Lets the owner invite people to add their own tracks to [playlist], make
+/// some of them admins, and manage who has joined. An admin sees the same
+/// list and may remove members who aren't admins.
 Future<void> showCollabSheet(
   BuildContext context, {
   required Playlist playlist,
@@ -64,6 +65,17 @@ class _CollabSheetState extends State<_CollabSheet> {
         return ok;
       }, 'باطل کردن لینک ناموفق بود. دوباره تلاش کن.');
 
+  Future<void> _setAdmin(PlaylistMember member, bool admin) => _run(() async {
+        final ok = await widget.controller
+            .setMemberAdmin(widget.playlist.id, member.id, admin);
+        if (ok) {
+          _members = [
+            for (final m in _members) m.id == member.id ? m.withAdmin(admin) : m
+          ];
+        }
+        return ok;
+      }, 'تغییر ادمین ناموفق بود. دوباره تلاش کن.');
+
   Future<void> _remove(PlaylistMember member) async {
     final confirmed = await showRhythmoConfirm(
       context,
@@ -96,6 +108,7 @@ class _CollabSheetState extends State<_CollabSheet> {
         : origin == null
             ? token
             : collabPlaylistLink(origin, token).toString();
+    final owner = widget.playlist.isOwner;
     final theme = Theme.of(context);
     final muted = theme.textTheme.bodySmall
         ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
@@ -113,10 +126,13 @@ class _CollabSheetState extends State<_CollabSheet> {
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 8),
-            const Text(
-                'هر کسی که لینک دعوت را باز کند عضو می‌شود و از موسیقی خودش آهنگ اضافه می‌کند. هر آهنگ از فضای کسی کم می‌شود که اضافه‌اش کرده.'),
+            Text(owner
+                ? 'هر کسی که لینک دعوت را باز کند عضو می‌شود و از موسیقی خودش آهنگ اضافه می‌کند. هر آهنگ از فضای کسی کم می‌شود که اضافه‌اش کرده. ادمین‌ها نام و توضیح را عوض می‌کنند، هر آهنگی را برمی‌دارند و اعضای عادی را حذف می‌کنند.'
+                : 'تو ادمین این فهرست پخشی: نام و توضیح را عوض می‌کنی، هر آهنگی را برمی‌داری و اعضای عادی را حذف می‌کنی.'),
             const SizedBox(height: 16),
-            if (link != null) ...[
+            if (!owner)
+              const SizedBox.shrink()
+            else if (link != null) ...[
               Directionality(
                 textDirection: TextDirection.ltr,
                 child: SelectableText(link, textAlign: TextAlign.center),
@@ -186,10 +202,32 @@ class _CollabSheetState extends State<_CollabSheet> {
                     textDirection: TextDirection.ltr,
                     textAlign: TextAlign.start,
                   ),
-                  trailing: IconButton(
-                    tooltip: 'حذف عضو',
-                    onPressed: _busy ? null : () => _remove(member),
-                    icon: const Icon(RhythmoIcons.userMinus),
+                  subtitle: member.isAdmin
+                      ? const Text('ادمین', textAlign: TextAlign.end)
+                      : null,
+                  // The owner's toggle shows the role; others see it as text.
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (owner)
+                        IconButton(
+                          tooltip:
+                              member.isAdmin ? 'برداشتن ادمین' : 'ادمین کردن',
+                          onPressed: _busy
+                              ? null
+                              : () => _setAdmin(member, !member.isAdmin),
+                          isSelected: member.isAdmin,
+                          icon: const Icon(RhythmoIcons.shield),
+                          selectedIcon:
+                              const Icon(RhythmoIcons.shieldCheckFill),
+                        ),
+                      if (owner || !member.isAdmin)
+                        IconButton(
+                          tooltip: 'حذف عضو',
+                          onPressed: _busy ? null : () => _remove(member),
+                          icon: const Icon(RhythmoIcons.userMinus),
+                        ),
+                    ],
                   ),
                 ),
           ],

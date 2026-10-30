@@ -107,6 +107,33 @@ func TestSubscribingToPublicPlaylistsAPI(t *testing.T) {
 		t.Fatalf("mark all read = %d", response.Code)
 	}
 
+	// Muting keeps the notice in the inbox but out of the badge (#428).
+	if response := call(http.MethodPut, link+"/subscription/mute", ownerToken, nil); response.Code != http.StatusNotFound {
+		t.Fatalf("muting without a subscription = %d", response.Code)
+	}
+	response = call(http.MethodPut, link+"/subscription/mute", fanToken, nil)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"subscriberCount":1,"muted":true`) {
+		t.Fatalf("mute = %d %s", response.Code, response.Body)
+	}
+	other, _ := tracks.Create(ctx, owner.ID, store.NewTrack{Title: "Quiet Song", FileName: "q.mp3", ContentType: "audio/mpeg", SizeBytes: 1})
+	call(http.MethodPut, "/api/v1/playlists/"+playlist.ID+"/tracks", ownerToken, map[string][]string{"trackIds": {song.ID, other.ID}})
+	if response := call(http.MethodGet, "/api/v1/notifications/unread-count", fanToken, nil); !strings.Contains(response.Body.String(), `"unreadCount":0`) {
+		t.Fatalf("unread while muted = %s", response.Body)
+	}
+	if response := call(http.MethodGet, "/api/v1/notifications", fanToken, nil); !strings.Contains(response.Body.String(), "Quiet Song") {
+		t.Fatalf("inbox while muted = %s", response.Body)
+	}
+	if response := call(http.MethodGet, "/api/v1/subscriptions", fanToken, nil); !strings.Contains(response.Body.String(), `"muted":true`) {
+		t.Fatalf("subscriptions while muted = %s", response.Body)
+	}
+	response = call(http.MethodDelete, link+"/subscription/mute", fanToken, nil)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"muted":false`) {
+		t.Fatalf("unmute = %d %s", response.Code, response.Body)
+	}
+	if response := call(http.MethodGet, "/api/v1/notifications/unread-count", fanToken, nil); !strings.Contains(response.Body.String(), `"unreadCount":1`) {
+		t.Fatalf("unread after unmuting = %s", response.Body)
+	}
+
 	response = call(http.MethodDelete, link+"/subscription", fanToken, nil)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"subscribed":false,"subscriberCount":0`) {
 		t.Fatalf("unsubscribe = %d %s", response.Code, response.Body)

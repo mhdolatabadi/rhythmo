@@ -7,6 +7,7 @@ import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
+import 'package:rhythmo/features/playlists/presentation/channel_sync_sheet.dart';
 import 'package:rhythmo/features/playlists/presentation/collab_sheet.dart';
 import 'package:rhythmo/features/playlists/presentation/shared_playlist_screen.dart';
 
@@ -560,16 +561,13 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   Future<void> _rename() async {
     final current = playlist;
     if (current == null) return;
-    final name = await _askName(
-      context,
-      'تغییر نام فهرست پخش',
-      initialValue: current.name,
-    );
-    if (name == null) return;
-    if (await widget.controller.rename(current.id, name)) {
+    final details = await _askDetails(context, current);
+    if (details == null) return;
+    if (await widget.controller
+        .rename(current.id, details.name, description: details.description)) {
       await _load();
     } else {
-      _message('تغییر نام ناموفق بود.');
+      _message('ذخیره‌ی نام و توضیح ناموفق بود.');
     }
   }
 
@@ -616,41 +614,51 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               icon: const Icon(RhythmoIcons.dotsThreeVertical),
               onSelected: (action) => switch (action) {
                 _PlaylistAction.rename => _rename(),
+                _PlaylistAction.syncChannel => showChannelSyncSheet(context,
+                    playlist: current, controller: widget.controller),
                 _PlaylistAction.delete => _delete(),
                 _PlaylistAction.leave => _leave(),
               },
               itemBuilder: (context) {
                 final danger = Theme.of(context).colorScheme.error;
-                // A member adds and removes their own tracks; the rest is
-                // the owner's.
-                return current.isOwner
-                    ? [
-                        const PopupMenuItem(
-                          value: _PlaylistAction.rename,
-                          child: _MenuRow(
-                            icon: RhythmoIcons.pencilSimple,
-                            label: 'تغییر نام',
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: _PlaylistAction.delete,
-                          child: _MenuRow(
-                            icon: RhythmoIcons.trash,
-                            label: 'حذف فهرست پخش',
-                            color: danger,
-                          ),
-                        ),
-                      ]
-                    : [
-                        PopupMenuItem(
-                          value: _PlaylistAction.leave,
-                          child: _MenuRow(
-                            icon: RhythmoIcons.signOut,
-                            label: 'ترک فهرست پخش',
-                            color: danger,
-                          ),
-                        ),
-                      ];
+                // A member adds and removes their own tracks; an admin also
+                // edits its name and description; the rest is the owner's.
+                return [
+                  if (current.canManage)
+                    const PopupMenuItem(
+                      value: _PlaylistAction.rename,
+                      child: _MenuRow(
+                        icon: RhythmoIcons.pencilSimple,
+                        label: 'ویرایش نام و توضیح',
+                      ),
+                    ),
+                  if (current.canManage && widget.controller.canSyncChannels)
+                    const PopupMenuItem(
+                      value: _PlaylistAction.syncChannel,
+                      child: _MenuRow(
+                        icon: RhythmoIcons.paperPlaneTilt,
+                        label: 'اتصال کانال تلگرام یا بله',
+                      ),
+                    ),
+                  if (current.isOwner)
+                    PopupMenuItem(
+                      value: _PlaylistAction.delete,
+                      child: _MenuRow(
+                        icon: RhythmoIcons.trash,
+                        label: 'حذف فهرست پخش',
+                        color: danger,
+                      ),
+                    )
+                  else
+                    PopupMenuItem(
+                      value: _PlaylistAction.leave,
+                      child: _MenuRow(
+                        icon: RhythmoIcons.signOut,
+                        label: 'ترک فهرست پخش',
+                        color: danger,
+                      ),
+                    ),
+                ];
               },
             ),
           const SizedBox(width: RhythmoSpace.sm),
@@ -675,7 +683,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       onPlay: () => widget.player.playFrom(current.tracks, 0),
                       onShuffle: () =>
                           widget.player.playShuffled(current.tracks),
-                      onCollab: current.isOwner ? _collab : null,
+                      onCollab: current.canManage ? _collab : null,
                       onShare: current.isOwner ? _share : null,
                       onSelectTracks: _selectTracks,
                       onTapTrack: (index) =>
@@ -698,7 +706,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   }
 }
 
-enum _PlaylistAction { rename, delete, leave }
+enum _PlaylistAction { rename, syncChannel, delete, leave }
 
 class _MenuRow extends StatelessWidget {
   const _MenuRow({required this.icon, required this.label, this.color});
@@ -712,7 +720,11 @@ class _MenuRow extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: color),
           const SizedBox(width: RhythmoSpace.md),
-          Text(label, style: TextStyle(color: color)),
+          Flexible(
+            child: Text(label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: color)),
+          ),
         ],
       );
 }
@@ -879,8 +891,11 @@ class _PlaylistDetailHeader extends StatelessWidget {
       final wide = constraints.maxWidth >= 600;
       final align = wide ? CrossAxisAlignment.start : CrossAxisAlignment.center;
       final textAlign = wide ? TextAlign.start : TextAlign.center;
-      final eyebrow =
-          playlist.isCollaborative ? 'فهرست پخش مشترک' : 'فهرست پخش';
+      final eyebrow = playlist.isPublic
+          ? 'کانال موسیقی'
+          : playlist.isCollaborative
+              ? 'فهرست پخش مشترک'
+              : 'فهرست پخش';
       final details = Column(
         crossAxisAlignment: align,
         mainAxisSize: MainAxisSize.min,
@@ -900,10 +915,21 @@ class _PlaylistDetailHeader extends StatelessWidget {
                     : theme.textTheme.headlineMedium)
                 ?.copyWith(fontWeight: FontWeight.w800, height: 1.3),
           ),
+          if (playlist.description.isNotEmpty) ...[
+            const SizedBox(height: RhythmoSpace.xs),
+            Text(
+              playlist.description,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              textAlign: textAlign,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
           const SizedBox(height: RhythmoSpace.sm),
           Text(
             [
               '${persianDigits(playlist.displayTrackCount)} قطعه موسیقی',
+              if (playlist.isAdmin) 'ادمین هستی',
               if (!playlist.isOwner && playlist.owner != null)
                 'از ${playlist.owner}'
               else if (playlist.members.isNotEmpty)
@@ -940,7 +966,9 @@ class _PlaylistDetailHeader extends StatelessWidget {
               ),
               if (onCollab != null)
                 IconButton.outlined(
-                  tooltip: 'دعوت دوستان و مدیریت اعضا',
+                  tooltip: playlist.isOwner
+                      ? 'دعوت دوستان و مدیریت اعضا'
+                      : 'اعضا و ادمین‌ها',
                   onPressed: onCollab,
                   icon: Icon(playlist.collabToken == null
                       ? RhythmoIcons.userPlus
@@ -1320,6 +1348,62 @@ Future<String?> _askName(
     ),
   );
   controller.dispose();
+  return result;
+}
+
+/// Asks for a playlist's name and its channel description.
+Future<({String name, String description})?> _askDetails(
+    BuildContext context, Playlist playlist) async {
+  final name = TextEditingController(text: playlist.name);
+  final description = TextEditingController(text: playlist.description);
+  final result = await showDialog<({String name, String description})>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('نام و توضیح'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: name,
+              autofocus: true,
+              maxLength: 200,
+              decoration: const InputDecoration(labelText: 'نام'),
+            ),
+            const SizedBox(height: RhythmoSpace.sm),
+            TextField(
+              controller: description,
+              maxLength: 500,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'توضیح',
+                hintText: 'این کانال درباره‌ی چیست؟',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('انصراف'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final value = name.text.trim();
+            if (value.isNotEmpty) {
+              Navigator.pop(
+                  context, (name: value, description: description.text.trim()));
+            }
+          },
+          child: const Text('ذخیره'),
+        ),
+      ],
+    ),
+  );
+  name.dispose();
+  description.dispose();
   return result;
 }
 

@@ -168,7 +168,11 @@ abstract interface class PlaylistsApi {
   Future<List<Playlist>> listPlaylists(String token);
   Future<Playlist> getPlaylist(String token, String playlistId);
   Future<Playlist> createPlaylist(String token, String name);
-  Future<Playlist> renamePlaylist(String token, String playlistId, String name);
+
+  /// Renames the playlist, and sets its channel description unless
+  /// [description] is null. Its owner and admins may.
+  Future<Playlist> renamePlaylist(String token, String playlistId, String name,
+      {String? description});
   Future<Playlist> replacePlaylistTracks(
       String token, String playlistId, List<String> trackIds);
   Future<void> deletePlaylist(String token, String playlistId);
@@ -219,6 +223,10 @@ abstract interface class PlaylistsApi {
 
   /// Leaves a collaborative playlist, taking one's tracks out of it.
   Future<void> leavePlaylist(String token, String playlistId);
+
+  /// The owner makes a member an admin, or a plain member again.
+  Future<void> setPlaylistMemberAdmin(
+      String token, String playlistId, String memberId, bool admin);
 }
 
 /// A playlist's share link as its owner set it. [pending] is true while a
@@ -232,6 +240,10 @@ abstract interface class NotificationsApi {
   /// same as once.
   Future<PlaylistSubscription> setPlaylistSubscription(
       String token, String shareToken, bool subscribed);
+
+  /// Mutes or unmutes a channel this account subscribed to.
+  Future<PlaylistSubscription> setPlaylistMuted(
+      String token, String shareToken, bool muted);
 
   /// The public playlists this account subscribed to, unread ones first.
   Future<List<SubscribedPlaylist>> listSubscriptions(String token);
@@ -253,6 +265,17 @@ abstract interface class BotsApi {
 
   /// Has the bot post a track into the account's linked chats.
   Future<void> sendTrackToBot(String token, String provider, String trackId);
+}
+
+/// Syncing a Telegram or Bale channel into a playlist (#430): its owner or an
+/// admin gets a code, makes the bot an admin of the channel and posts the
+/// code there.
+abstract interface class BotChannelsApi {
+  Future<BotLinkCode> createChannelCode(String token, String playlistId);
+  Future<List<SyncedChannel>> listSyncedChannels(
+      String token, String playlistId);
+  Future<void> removeSyncedChannel(
+      String token, String playlistId, SyncedChannel channel);
 }
 
 /// Song lyrics, which the server looks up on LRCLIB; the app never calls
@@ -358,6 +381,7 @@ class ApiClient
         HistoryApi,
         PlaylistsApi,
         BotsApi,
+        BotChannelsApi,
         LinkImportsApi,
         LyricsApi,
         TranscriptionApi,
@@ -689,6 +713,17 @@ class ApiClient
   }
 
   @override
+  Future<PlaylistSubscription> setPlaylistMuted(
+      String token, String shareToken, bool muted) async {
+    final body = await _send(
+        muted ? 'PUT' : 'DELETE',
+        '/api/v1/shared-playlists/${Uri.encodeComponent(shareToken)}'
+        '/subscription/mute',
+        token: token);
+    return PlaylistSubscription.fromJson(body);
+  }
+
+  @override
   Future<List<SubscribedPlaylist>> listSubscriptions(String token) async {
     final body = await _send('GET', '/api/v1/subscriptions', token: token);
     return [
@@ -1004,6 +1039,18 @@ class ApiClient
   }
 
   @override
+  Future<void> setPlaylistMemberAdmin(
+      String token, String playlistId, String memberId, bool admin) async {
+    await _send(
+        'PUT',
+        '/api/v1/playlists/${Uri.encodeComponent(playlistId)}'
+            '/members/${Uri.encodeComponent(memberId)}/role',
+        token: token,
+        body: {'role': admin ? 'admin' : 'member'},
+        expectBody: false);
+  }
+
+  @override
   Future<void> leavePlaylist(String token, String playlistId) async {
     await _send('DELETE',
         '/api/v1/playlists/${Uri.encodeComponent(playlistId)}/membership',
@@ -1025,10 +1072,14 @@ class ApiClient
   }
 
   @override
-  Future<Playlist> renamePlaylist(
-      String token, String playlistId, String name) async {
+  Future<Playlist> renamePlaylist(String token, String playlistId, String name,
+      {String? description}) async {
     final body = await _send('PUT', '/api/v1/playlists/$playlistId',
-        token: token, body: {'name': name});
+        token: token,
+        body: {
+          'name': name,
+          if (description != null) 'description': description,
+        });
     return Playlist.fromJson(body);
   }
 
@@ -1059,6 +1110,40 @@ class ApiClient
   Future<BotLinkCode> createBotLinkCode(String token) async {
     final body = await _send('POST', '/api/v1/bots/link-code', token: token);
     return BotLinkCode.fromJson(body);
+  }
+
+  @override
+  Future<BotLinkCode> createChannelCode(String token, String playlistId) async {
+    final body = await _send(
+        'POST',
+        '/api/v1/playlists/${Uri.encodeComponent(playlistId)}'
+            '/bot-channels/code',
+        token: token);
+    return BotLinkCode.fromJson(body);
+  }
+
+  @override
+  Future<List<SyncedChannel>> listSyncedChannels(
+      String token, String playlistId) async {
+    final body = await _send('GET',
+        '/api/v1/playlists/${Uri.encodeComponent(playlistId)}/bot-channels',
+        token: token);
+    return [
+      for (final channel in body['channels'] as List<dynamic>)
+        SyncedChannel.fromJson(channel as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<void> removeSyncedChannel(
+      String token, String playlistId, SyncedChannel channel) async {
+    await _send(
+        'DELETE',
+        '/api/v1/playlists/${Uri.encodeComponent(playlistId)}/bot-channels'
+            '/${Uri.encodeComponent(channel.provider)}'
+            '/${Uri.encodeComponent(channel.chatId)}',
+        token: token,
+        expectBody: false);
   }
 
   @override

@@ -268,6 +268,7 @@ func run() error {
 		objects:       objects,
 		notifications: notifications,
 		webOrigin:     os.Getenv("WEB_ORIGIN"),
+		playlists:     playlists,
 		policy: bot.UploadPolicy{
 			Enabled: uploadsEnabled, MaxFileBytes: maxUploadBytes,
 			MaxOwnerBytes: ownerQuotaBytes, MaxPending: maxPending,

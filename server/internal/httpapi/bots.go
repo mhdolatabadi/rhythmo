@@ -12,6 +12,7 @@ import (
 
 	"github.com/mhdolatabadi/rhythmo/server/internal/auth"
 	"github.com/mhdolatabadi/rhythmo/server/internal/bot"
+	"github.com/mhdolatabadi/rhythmo/server/internal/store"
 )
 
 // BotLinker issues the one-time codes that link a messenger chat to the
@@ -19,6 +20,18 @@ import (
 type BotLinker interface {
 	NewCode(ctx context.Context, userID string) (string, time.Time, error)
 	LinkedProviders(ctx context.Context, userID string) ([]string, error)
+}
+
+// BotChannelLinker issues the codes that sync a messenger channel into a
+// playlist (#430).
+type BotChannelLinker interface {
+	NewChannelCode(ctx context.Context, userID, playlistID string) (string, time.Time, error)
+}
+
+// BotChannelStore lists and removes a playlist's synced channels.
+type BotChannelStore interface {
+	PlaylistChannels(ctx context.Context, actorID, playlistID string) ([]store.BotChannel, error)
+	RemovePlaylistChannel(ctx context.Context, actorID, playlistID, provider, chatID string) error
 }
 
 // BotSender has a bot send one of the user's tracks to their linked chats.
@@ -44,6 +57,16 @@ type BotHandlers struct {
 	sendRate *RateLimiter
 	// emailGate keeps unverified accounts from the bots; nil allows everyone.
 	emailGate *EmailGate
+	// channelLinker and channels sync messenger channels; nil leaves the
+	// channel endpoints out.
+	channelLinker BotChannelLinker
+	channels      BotChannelStore
+}
+
+// WithChannels serves syncing messenger channels into playlists.
+func (h *BotHandlers) WithChannels(linker BotChannelLinker, channels BotChannelStore) *BotHandlers {
+	h.channelLinker, h.channels = linker, channels
+	return h
 }
 
 // WithEmailGate keeps accounts with an unverified email out of what costs
@@ -63,6 +86,11 @@ func (h *BotHandlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/bots", h.handleList)
 	mux.HandleFunc("POST /api/v1/bots/link-code", h.handleLinkCode)
 	mux.HandleFunc("POST /api/v1/bots/{provider}/send", h.handleSend)
+	if h.channels != nil {
+		mux.HandleFunc("POST /api/v1/playlists/{id}/bot-channels/code", h.handleChannelCode)
+		mux.HandleFunc("GET /api/v1/playlists/{id}/bot-channels", h.handleChannels)
+		mux.HandleFunc("DELETE /api/v1/playlists/{id}/bot-channels/{provider}/{chatId}", h.handleRemoveChannel)
+	}
 }
 
 type botResponse struct {
@@ -177,5 +205,81 @@ func (h *BotHandlers) handleSend(w http.ResponseWriter, r *http.Request) {
 		internalError(w, "send track to bot", err)
 	default:
 		w.WriteHeader(http.StatusAccepted)
+	}
+}
+
+// handleChannelCode issues a code that, posted in a Telegram or Bale
+// channel the bot administers, syncs that channel into the playlist. Its
+// owner and admins may ask for one.
+func (h *BotHandlers) handleChannelCode(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authenticate(h.tokens, w, r)
+	if !ok {
+		return
+	}
+	if len(h.bots) == 0 {
+		writeError(w, http.StatusNotFound, "no_bots")
+		return
+	}
+	if !enforceRateLimit(w, h.rate, userID) || !h.emailGate.allow(w, r, userID) {
+		return
+	}
+	code, expiresAt, err := h.channelLinker.NewChannelCode(r.Context(), userID, r.PathValue("id"))
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found")
+		return
+	case err != nil:
+		internalError(w, "create bot channel code", err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	// The bots' deep links are for private chats; a channel gets the code.
+	writeJSON(w, http.StatusCreated, linkCodeResponse{
+		Code: code, ExpiresAt: expiresAt.UTC(), Bots: h.responses("", nil),
+	})
+}
+
+type botChannelResponse struct {
+	Provider string    `json:"provider"`
+	ChatID   string    `json:"chatId"`
+	Title    string    `json:"title"`
+	LinkedAt time.Time `json:"linkedAt"`
+}
+
+func (h *BotHandlers) handleChannels(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authenticate(h.tokens, w, r)
+	if !ok {
+		return
+	}
+	channels, err := h.channels.PlaylistChannels(r.Context(), userID, r.PathValue("id"))
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found")
+		return
+	case err != nil:
+		internalError(w, "list bot channels", err)
+		return
+	}
+	response := make([]botChannelResponse, 0, len(channels))
+	for _, c := range channels {
+		response = append(response, botChannelResponse{Provider: c.Provider, ChatID: c.ChatID, Title: c.Title, LinkedAt: c.LinkedAt.UTC()})
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"channels": response})
+}
+
+func (h *BotHandlers) handleRemoveChannel(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authenticate(h.tokens, w, r)
+	if !ok {
+		return
+	}
+	err := h.channels.RemovePlaylistChannel(r.Context(), userID, r.PathValue("id"), r.PathValue("provider"), r.PathValue("chatId"))
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found")
+	case err != nil:
+		internalError(w, "remove bot channel", err)
+	default:
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

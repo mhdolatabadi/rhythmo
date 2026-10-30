@@ -150,6 +150,32 @@ func TestCollaborativePlaylistAPI(t *testing.T) {
 		t.Fatalf("member removes owner = %d", code)
 	}
 
+	// The owner makes the member an admin, who may then edit the channel
+	// (#428); only the owner sets roles.
+	role := base + "/members/" + member.ID + "/role"
+	if code := call(http.MethodPut, role, memberToken, map[string]string{"role": "admin"}).Code; code != http.StatusNotFound {
+		t.Fatalf("member making themselves admin = %d", code)
+	}
+	if code := call(http.MethodPut, role, ownerToken, map[string]string{"role": "boss"}).Code; code != http.StatusBadRequest {
+		t.Fatalf("unknown role = %d", code)
+	}
+	if code := call(http.MethodPut, role, ownerToken, map[string]string{"role": "admin"}).Code; code != http.StatusNoContent {
+		t.Fatalf("make admin = %d", code)
+	}
+	response = call(http.MethodPut, base, memberToken, map[string]string{"name": "ours", "description": "  songs we love "})
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"description":"songs we love"`) ||
+		!strings.Contains(response.Body.String(), `"isAdmin":true`) {
+		t.Fatalf("admin renames = %d %s", response.Code, response.Body)
+	}
+	if code := call(http.MethodPut, base, memberToken, map[string]string{"name": "ours", "description": strings.Repeat("x", 501)}).Code; code != http.StatusBadRequest {
+		t.Fatalf("long description = %d", code)
+	}
+	response = call(http.MethodGet, base, ownerToken, nil)
+	if !strings.Contains(response.Body.String(), `"role":"admin"`) {
+		t.Fatalf("members after making admin = %s", response.Body)
+	}
+	call(http.MethodPut, role, ownerToken, map[string]string{"role": "member"})
+
 	// Leaving takes the member's tracks out; the member list is empty again.
 	if code := call(http.MethodDelete, base+"/membership", memberToken, nil).Code; code != http.StatusNoContent {
 		t.Fatalf("leave = %d", code)

@@ -13,6 +13,8 @@ class Playlist {
     this.isPublic = false,
     this.publicReview,
     this.isOwner = true,
+    this.isAdmin = false,
+    this.description = '',
     this.collabToken,
     this.owner,
     this.members = const [],
@@ -38,6 +40,8 @@ class Playlist {
       publicReview: json['publicReview'] as String?,
       // Older servers don't say; every playlist was its owner's then.
       isOwner: json['isOwner'] as bool? ?? true,
+      isAdmin: json['isAdmin'] == true,
+      description: json['description'] as String? ?? '',
       collabToken: json['collabToken'] as String?,
       owner: json['owner'] as String?,
       members: rawMembers
@@ -73,6 +77,17 @@ class Playlist {
   /// can add their own tracks and remove those, nothing else.
   final bool isOwner;
 
+  /// Whether the owner made this member an admin: they may also rename it,
+  /// edit its description, take out anyone's tracks and remove members who
+  /// aren't admins.
+  final bool isAdmin;
+
+  /// Whether the user runs it: its owner or one of its admins.
+  bool get canManage => isOwner || isAdmin;
+
+  /// A short blurb about the channel; empty for none.
+  final String description;
+
   /// Set while people can join by the collaboration link; owner only.
   final String? collabToken;
 
@@ -98,6 +113,8 @@ class Playlist {
         isPublic: isPublic,
         publicReview: publicReview,
         isOwner: isOwner,
+        isAdmin: isAdmin,
+        description: description,
         collabToken: collabToken,
         owner: owner,
         members: members,
@@ -106,24 +123,32 @@ class Playlist {
   /// Whether more than one person adds tracks to it.
   bool get isCollaborative => !isOwner || members.isNotEmpty;
 
-  /// Whether the user may take [track] out: the owner any track, a member
-  /// only their own.
-  bool canRemove(Track track) => isOwner || track.addedBy == null;
+  /// Whether the user may take [track] out: the owner and admins any
+  /// track, a member only their own.
+  bool canRemove(Track track) => canManage || track.addedBy == null;
 }
 
 /// Someone who joined a collaborative playlist.
 class PlaylistMember {
-  const PlaylistMember({required this.id, required this.name});
+  const PlaylistMember(
+      {required this.id, required this.name, this.isAdmin = false});
 
   factory PlaylistMember.fromJson(Map<String, dynamic> json) => PlaylistMember(
         id: json['id'] as String,
         name: json['name'] as String,
+        isAdmin: json['role'] == 'admin',
       );
 
   final String id;
 
   /// Their email, masked.
   final String name;
+
+  /// Whether the owner made them an admin.
+  final bool isAdmin;
+
+  PlaylistMember withAdmin(bool isAdmin) =>
+      PlaylistMember(id: id, name: name, isAdmin: isAdmin);
 }
 
 /// How many people like a shared playlist, and whether the viewer does.
@@ -201,6 +226,7 @@ class SharedPlaylist {
     required this.owner,
     required this.isOwner,
     required this.tracks,
+    this.description = '',
     this.isPublic = false,
     this.likes = const PlaylistLikes(liked: false, likeCount: 0),
     this.subscription,
@@ -211,6 +237,7 @@ class SharedPlaylist {
       SharedPlaylist(
         shareToken: shareToken,
         name: json['name'] as String,
+        description: json['description'] as String? ?? '',
         owner: json['owner'] as String,
         isOwner: json['isOwner'] == true,
         isPublic: json['public'] == true,
@@ -227,6 +254,9 @@ class SharedPlaylist {
 
   final String shareToken;
   final String name;
+
+  /// The channel's blurb; empty for none.
+  final String description;
 
   /// The owner's email, masked, for example «m***@gmail.com».
   final String owner;
@@ -249,6 +279,7 @@ class SharedPlaylist {
         owner: owner,
         isOwner: isOwner,
         tracks: tracks,
+        description: description,
         isPublic: isPublic,
         likes: likes,
         subscription: subscription,
@@ -261,6 +292,7 @@ class SharedPlaylist {
         owner: owner,
         isOwner: isOwner,
         tracks: tracks,
+        description: description,
         isPublic: isPublic,
         likes: likes,
         subscription: subscription,

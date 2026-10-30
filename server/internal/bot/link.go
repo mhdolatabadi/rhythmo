@@ -25,6 +25,8 @@ type LinkStore interface {
 	Unlink(ctx context.Context, provider, chatID string) error
 	CreateLinkCode(ctx context.Context, userID string, hash []byte, expiresAt time.Time) error
 	RedeemLinkCode(ctx context.Context, provider, chatID string, hash []byte, now time.Time, maxFailures int, window time.Duration) (string, error)
+	CreateChannelCode(ctx context.Context, userID, playlistID string, hash []byte, expiresAt time.Time) error
+	RedeemChannelCode(ctx context.Context, provider, chatID, title string, hash []byte, now time.Time, maxFailures int, window time.Duration) (store.BotChannel, error)
 	LinkedProviders(ctx context.Context, userID string, since time.Time) ([]string, error)
 }
 
@@ -75,6 +77,43 @@ func (l *Linker) NewCode(ctx context.Context, userID string) (string, time.Time,
 		return code, expiresAt, err
 	}
 	return "", time.Time{}, errors.New("could not pick an unused link code")
+}
+
+// NewChannelCode issues a code that links a messenger channel to the
+// playlist, which the user must own or administer: store.ErrNotFound
+// otherwise. It replaces the user's earlier code for that playlist.
+func (l *Linker) NewChannelCode(ctx context.Context, userID, playlistID string) (string, time.Time, error) {
+	expiresAt := l.now().Add(l.limits.CodeTTL)
+	for range 5 {
+		code, err := newCode()
+		if err != nil {
+			return "", time.Time{}, err
+		}
+		err = l.store.CreateChannelCode(ctx, userID, playlistID, l.hash(code), expiresAt)
+		if errors.Is(err, store.ErrCodeCollision) {
+			continue
+		}
+		return code, expiresAt, err
+	}
+	return "", time.Time{}, errors.New("could not pick an unused link code")
+}
+
+// RedeemChannel links the messenger channel to the playlist a channel code
+// was issued for. store.ErrNotFound means its issuer no longer runs it.
+func (l *Linker) RedeemChannel(ctx context.Context, provider, chatID, title, input string) (store.BotChannel, error) {
+	code, ok := NormalizeCode(input)
+	if !ok {
+		return store.BotChannel{}, ErrBadCode
+	}
+	link, err := l.store.RedeemChannelCode(ctx, provider, chatID, title, l.hash(code), l.now(),
+		l.limits.MaxFailures, l.limits.FailureWindow)
+	switch {
+	case errors.Is(err, store.ErrCodeInvalid):
+		return store.BotChannel{}, ErrBadCode
+	case errors.Is(err, store.ErrCodeAttempts):
+		return store.BotChannel{}, ErrLocked
+	}
+	return link, err
 }
 
 // Redeem links the chat to the account that issued the code.

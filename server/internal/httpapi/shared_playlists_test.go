@@ -41,13 +41,16 @@ func (s *sharingStore) Join(context.Context, string, string) (store.Playlist, er
 func (s *sharingStore) RemoveMember(context.Context, string, string, string) error {
 	return errors.New("unused")
 }
+func (s *sharingStore) SetMemberRole(context.Context, string, string, string, string) error {
+	return errors.New("unused")
+}
 func (s *sharingStore) PlaylistTrack(context.Context, string, string, string) (store.Track, error) {
 	return store.Track{}, errors.New("unused")
 }
 func (s *sharingStore) Create(context.Context, string, string) (store.Playlist, error) {
 	return store.Playlist{}, errors.New("unused")
 }
-func (s *sharingStore) Rename(context.Context, string, string, string) (store.Playlist, error) {
+func (s *sharingStore) Rename(context.Context, string, string, string, *string) (store.Playlist, error) {
 	return store.Playlist{}, errors.New("unused")
 }
 func (s *sharingStore) ReplaceTracks(context.Context, string, string, []string) error {

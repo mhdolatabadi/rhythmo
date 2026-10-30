@@ -147,9 +147,9 @@ func (c *Client) Send(ctx context.Context, chatID, text string) error {
 	return c.call(ctx, "sendMessage", map[string]any{"chat_id": json.Number(chatID), "text": text}, nil)
 }
 
-// SetWebhook points the API at url for updates of messages only.
+// SetWebhook points the API at url for new messages and channel posts.
 func (c *Client) SetWebhook(ctx context.Context, url string) error {
-	params := map[string]any{"url": url, "allowed_updates": []string{"message"}}
+	params := map[string]any{"url": url, "allowed_updates": []string{"message", "channel_post"}}
 	if c.config.SecretToken != "" {
 		params["secret_token"] = c.config.SecretToken
 	}
@@ -306,13 +306,16 @@ func (c *Client) Open(ctx context.Context, fileID string) (io.ReadCloser, int64,
 type update struct {
 	UpdateID json.Number `json:"update_id"`
 	Message  *message    `json:"message"`
+	// ChannelPost is a post in a channel the bot administers (#430).
+	ChannelPost *message `json:"channel_post"`
 }
 
 type message struct {
 	MessageID json.Number `json:"message_id"`
 	Chat      struct {
-		ID   json.Number `json:"id"`
-		Type string      `json:"type"`
+		ID    json.Number `json:"id"`
+		Type  string      `json:"type"`
+		Title string      `json:"title"`
 	} `json:"chat"`
 	Text     string    `json:"text"`
 	Audio    *document `json:"audio"`
@@ -328,8 +331,8 @@ type document struct {
 	Performer string `json:"performer"`
 }
 
-// Parse reads a webhook body. Only new messages are handled; edits, channel
-// posts and other update kinds are acknowledged and ignored.
+// Parse reads a webhook body. New messages and new channel posts are
+// handled; edits and other update kinds are acknowledged and ignored.
 func Parse(body []byte) (bot.Update, bool, error) {
 	var u update
 	decoder := json.NewDecoder(bytes.NewReader(body))
@@ -340,14 +343,19 @@ func Parse(body []byte) (bot.Update, bool, error) {
 	if u.UpdateID == "" {
 		return bot.Update{}, false, errors.New("update without update_id")
 	}
-	if u.Message == nil {
+	m := u.Message
+	if m == nil {
+		m = u.ChannelPost
+	}
+	if m == nil {
 		return bot.Update{}, false, nil
 	}
-	m := u.Message
 	parsed := bot.Update{
 		ID:        u.UpdateID.String(),
 		ChatID:    m.Chat.ID.String(),
 		Private:   m.Chat.Type == "private",
+		Channel:   u.Message == nil && m.Chat.Type == "channel",
+		ChatTitle: m.Chat.Title,
 		MessageID: m.MessageID.String(),
 		Text:      m.Text,
 	}

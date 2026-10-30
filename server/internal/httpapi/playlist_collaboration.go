@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -15,6 +16,7 @@ func (h *PlaylistHandlers) registerCollaboration(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/playlists/{id}/collab", h.handleRevokeCollab)
 	mux.HandleFunc("POST /api/v1/collab/{token}/join", h.handleJoin)
 	mux.HandleFunc("DELETE /api/v1/playlists/{id}/members/{userId}", h.handleRemoveMember)
+	mux.HandleFunc("PUT /api/v1/playlists/{id}/members/{userId}/role", h.handleSetMemberRole)
 	mux.HandleFunc("DELETE /api/v1/playlists/{id}/membership", h.handleLeave)
 	mux.HandleFunc("GET /api/v1/playlists/{id}/tracks/{trackId}/stream", h.handlePlaylistStream)
 	mux.HandleFunc("GET /api/v1/playlists/{id}/tracks/{trackId}/artwork", h.handlePlaylistStreamArtwork)
@@ -104,7 +106,37 @@ func (h *PlaylistHandlers) removeMember(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
-// handleRemoveMember is the owner taking someone out of the playlist.
+type memberRoleRequest struct {
+	Role string `json:"role"`
+}
+
+// handleSetMemberRole is the owner making a member an admin, or a plain
+// member again (#428).
+func (h *PlaylistHandlers) handleSetMemberRole(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authenticate(h.tokens, w, r)
+	if !ok {
+		return
+	}
+	var input memberRoleRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPlaylistBodyBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil || (input.Role != store.RoleMember && input.Role != store.RoleAdmin) {
+		writeError(w, http.StatusBadRequest, "invalid_role")
+		return
+	}
+	err := h.playlists.SetMemberRole(r.Context(), userID, r.PathValue("id"), r.PathValue("userId"), input.Role)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found")
+	case err != nil:
+		internalError(w, "set playlist member role", err)
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleRemoveMember is the owner or an admin taking someone out of the
+// playlist.
 func (h *PlaylistHandlers) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 	userID, ok := authenticate(h.tokens, w, r)
 	if !ok {

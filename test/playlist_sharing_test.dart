@@ -25,6 +25,8 @@ class FakePlaylistsApi implements PlaylistsApi {
   String? collabToken;
   List<PlaylistMember> members = [];
   bool isOwner = true;
+  bool isAdmin = false;
+  String description = '';
   List<Track> tracks = [];
   List<Playlist>? userPlaylists;
   final createdNames = <String>[];
@@ -53,6 +55,8 @@ class FakePlaylistsApi implements PlaylistsApi {
         shareToken: shareToken,
         isPublic: isPublic,
         isOwner: isOwner,
+        isAdmin: isAdmin,
+        description: description,
         collabToken: isOwner ? collabToken : null,
         owner: 'o***@example.com',
         members: members,
@@ -182,8 +186,24 @@ class FakePlaylistsApi implements PlaylistsApi {
   }
 
   @override
-  Future<Playlist> renamePlaylist(String t, String id, String name) async =>
-      playlist;
+  Future<Playlist> renamePlaylist(String t, String id, String name,
+      {String? description}) async {
+    renamedTo = (name: name, description: description);
+    return playlist;
+  }
+
+  ({String name, String? description})? renamedTo;
+  final adminChanges = <(String, bool)>[];
+
+  @override
+  Future<void> setPlaylistMemberAdmin(
+      String t, String playlistId, String memberId, bool admin) async {
+    adminChanges.add((memberId, admin));
+    members = [
+      for (final m in members) m.id == memberId ? m.withAdmin(admin) : m
+    ];
+  }
+
   @override
   Future<Playlist> replacePlaylistTracks(
       String t, String id, List<String> trackIds) async {

@@ -63,7 +63,7 @@ func (b *Bots) Unlink(ctx context.Context, provider, chatID string) error {
 func (b *Bots) CreateLinkCode(ctx context.Context, userID string, hash []byte, expiresAt time.Time) error {
 	return pgx.BeginFunc(ctx, b.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `
-			DELETE FROM bot_link_codes WHERE user_id::text = $1 OR expires_at <= now()
+			DELETE FROM bot_link_codes WHERE (user_id::text = $1 AND playlist_id IS NULL) OR expires_at <= now()
 		`, userID); err != nil {
 			return err
 		}
@@ -88,7 +88,28 @@ func (b *Bots) RedeemLinkCode(
 	ctx context.Context, provider, chatID string, hash []byte,
 	now time.Time, maxFailures int, window time.Duration,
 ) (string, error) {
-	var userID string
+	var linked string
+	err := b.redeem(ctx, provider, chatID, hash, now, maxFailures, window, false,
+		func(tx pgx.Tx, userID, _ string) error {
+			linked = userID
+			_, err := tx.Exec(ctx, `
+				UPDATE bot_chats SET user_id = $3::uuid, linked_at = $4, failed_links = 0, failed_since = NULL
+				WHERE provider = $1 AND chat_id = $2
+			`, provider, chatID, userID, now)
+			return err
+		})
+	return linked, err
+}
+
+// redeem uses up the live code matching hash, a channel code or a private
+// chat one, and runs link with whose it was. Wrong codes count against the
+// chat: after maxFailures within window, every code is refused until the
+// window passes.
+func (b *Bots) redeem(
+	ctx context.Context, provider, chatID string, hash []byte,
+	now time.Time, maxFailures int, window time.Duration, channel bool,
+	link func(tx pgx.Tx, userID, playlistID string) error,
+) error {
 	var result error
 	err := pgx.BeginFunc(ctx, b.pool, func(tx pgx.Tx) error {
 		var failures int
@@ -107,10 +128,12 @@ func (b *Bots) RedeemLinkCode(
 			result = ErrCodeAttempts
 			return nil
 		}
+		var userID string
+		var playlistID *string
 		err := tx.QueryRow(ctx, `
-			DELETE FROM bot_link_codes WHERE code_hash = $1 AND expires_at > $2
-			RETURNING user_id::text
-		`, hash, now).Scan(&userID)
+			DELETE FROM bot_link_codes WHERE code_hash = $1 AND expires_at > $2 AND (playlist_id IS NOT NULL) = $3
+			RETURNING user_id::text, playlist_id::text
+		`, hash, now, channel).Scan(&userID, &playlistID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			failures++
 			result = ErrCodeInvalid
@@ -126,19 +149,19 @@ func (b *Bots) RedeemLinkCode(
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `
-			UPDATE bot_chats SET user_id = $3::uuid, linked_at = $4, failed_links = 0, failed_since = NULL
-			WHERE provider = $1 AND chat_id = $2
-		`, provider, chatID, userID, now)
-		return err
+		return link(tx, userID, optional(playlistID))
 	})
 	if err != nil {
-		return "", err
+		return err
 	}
-	if result != nil {
-		return "", result
+	return result
+}
+
+func optional(s *string) string {
+	if s == nil {
+		return ""
 	}
-	return userID, nil
+	return *s
 }
 
 // LinkedChats lists the user's chats with the provider linked since the
@@ -235,15 +258,18 @@ type BotImport struct {
 	Error     *string
 	Attempts  int
 	CreatedAt time.Time
+	// PlaylistID is set for a post in a synced channel: the imported track
+	// is added to that rhythmo channel.
+	PlaylistID *string
 }
 
 const importColumns = `id::text, provider, chat_id, message_id, user_id::text, file_id, file_name,
-	title, artist, size_bytes, state, track_id::text, error, attempts, created_at`
+	title, artist, size_bytes, state, track_id::text, error, attempts, created_at, playlist_id::text`
 
 func scanImport(row pgx.Row) (BotImport, error) {
 	var i BotImport
 	err := row.Scan(&i.ID, &i.Provider, &i.ChatID, &i.MessageID, &i.UserID, &i.FileID, &i.FileName,
-		&i.Title, &i.Artist, &i.SizeBytes, &i.State, &i.TrackID, &i.Error, &i.Attempts, &i.CreatedAt)
+		&i.Title, &i.Artist, &i.SizeBytes, &i.State, &i.TrackID, &i.Error, &i.Attempts, &i.CreatedAt, &i.PlaylistID)
 	return i, err
 }
 
@@ -251,11 +277,11 @@ func scanImport(row pgx.Row) (BotImport, error) {
 // often the provider redelivers it: ErrDuplicateImport.
 func (b *Bots) AddImport(ctx context.Context, i BotImport) (BotImport, error) {
 	created, err := scanImport(b.pool.QueryRow(ctx, `
-		INSERT INTO bot_imports (provider, chat_id, message_id, user_id, file_id, file_name, title, artist, size_bytes)
-		VALUES ($1, $2, $3, $4::uuid, $5, $6, $7, $8, $9)
+		INSERT INTO bot_imports (provider, chat_id, message_id, user_id, file_id, file_name, title, artist, size_bytes, playlist_id)
+		VALUES ($1, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10::uuid)
 		ON CONFLICT (provider, chat_id, message_id) DO NOTHING
 		RETURNING `+importColumns,
-		i.Provider, i.ChatID, i.MessageID, i.UserID, i.FileID, i.FileName, i.Title, i.Artist, i.SizeBytes))
+		i.Provider, i.ChatID, i.MessageID, i.UserID, i.FileID, i.FileName, i.Title, i.Artist, i.SizeBytes, i.PlaylistID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return BotImport{}, ErrDuplicateImport
 	}
