@@ -127,6 +127,10 @@ func (s *Service) Recent(ctx context.Context, userID string) ([]store.BaleArchiv
 // older than the importer's lease (including after a restart); this is safe
 // with overlapping instances. Work never depends on an HTTP request staying open.
 func (s *Service) Run(ctx context.Context) {
+	if db, ok := s.imports.(CatalogStore); ok {
+		go s.catalogWorker(ctx, db)
+		go s.topicWorker(ctx, db)
+	}
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 	for {

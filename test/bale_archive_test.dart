@@ -1,192 +1,144 @@
-import 'package:rhythmo/core/api/api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/bale_archive/bale_archive.dart';
 import 'package:rhythmo/features/bale_archive/bale_archive_screen.dart';
 
-class _ArchiveApi implements BaleArchiveApi {
-  final imported = <BaleLecture>[];
-  final cursors = <int?>[];
-  Object? previewError;
-  int? failAt;
-  bool emptyPreview = false;
-  List<BaleArchiveJob> jobs = [];
+const _topic = BaleTopic(
+    key: 'مهدویت',
+    name: 'ما و حضرت ولی‌عصر',
+    total: 13,
+    imported: 2,
+    pending: 0,
+    failed: 0,
+    state: 'partial');
+
+class _TopicsApi implements BaleTopicCatalogApi {
+  final requested = <String>[];
+  Object? error;
+  bool scanning = false;
+  int refreshes = 0;
+  List<BaleTopic> topics = const [
+    _topic,
+    BaleTopic(
+        key: 'فاطمیه',
+        name: 'فاطمیه دقیقاً چیست؟',
+        total: 5,
+        imported: 5,
+        pending: 0,
+        failed: 0,
+        state: 'imported')
+  ];
   @override
-  Future<BaleArchivePage> previewBaleArchive(
-    String token, {
-    int? before,
-  }) async {
-    cursors.add(before);
-    if (previewError != null && (failAt == null || failAt == cursors.length)) {
-      throw previewError!;
-    }
-    if (emptyPreview) return const BaleArchivePage([], 1234, false);
-    return const BaleArchivePage(
-      [
-        BaleLecture(
-          id: '13',
-          date: 1234,
-          title: 'مهدویت؛ جلسه سیزدهم',
-          topic: 'مهدویت',
-          session: 13,
-          needsReview: false,
-        ),
-        BaleLecture(
-          id: '1',
-          date: 1235,
-          title: 'فاطمیه؛ جلسه اول',
-          topic: 'فاطمیه',
-          session: 1,
-          needsReview: false,
-        ),
-        BaleLecture(
-          id: '2',
-          date: 1236,
-          title: 'مهدویت؛ جلسه دوم',
-          topic: 'مهدویت',
-          session: 2,
-          needsReview: false,
-        ),
-        BaleLecture(
-          id: '4',
-          date: 1237,
-          title: '',
-          topic: '',
-          session: 0,
-          needsReview: true,
-        ),
-      ],
-      1234,
-      false,
-    );
+  Future<BaleTopicCatalog> baleTopics(String token) async {
+    if (error != null) throw error!;
+    return BaleTopicCatalog(
+        topics: topics,
+        scanState: scanning ? 'scanning' : 'done',
+        scannedPosts: 12345,
+        unclassified: 0);
   }
 
   @override
-  Future<BaleArchiveJob> importBaleLecture(
-    String token,
-    BaleLecture lecture,
-  ) async {
-    imported.add(lecture);
-    return BaleArchiveJob(lecture.id, 'queued', 'lecture.mp3', null);
+  Future<void> refreshBaleTopics(String token) async {
+    refreshes++;
+    scanning = true;
   }
 
   @override
-  Future<List<BaleArchiveJob>> baleArchiveJobs(String token) async => jobs;
+  Future<void> importBaleTopic(String token, String key) async {
+    requested.add(key);
+    topics = [
+      for (final t in topics)
+        if (t.key == key)
+          BaleTopic(
+              key: t.key,
+              name: t.name,
+              total: t.total,
+              imported: t.imported,
+              pending: 1,
+              failed: 0,
+              state: 'importing')
+        else
+          t
+    ];
+  }
 }
 
 void main() {
-  testWidgets('separate topics, ordered sessions, review and narrow layout', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(360, 900);
+  testWidgets(
+      'all topics, previous imports and one-click whole-topic request on narrow screen',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final api = _ArchiveApi();
-    await tester.pumpWidget(
-      MaterialApp(
+    final api = _TopicsApi();
+    await tester.pumpWidget(MaterialApp(
         home: Directionality(
-          textDirection: TextDirection.rtl,
-          child: BaleArchiveScreen(api: api, token: () => 'token'),
-        ),
-      ),
-    );
+            textDirection: TextDirection.rtl,
+            child: BaleArchiveScreen(api: api, token: () => 'token'))));
     await tester.pumpAndSettle();
-    expect(find.text('مهدویت'), findsOneWidget);
-    expect(find.text('فاطمیه'), findsOneWidget);
-    final second = tester.getTopLeft(find.text('مهدویت؛ جلسه دوم'));
-    final thirteenth = tester.getTopLeft(find.text('مهدویت؛ جلسه سیزدهم'));
-    expect(second.dy, lessThan(thirteenth.dy));
-    expect(tester.takeException(), isNull);
-    await tester.tap(find.widgetWithText(FilledButton, 'واردکردن').first);
+    expect(find.text('ما و حضرت ولی‌عصر'), findsOneWidget);
+    expect(find.text('فاطمیه دقیقاً چیست؟'), findsOneWidget);
+    expect(find.text('قبلاً کامل وارد شده'), findsOneWidget);
+    expect(find.textContaining('۱۳ جلسه · ۲ واردشده'), findsOneWidget);
+    await tester.tap(find.text('واردکردن جلسه‌های باقی‌مانده'));
     await tester.pumpAndSettle();
-    expect(api.imported.single.session, 2);
-    expect(api.imported.single.topic, 'مهدویت');
+    expect(api.requested, ['مهدویت']);
+    expect(find.text('در حال واردکردن کامل موضوع'), findsOneWidget);
     expect(tester.takeException(), isNull);
-    // Dispose the timer even if the app isn't navigated away during the test.
     await tester.pumpWidget(const SizedBox());
   });
-
   testWidgets(
-      'reopening restores topic groups even when preview is rate limited',
+      'scan is explicitly incomplete and does not require manual pagination',
       (tester) async {
-    final api = _ArchiveApi()
-      ..previewError = const ApiException('limited',
-          statusCode: 429,
-          code: 'rate_limited',
-          details: {'retryAfterSeconds': 60})
-      ..jobs = const [
-        BaleArchiveJob('a', 'done', 'raw-13.mp3', null,
-            messageId: '13',
-            date: 1234,
-            title: 'مهدویت؛ جلسه سیزدهم',
-            topic: 'مهدویت',
-            session: 13),
-        BaleArchiveJob('b', 'done', 'raw-2.mp3', null,
-            messageId: '2',
-            date: 1235,
-            title: 'مهدویت؛ جلسه دوم',
-            topic: 'مهدویت',
-            session: 2),
-      ];
+    final api = _TopicsApi()..scanning = true;
     await tester.pumpWidget(
         MaterialApp(home: BaleArchiveScreen(api: api, token: () => 'token')));
     await tester.pumpAndSettle();
-    expect(find.text('مهدویت'), findsOneWidget);
-    expect(find.text('raw-13.mp3'), findsNothing);
-    expect(find.textContaining('در این بخش از تاریخچه'), findsNothing);
-    expect(find.text('وارد شد'), findsNWidgets(2));
-    expect(tester.getTopLeft(find.text('مهدویت؛ جلسه دوم')).dy,
-        lessThan(tester.getTopLeft(find.text('مهدویت؛ جلسه سیزدهم')).dy));
+    expect(find.textContaining('در حال بررسی کل تاریخچه'), findsOneWidget);
+    expect(find.textContaining('فهرست موضوع‌ها کامل است'), findsNothing);
+    expect(find.text('بررسی پست‌های قدیمی‌تر'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('failed catalog read never claims there are no topics',
+      (tester) async {
+    final api = _TopicsApi()
+      ..error = const ApiException('limited',
+          code: 'rate_limited',
+          statusCode: 429,
+          details: {'retryAfterSeconds': 60});
+    await tester.pumpWidget(
+        MaterialApp(home: BaleArchiveScreen(api: api, token: () => 'token')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('محدودیت درخواست'), findsOneWidget);
+    expect(find.textContaining('موضوعی پیدا نشد'), findsNothing);
     final retry = find.ancestor(
         of: find.textContaining('تلاش دوباره در '),
         matching: find.byType(TextButton));
-    expect(retry, findsOneWidget);
     expect(tester.widget<TextButton>(retry).onPressed, isNull);
-    expect(api.cursors, [null]);
-    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
-
-  testWidgets('failed history request retains cursor and retries the same page',
-      (tester) async {
-    final api = _ArchiveApi()
-      ..emptyPreview = true
-      ..failAt = 2
-      ..previewError =
-          const ApiException('unavailable', code: 'archive_unavailable');
-    await tester.pumpWidget(
-        MaterialApp(home: BaleArchiveScreen(api: api, token: () => 'token')));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('در این بخش از تاریخچه'), findsOneWidget);
-    await tester.tap(find.text('بررسی پست‌های قدیمی‌تر'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('در این بخش از تاریخچه'), findsNothing);
-    expect(find.text('تلاش دوباره'), findsOneWidget);
-    api.previewError = null;
-    await tester.tap(find.text('تلاش دوباره'));
-    await tester.pumpAndSettle();
-    expect(api.cursors, [null, 1234, 1234]);
-    expect(find.textContaining('در این بخش از تاریخچه'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-  });
-
-  test('Bale post IDs stay strings, including negative 64-bit values', () {
-    final page = BaleArchivePage.fromJson({
-      'entries': [
+  test(
+      'catalog metadata records completed, partial and newly discovered sessions',
+      () {
+    final result = BaleTopicCatalog.fromJson({
+      'scan': {'state': 'done', 'scannedPosts': 12500, 'unclassified': 2},
+      'topics': [
         {
-          'id': '-5951363129833672291',
-          'date': 1793266150479,
-          'title': 'عنوان',
-          'topic': 'فاطمیه',
-          'session': 5,
-          'needsReview': false,
-        },
-      ],
-      'nextBefore': 1793266150479,
-      'done': false,
+          'key': 'موضوع',
+          'name': 'موضوع',
+          'total': 10,
+          'imported': 9,
+          'pending': 0,
+          'failed': 0,
+          'state': 'partial'
+        }
+      ]
     });
-    expect(page.entries.single.id, '-5951363129833672291');
-    expect(page.entries.single.session, 5);
+    expect(result.complete, isTrue);
+    expect(result.topics.single.total - result.topics.single.imported, 1);
+    expect(result.unclassified, 2);
   });
 }

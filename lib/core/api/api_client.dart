@@ -394,9 +394,28 @@ class ApiClient
         AdminSongReportsApi,
         FeedbackApi,
         AdminQuotaApi,
-        BaleArchiveApi {
+        BaleArchiveApi,
+        BaleTopicCatalogApi {
   ApiClient(this.baseUri, {http.Client? httpClient})
       : _httpClient = httpClient ?? http.Client();
+
+  @override
+  Future<BaleTopicCatalog> baleTopics(String token) async {
+    final body =
+        await _send('GET', '/api/v1/admin/bale-archive/topics', token: token);
+    return BaleTopicCatalog.fromJson(body);
+  }
+
+  @override
+  Future<void> refreshBaleTopics(String token) async {
+    await _send('POST', '/api/v1/admin/bale-archive/scan', token: token);
+  }
+
+  @override
+  Future<void> importBaleTopic(String token, String key) async {
+    await _send('POST', '/api/v1/admin/bale-archive/topics/import',
+        token: token, body: {'key': key});
+  }
 
   @override
   Future<BaleArchivePage> previewBaleArchive(
