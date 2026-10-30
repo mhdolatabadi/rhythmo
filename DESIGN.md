@@ -227,6 +227,16 @@ height; Arabic-script marks must not collide.
   screens included, sits on the aurora under the same brand header
   (`RhythmoBrand`), with forms and welcomes in flat glass cards. The
   listener's own collection is called «موسیقی من», never «کتابخانه».
+- **Quiet lists.** Every list (songs, گنجینه, playlists, settings) reads
+  the same: the count at the start of one toolbar and the tools at its far
+  end; rows sit straight on the page with no panel, no lines and no
+  chevrons. A row carries a badge only when it needs attention (only on
+  the device, uploading, failed, or from a bot); the usual places are
+  named on hover and to screen readers.
+- **Settings in groups.** «حساب و تنظیمات» runs: the account, storage,
+  playback, queue, journey, appearance, «این دستگاه», bots, «پشتیبانی»,
+  and the ways out last. Each group is one quiet card under a small muted
+  label (`SettingsGroup`).
 - **One way in.** Each place has a single entry point.
   - **Header:** the brand and the notifications bell, nothing else.
   - **Dock** (`RhythmoDock`, built on `RhythmoDockBar`): the main
@@ -236,8 +246,8 @@ height; Arabic-script marks must not collide.
     name; the others show only their icon, each a 48px target. The pill is
     flat and opaque, not blurred. Guests get the same dock with خانه،
     گنجینه and ورود.
-  - **خانه:** greets, offers «ادامه بده», and holds the «کشف» cards for
-    محبوب‌ها، گنجینه and «این آهنگ چیه؟». It also shows the newest tracks
+  - **خانه:** greets, then three small chips right under the greeting for
+    محبوب‌ها، گنجینه and «این آهنگ چیه؟», then «ادامه بده». It also shows the newest tracks
     and what was played lately. It is capped at 880px like the library.
   - **موسیقی من:** its tabs hold پسندیده‌ها, and the «+» add button lives
     only here.

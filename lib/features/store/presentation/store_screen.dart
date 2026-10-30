@@ -326,7 +326,13 @@ class _StoreScreenState extends State<StoreScreen>
                               header: true,
                               child: Text(
                                 'همه‌ی آهنگ‌ها',
-                                style: Theme.of(context).textTheme.titleMedium,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant),
                               ),
                             ),
                           ),
@@ -935,9 +941,8 @@ class _Listing<T> extends StatelessWidget {
   }
 }
 
-/// One row of a list that reads as a single rounded panel: the first row
-/// rounds its top, the last its bottom, and rows between are split by a
-/// hairline.
+/// One row of a store list. Rows sit straight on the page, apart by
+/// space and artwork, like every list in Rhythmo: no panel, no lines.
 class _PanelRow extends StatelessWidget {
   const _PanelRow({
     required this.first,
@@ -950,41 +955,11 @@ class _PanelRow extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    const radius = Radius.circular(RhythmoRadii.lg);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: RhythmoSpace.lg),
-      // A Material, so the rows' hover and ink still paint on the panel.
-      child: Material(
-        color: colors.surfaceContainerHigh.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.vertical(
-          top: first ? radius : Radius.zero,
-          bottom: last ? radius : Radius.zero,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-              RhythmoSpace.xs,
-              first ? RhythmoSpace.xs : 0,
-              RhythmoSpace.xs,
-              last ? RhythmoSpace.xs : 0),
-          child: Column(
-            children: [
-              child,
-              if (!last)
-                const Divider(
-                  height: 1,
-                  indent: RhythmoSpace.lg + 44 + RhythmoSpace.lg,
-                  endIndent: RhythmoSpace.md,
-                  color: RhythmoColors.divider,
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            RhythmoSpace.sm, first ? RhythmoSpace.xs : 0, RhythmoSpace.sm, 2),
+        child: child,
+      );
 }
 
 /// The end of a listing with more to come: it asks for the next page as

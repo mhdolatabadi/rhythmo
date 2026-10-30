@@ -108,7 +108,17 @@ class HomeView extends StatelessWidget {
                     homeGreeting((now ?? DateTime.now)()),
                     style: theme.textTheme.headlineMedium,
                   ),
-                  const SizedBox(height: RhythmoSpace.md),
+                  // Ways to find new music sit right under the greeting, as
+                  // small chips: a door, not a section.
+                  if (discover.isNotEmpty) ...[
+                    const SizedBox(height: RhythmoSpace.md),
+                    Wrap(
+                      spacing: RhythmoSpace.sm,
+                      runSpacing: RhythmoSpace.sm,
+                      children: discover,
+                    ),
+                  ],
+                  const SizedBox(height: RhythmoSpace.lg),
                   if (resume == null && library.isEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: RhythmoSpace.xxxl),
@@ -131,17 +141,6 @@ class HomeView extends StatelessWidget {
                           ? player.toggle()
                           : player.playFrom(played, 0),
                     ),
-                  if (discover.isNotEmpty) ...[
-                    const _Heading('کشف'),
-                    Row(
-                      children: [
-                        for (final (index, card) in discover.indexed) ...[
-                          if (index > 0) const SizedBox(width: RhythmoSpace.sm),
-                          Expanded(child: card),
-                        ],
-                      ],
-                    ),
-                  ],
                   if (newest.isNotEmpty) ...[
                     const _Heading('تازه اضافه‌شده'),
                     SizedBox(
@@ -321,7 +320,7 @@ class _ShelfItem extends StatelessWidget {
   }
 }
 
-/// A way to find new music on «خانه»: an icon and a name on flat glass.
+/// A way to find new music on «خانه»: a small chip with an icon and a name.
 class _DiscoverCard extends StatelessWidget {
   const _DiscoverCard(this.label, this.icon, this.onTap);
 
@@ -332,28 +331,25 @@ class _DiscoverCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return GlassSurface(
-      radius: RhythmoRadii.md,
-      blur: 0,
-      shadow: false,
+    return Material(
+      color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.6),
+      shape: const StadiumBorder(),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: RhythmoRadii.control,
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-              horizontal: RhythmoSpace.sm, vertical: RhythmoSpace.md),
-          child: Column(
-            children: [
-              Icon(icon, size: 22, color: theme.colorScheme.onSurfaceVariant),
-              const SizedBox(height: RhythmoSpace.xs),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.labelLarge,
-              ),
-            ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: RhythmoSpace.target),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(
+                RhythmoSpace.md, 0, RhythmoSpace.lg, 0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: RhythmoSpace.sm),
+                Text(label, style: theme.textTheme.labelLarge),
+              ],
+            ),
           ),
         ),
       ),

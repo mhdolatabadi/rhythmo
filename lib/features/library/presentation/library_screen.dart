@@ -619,8 +619,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     final store = widget.store;
     if (store == null) return;
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => StoreScreen(
-          controller: store, player: widget.player, identify: widget.identify),
+      builder: (_) => StoreScreen(controller: store, player: widget.player),
     ));
   }
 
@@ -2213,6 +2212,15 @@ class _TrackArtwork extends StatelessWidget {
             ),
         },
     };
+    // The usual places, on the server or on both, need no mark on every
+    // row; only what asks for attention gets a badge. The place is still
+    // named on hover and to screen readers.
+    final quiet = sync == null &&
+        switch ((location, track.importedFrom)) {
+          (TrackLocation.synced, _) => true,
+          (TrackLocation.server, null) => true,
+          _ => false,
+        };
     return SizedBox.square(
       dimension: 48,
       child: Stack(
@@ -2237,24 +2245,32 @@ class _TrackArtwork extends StatelessWidget {
                       : colors.onSurfaceVariant,
                 )),
           ),
-          PositionedDirectional(
-            end: -4,
-            bottom: -4,
-            child: Tooltip(
-              message: where,
-              child: Semantics(
-                label: where,
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: colors.surface,
-                    shape: BoxShape.circle,
+          if (quiet)
+            Positioned.fill(
+              child: Tooltip(
+                message: where,
+                child: Semantics(label: where, child: const SizedBox.expand()),
+              ),
+            ),
+          if (!quiet)
+            PositionedDirectional(
+              end: -4,
+              bottom: -4,
+              child: Tooltip(
+                message: where,
+                child: Semantics(
+                  label: where,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      shape: BoxShape.circle,
+                    ),
+                    child: badge,
                   ),
-                  child: badge,
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

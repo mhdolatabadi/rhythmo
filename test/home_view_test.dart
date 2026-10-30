@@ -44,7 +44,10 @@ void main() {
     tearDown(() => player.dispose());
 
     Future<void> pump(WidgetTester tester, List<Track> tracks,
-        {VoidCallback? onAddMusic}) async {
+        {VoidCallback? onAddMusic,
+        VoidCallback? onPopular,
+        VoidCallback? onStore,
+        VoidCallback? onIdentify}) async {
       tester.view.physicalSize = const Size(360, 740);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -57,6 +60,9 @@ void main() {
             changes: ChangeNotifier(),
             tracks: () => tracks,
             onAddMusic: onAddMusic ?? () {},
+            onPopular: onPopular,
+            onStore: onStore,
+            onIdentify: onIdentify,
             now: () => DateTime(2026, 10, 29, 22),
           ),
         ),
@@ -70,6 +76,30 @@ void main() {
       expect(find.text('شب بخیر'), findsOneWidget);
       await tester.tap(find.text('افزودن موسیقی'));
       expect(asked, isTrue);
+    });
+
+    testWidgets('discovery is three small chips right under the greeting',
+        (tester) async {
+      final opened = <String>[];
+      await pump(tester, [_track('a')],
+          onPopular: () => opened.add('popular'),
+          onStore: () => opened.add('store'),
+          onIdentify: () => opened.add('identify'));
+
+      final greeting = tester.getRect(find.text('شب بخیر'));
+      final shelf = tester.getRect(find.text('Track a'));
+      for (final label in ['محبوب‌ها', 'گنجینه', 'این آهنگ چیه؟']) {
+        final chip = tester.getRect(find.ancestor(
+            of: find.text(label), matching: find.byType(InkWell)));
+        // Between the greeting and the music, and a full touch target
+        // without being a big card.
+        expect(chip.top, greaterThan(greeting.bottom));
+        expect(chip.bottom, lessThan(shelf.top));
+        expect(chip.height, inInclusiveRange(48, 56));
+        await tester.tap(find.text(label));
+      }
+      expect(opened, ['popular', 'store', 'identify']);
+      expect(find.text('کشف'), findsNothing);
     });
 
     testWidgets('a shelf cover plays, then the resume card follows along',

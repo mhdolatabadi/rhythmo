@@ -26,7 +26,7 @@ class CrossfadeSetting extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Divider(height: 1),
+            const SizedBox(height: 4),
             ListTile(
               leading: const Icon(RhythmoIcons.waveform),
               title: const Text('هم‌پوشانی آهنگ‌ها'),
