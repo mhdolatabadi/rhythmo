@@ -31,10 +31,11 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
     _load();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (timer.tick % 6 == 0) _load(background: true);
-      if (_retryAt != null && mounted)
+      if (_retryAt != null && mounted) {
         setState(() {
           if (_seconds == 0) _retryAt = null;
         });
+      }
     });
   }
 
@@ -67,11 +68,12 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
     if (!background && mounted) setState(() => _error = null);
     try {
       final data = await widget.api.baleTopics(token);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _catalog = data;
           if (_seconds == 0) _error = null;
         });
+      }
     } catch (error) {
       if (mounted) setState(() => _fail(error));
     } finally {
@@ -209,7 +211,7 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
               if (data != null) ...[
                 const SizedBox(height: 16),
                 Text(data.complete
-                    ? 'فهرست موضوع‌ها کامل است · ${persianDigits(data.topics.length)} موضوع'
+                    ? 'بررسی کل تاریخچه کامل شد · ${persianDigits(data.topics.length)} موضوع'
                     : 'در حال بررسی کل تاریخچه · ${persianDigits(data.scannedPosts)} پست · ${persianDigits(data.topics.length)} موضوع پیدا شده'),
                 if (!data.complete)
                   const Padding(
