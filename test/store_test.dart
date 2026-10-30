@@ -428,6 +428,8 @@ void main() {
       // The artist is the row's only secondary detail; the size is not.
       expect(find.text('خواننده‌ای با نام بسیار بلند 0'), findsOneWidget);
       expect(find.textContaining(formatSize(3 * 1024 * 1024)), findsNothing);
+      // Rows sit on the page like «موسیقی من»'s: no lines between them.
+      expect(find.byType(Divider), findsNothing);
 
       await player.play(song(0, title: '$long 0'));
       await tester.pumpAndSettle();

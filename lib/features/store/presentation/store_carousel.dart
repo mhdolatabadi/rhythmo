@@ -59,10 +59,7 @@ class _StoreCarouselState extends State<StoreCarousel> {
                 header: true,
                 child: Text(
                   widget.ranking.label,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800),
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
             ),
@@ -137,8 +134,7 @@ class _Card extends StatelessWidget {
                 Text(song.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700)),
+                    style: theme.textTheme.titleSmall),
                 Row(
                   children: [
                     Expanded(

@@ -55,8 +55,7 @@ class RecentlyPlayedShelf extends StatelessWidget {
                         'اخیراً پخش‌شده',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                        style: theme.textTheme.titleMedium,
                       ),
                     ),
                   ),
@@ -169,7 +168,7 @@ class _RecentCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: current ? colors.primary : colors.onSurface,
                   ),
                 ),

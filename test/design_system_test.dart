@@ -88,7 +88,7 @@ void main() {
       final theme = RhythmoTheme.dark();
       expect(theme.extension<RhythmoTokens>(), isNotNull);
       expect(theme.textTheme.bodyLarge?.fontFamily, RhythmoType.family);
-      expect(theme.textTheme.titleLarge?.fontWeight, FontWeight.w800);
+      expect(theme.textTheme.titleLarge?.fontWeight, FontWeight.w500);
       expect(theme.colorScheme.primary, RhythmoColors.primary);
       expect(artworkTint('a'), artworkTint('a'));
     });

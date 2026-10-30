@@ -575,15 +575,6 @@ class _LibraryScreenState extends State<LibraryScreen>
         builder: (_) => Scaffold(
               appBar: AppBar(
                 title: const Text('فهرست‌های پخش'),
-                actions: [
-                  if (widget.store != null)
-                    IconButton(
-                      tooltip: 'گنجینه',
-                      onPressed: _openStore,
-                      icon: const Icon(RhythmoIcons.vinylRecord),
-                    ),
-                  PopularPlaylistsButton(onOpen: _openPopular),
-                ],
               ),
               bottomNavigationBar: MiniPlayer(player: widget.player),
               body: RhythmoBackdrop(
@@ -628,8 +619,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     final store = widget.store;
     if (store == null) return;
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => StoreScreen(
-          controller: store, player: widget.player, identify: widget.identify),
+      builder: (_) => StoreScreen(controller: store, player: widget.player),
     ));
   }
 
@@ -638,6 +628,9 @@ class _LibraryScreenState extends State<LibraryScreen>
         .push(MaterialPageRoute<void>(
           builder: (_) => SettingsScreen(
             email: widget.email,
+            verified: widget.verified,
+            onAdmin: widget.onAdmin,
+            onLogout: widget.onLogout,
             onFeedback: widget.onFeedback,
             onDeleteAccount: widget.onDeleteAccount,
             onSignOutEverywhere: widget.onSignOutEverywhere,
@@ -695,120 +688,17 @@ class _LibraryScreenState extends State<LibraryScreen>
           entry.track,
       ];
 
-  List<Widget> _accountActions(BuildContext context) {
-    final wideActions = widget.onAdmin == null ? 720 : 960;
-    final identify = widget.identify;
-    final identifySong = identify == null
-        ? null
-        : IconButton(
-            tooltip: 'این آهنگ چیه؟',
-            onPressed: () => openIdentify(context, identify, widget.player),
-            icon: const Icon(RhythmoIcons.microphoneStage),
-          );
-    final popular = widget.playlists == null
-        ? null
-        : PopularPlaylistsButton(onOpen: _openPopular);
-    final bell = widget.notifications == null || widget.playlists == null
-        ? null
-        : NotificationsButton(
-            controller: widget.notifications!, onOpen: _openNotifications);
-    final storeButton = widget.store == null
-        ? null
-        : IconButton(
-            tooltip: 'گنجینه',
-            onPressed: _openStore,
-            icon: const Icon(RhythmoIcons.vinylRecord),
-          );
-    if (MediaQuery.sizeOf(context).width >= wideActions) {
-      return [
-        if (bell != null) bell,
-        if (popular != null) popular,
-        if (storeButton != null) storeButton,
-        if (identifySong != null) identifySong,
-        const SizedBox(width: 8),
-        _AccountChip(email: widget.email, verified: widget.verified),
-        if (widget.onAdmin != null)
-          IconButton(
-            tooltip: 'مدیریت حساب‌ها',
-            onPressed: widget.onAdmin,
-            icon: const Icon(RhythmoIcons.usersFill),
-          ),
-        IconButton(
-          tooltip: 'تنظیمات',
-          onPressed: _openSettings,
-          icon: const Icon(RhythmoIcons.gear),
-        ),
-        IconButton(
-          tooltip: 'خروج',
-          onPressed: widget.onLogout,
-          icon: const Icon(RhythmoIcons.signOut),
-        ),
-        const SizedBox(width: 32),
+  /// The header keeps only the notifications bell: every other place has
+  /// its one way in, from the dock or from «خانه».
+  List<Widget> _headerActions(BuildContext context) => [
+        if (widget.notifications != null && widget.playlists != null)
+          NotificationsButton(
+              controller: widget.notifications!, onOpen: _openNotifications),
+        SizedBox(
+            width: MediaQuery.sizeOf(context).width >= 720
+                ? RhythmoSpace.xxl
+                : RhythmoSpace.sm),
       ];
-    }
-    return [
-      if (bell != null) bell,
-      if (popular != null) popular,
-      if (storeButton != null) storeButton,
-      if (identifySong != null) identifySong,
-      PopupMenuButton<_HeaderAction>(
-        tooltip: 'حساب و تنظیمات',
-        icon: AccountAvatar(verified: widget.verified),
-        onSelected: (action) {
-          switch (action) {
-            case _HeaderAction.settings:
-              _openSettings();
-            case _HeaderAction.admin:
-              widget.onAdmin?.call();
-            case _HeaderAction.logout:
-              widget.onLogout();
-          }
-        },
-        itemBuilder: (context) => [
-          PopupMenuItem<_HeaderAction>(
-            enabled: false,
-            child: Text(
-              widget.email,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (widget.verified)
-            const PopupMenuItem<_HeaderAction>(
-              enabled: false,
-              child: Text('حساب تأییدشده'),
-            ),
-          if (widget.onAdmin != null)
-            const PopupMenuItem(
-              value: _HeaderAction.admin,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(RhythmoIcons.usersFill),
-                title: Text('مدیریت حساب‌ها'),
-              ),
-            ),
-          const PopupMenuDivider(),
-          const PopupMenuItem(
-            value: _HeaderAction.settings,
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(RhythmoIcons.gear),
-              title: Text('تنظیمات'),
-            ),
-          ),
-          const PopupMenuItem(
-            value: _HeaderAction.logout,
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(RhythmoIcons.signOut),
-              title: Text('خروج از حساب'),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(width: 8),
-    ];
-  }
 
   /// Brand and actions share one toolbar above the category tabs.
   Widget _header(BuildContext context) {
@@ -821,14 +711,11 @@ class _LibraryScreenState extends State<LibraryScreen>
       tabAlignment: wide || _visibleTabs.length > 4
           ? TabAlignment.start
           : TabAlignment.fill,
-      labelStyle: Theme.of(context)
-          .textTheme
-          .titleSmall
-          ?.copyWith(fontWeight: FontWeight.w800),
+      labelStyle: Theme.of(context).textTheme.titleSmall,
       unselectedLabelStyle: Theme.of(context)
           .textTheme
           .titleSmall
-          ?.copyWith(fontWeight: FontWeight.w500),
+          ?.copyWith(fontWeight: FontWeight.w400),
       // Phone tabs share a narrow width: tighter padding, and a label that
       // still does not fit shrinks a little instead of being clipped.
       labelPadding: wide
@@ -860,7 +747,7 @@ class _LibraryScreenState extends State<LibraryScreen>
             toolbarHeight: 76,
             titleSpacing: 32,
             title: const RhythmoBrand(compact: false),
-            actions: _accountActions(context),
+            actions: _headerActions(context),
             bottom: bottom,
           )
         : SliverAppBar(
@@ -869,18 +756,21 @@ class _LibraryScreenState extends State<LibraryScreen>
             title: const RhythmoBrand(compact: true),
             // Opaque, because the lists scroll underneath it.
             backgroundColor: Theme.of(context).colorScheme.surface,
-            actions: _accountActions(context),
+            actions: _headerActions(context),
             bottom: bottom,
           );
   }
 
   void _selectDestination(DockDestination destination) {
-    if (destination == DockDestination.account) {
-      // Account and settings open as their own page.
-      _openSettings();
-      return;
+    switch (destination) {
+      // Search and the account open as their own pages.
+      case DockDestination.search:
+        _openSearch();
+      case DockDestination.account:
+        _openSettings();
+      case DockDestination.home || DockDestination.library:
+        setState(() => _destination = destination);
     }
-    setState(() => _destination = destination);
   }
 
   Widget _destinationBody(BuildContext context) => switch (_destination) {
@@ -891,9 +781,13 @@ class _LibraryScreenState extends State<LibraryScreen>
             tracks: _unifiedTracks,
             recent: widget.recent,
             onAddMusic: _showAddMenu,
+            onPopular: widget.playlists == null ? null : _openPopular,
+            onStore: widget.store == null ? null : _openStore,
+            onIdentify: widget.identify == null
+                ? null
+                : () => openIdentify(context, widget.identify!, widget.player),
           ),
-        DockDestination.liked => _likedView(context),
-        DockDestination.library || DockDestination.account => NestedScrollView(
+        _ => NestedScrollView(
             headerSliverBuilder: (context, _) => [_header(context)],
             body: TabBarView(
               controller: _tabs,
@@ -905,18 +799,6 @@ class _LibraryScreenState extends State<LibraryScreen>
             ),
           ),
       };
-
-  /// «پسندیده‌ها» from the dock: the liked songs with the library's row
-  /// actions.
-  Widget _likedView(BuildContext context) => NestedScrollView(
-        headerSliverBuilder: (context, _) => [
-          SliverOverlapAbsorber(
-            handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-            sliver: _appBar(context),
-          ),
-        ],
-        body: Builder(builder: (context) => _favoritesBody()),
-      );
 
   Widget _favoritesBody() => ListenableBuilder(
       listenable: Listenable.merge([_libraryChanges, widget.player.favorites]),
@@ -939,7 +821,6 @@ class _LibraryScreenState extends State<LibraryScreen>
         player: widget.player,
         selected: _destination,
         onSelect: _selectDestination,
-        onSearch: _openSearch,
       ),
       floatingActionButtonLocation: const _LibraryAddButtonLocation(),
       floatingActionButton: _destination != DockDestination.library ||
@@ -1155,8 +1036,6 @@ String _syncVerb(SyncKind kind) => switch (kind) {
       SyncKind.download => 'دانلود',
     };
 
-enum _HeaderAction { settings, logout, admin }
-
 enum _TrackAction {
   addToPlaylist,
   sendToBot,
@@ -1170,27 +1049,6 @@ enum _TrackAction {
   like,
   publish,
   delete,
-}
-
-class _AccountChip extends StatelessWidget {
-  const _AccountChip({required this.email, required this.verified});
-
-  final String email;
-  final bool verified;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: verified ? '$email · حساب تأییدشده' : email,
-      child: GlassSurface(
-        blur: 0,
-        shadow: false,
-        radius: 14,
-        padding: const EdgeInsets.all(9),
-        child: AccountAvatar(verified: verified, size: 22),
-      ),
-    );
-  }
 }
 
 /// One library tab, kept alive so its scroll position survives switching
@@ -1288,8 +1146,7 @@ class _GroupList extends StatelessWidget {
                 group.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+                style: theme.textTheme.bodyLarge?.copyWith(
                   color: group.unknown ? colors.onSurfaceVariant : null,
                 ),
               ),
@@ -1367,7 +1224,7 @@ class _AlbumCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: group.unknown ? colors.onSurfaceVariant : null,
             ),
           ),
@@ -1452,8 +1309,7 @@ class _TrackGroupScreen extends StatelessWidget {
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
-                                    style: theme.textTheme.headlineSmall
-                                        ?.copyWith(fontWeight: FontWeight.w800),
+                                    style: theme.textTheme.headlineSmall,
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -2178,8 +2034,10 @@ class _TrackRow extends StatelessWidget {
                     track.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: current ? FontWeight.w700 : FontWeight.w600,
+                    // Regular, as every list title; the playing one is
+                    // medium and ember.
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: current ? FontWeight.w500 : FontWeight.w400,
                       color: current ? colors.primary : colors.onSurface,
                     ),
                   ),
@@ -2354,6 +2212,15 @@ class _TrackArtwork extends StatelessWidget {
             ),
         },
     };
+    // The usual places, on the server or on both, need no mark on every
+    // row; only what asks for attention gets a badge. The place is still
+    // named on hover and to screen readers.
+    final quiet = sync == null &&
+        switch ((location, track.importedFrom)) {
+          (TrackLocation.synced, _) => true,
+          (TrackLocation.server, null) => true,
+          _ => false,
+        };
     return SizedBox.square(
       dimension: 48,
       child: Stack(
@@ -2378,24 +2245,32 @@ class _TrackArtwork extends StatelessWidget {
                       : colors.onSurfaceVariant,
                 )),
           ),
-          PositionedDirectional(
-            end: -4,
-            bottom: -4,
-            child: Tooltip(
-              message: where,
-              child: Semantics(
-                label: where,
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: colors.surface,
-                    shape: BoxShape.circle,
+          if (quiet)
+            Positioned.fill(
+              child: Tooltip(
+                message: where,
+                child: Semantics(label: where, child: const SizedBox.expand()),
+              ),
+            ),
+          if (!quiet)
+            PositionedDirectional(
+              end: -4,
+              bottom: -4,
+              child: Tooltip(
+                message: where,
+                child: Semantics(
+                  label: where,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      shape: BoxShape.circle,
+                    ),
+                    child: badge,
                   ),
-                  child: badge,
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -3101,8 +2976,7 @@ class _RecentSearches extends StatelessWidget {
                   header: true,
                   child: Text(
                     'جست‌وجوهای اخیر',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
+                    style: theme.textTheme.titleMedium,
                   ),
                 ),
               ),
@@ -3155,14 +3029,13 @@ class _Hairline extends StatelessWidget {
 }
 
 /// The hairline between track rows: from the title's start edge.
+/// The space between two track rows. Rows are told apart by their artwork
+/// and spacing, not by lines, which made long lists read as busy.
 class _RowHairline extends StatelessWidget {
   const _RowHairline();
 
-  // Row padding, the 48 px artwork and the gap before the title.
-  static const indent = 8.0 + 48 + 12;
-
   @override
-  Widget build(BuildContext context) => const _Hairline(indent: indent);
+  Widget build(BuildContext context) => const SizedBox(height: 2);
 }
 
 /// A group's title in the search results, with how many it found.
@@ -3191,8 +3064,7 @@ class _ResultsHeader extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800),
+                  style: theme.textTheme.titleMedium,
                 ),
               ),
               if (count > 0)

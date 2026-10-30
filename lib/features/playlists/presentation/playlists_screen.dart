@@ -194,38 +194,54 @@ class _PlaylistsViewState extends State<PlaylistsView> {
 
   @override
   Widget build(BuildContext context) {
-    final actions = Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Row(
-        children: [
-          IconButton.filledTonal(
-            tooltip: 'فهرست پخش جدید',
-            onPressed: _create,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            icon: const Icon(RhythmoIcons.plus),
-          ),
-          const SizedBox(width: RhythmoSpace.sm),
-          IconButton(
-            tooltip: 'باز کردن لینک اشتراک',
-            onPressed: _openLink,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            icon: const Icon(RhythmoIcons.link),
-          ),
-          if (widget.onImportFromDevice case final onImport?) ...[
-            const SizedBox(width: RhythmoSpace.sm),
-            IconButton(
-              tooltip: 'وارد کردن از گوشی',
-              onPressed: onImport,
-              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-              icon: const Icon(RhythmoIcons.deviceMobile),
-            ),
-          ],
-        ],
-      ),
-    );
     return ListenableBuilder(
       listenable: widget.controller,
       builder: (context, _) {
+        final actions = Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          // Like the songs tab: the count first, the tools at the far end.
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 8),
+                  child: Text(
+                    widget.controller.playlists.isEmpty
+                        ? ''
+                        : '${persianDigits(widget.controller.playlists.length)} فهرست پخش',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'فهرست پخش جدید',
+                onPressed: _create,
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                icon: const Icon(RhythmoIcons.plus),
+              ),
+              const SizedBox(width: RhythmoSpace.sm),
+              IconButton(
+                tooltip: 'باز کردن لینک اشتراک',
+                onPressed: _openLink,
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                icon: const Icon(RhythmoIcons.link),
+              ),
+              if (widget.onImportFromDevice case final onImport?) ...[
+                const SizedBox(width: RhythmoSpace.sm),
+                IconButton(
+                  tooltip: 'وارد کردن از گوشی',
+                  onPressed: onImport,
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                  icon: const Icon(RhythmoIcons.deviceMobile),
+                ),
+              ],
+            ],
+          ),
+        );
         final content = switch (widget.controller.status) {
           PlaylistsStatus.loading => const SliverFillRemaining(
               hasScrollBody: false,
@@ -313,7 +329,11 @@ class _PlaylistsOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final featured = playlists.take(3).toList(growable: false);
+    // A shelf of the first few only when there are more below it; with a
+    // handful it would just show the same playlists twice.
+    final featured = playlists.length > 4
+        ? playlists.take(3).toList(growable: false)
+        : const <Playlist>[];
     return SliverPadding(
       // Room at the bottom for the mini player.
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 112),
@@ -338,15 +358,15 @@ class _PlaylistsOverview extends StatelessWidget {
             ),
             const SizedBox(height: 20),
           ],
-          Padding(
-            padding: const EdgeInsetsDirectional.only(start: 4, bottom: 8),
-            child: Text(
-              'همهٔ فهرست‌های پخش',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+          if (featured.isNotEmpty)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(start: 4, bottom: 8),
+              child: Text(
+                'همهٔ فهرست‌های پخش',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
             ),
-          ),
           for (final playlist in playlists)
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -373,7 +393,6 @@ class _PlaylistsOverview extends StatelessWidget {
               ),
               subtitle: Text(
                   '${persianDigits(playlist.displayTrackCount)} قطعه موسیقی'),
-              trailing: const Icon(RhythmoIcons.caretLeft),
               onTap: () => onOpen(playlist),
             ),
         ],
@@ -408,7 +427,7 @@ class _PlaylistFeatureCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
             ),
             Text(
@@ -913,7 +932,7 @@ class _PlaylistDetailHeader extends StatelessWidget {
             style: (wide
                     ? theme.textTheme.displaySmall
                     : theme.textTheme.headlineMedium)
-                ?.copyWith(fontWeight: FontWeight.w800, height: 1.3),
+                ?.copyWith(fontWeight: FontWeight.w500, height: 1.3),
           ),
           if (playlist.description.isNotEmpty) ...[
             const SizedBox(height: RhythmoSpace.xs),

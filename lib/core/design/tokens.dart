@@ -52,7 +52,7 @@ abstract final class RhythmoColors {
 
   // Text and lines.
   static const onSurface = Color(0xFFF5F1F7);
-  static const onSurfaceVariant = Color(0xFFD0C8D4);
+  static const onSurfaceVariant = Color(0xFFA9A1AE);
   static const outline = Color(0xFF8B8290);
   static const outlineVariant = Color(0xFF3C3743);
 
@@ -177,18 +177,22 @@ abstract final class RhythmoType {
           color: color,
         );
     return base.copyWith(
-      displaySmall: style(base.displaySmall, 26, FontWeight.w800, 1.3),
-      headlineMedium: style(base.headlineMedium, 22, FontWeight.w800, 1.35),
-      headlineSmall: style(base.headlineSmall, 20, FontWeight.w800, 1.4),
-      titleLarge: style(base.titleLarge, 17, FontWeight.w800, 1.4),
-      titleMedium: style(base.titleMedium, 14, FontWeight.w700, 1.45),
-      titleSmall: style(base.titleSmall, 13, FontWeight.w700, 1.45),
+      // Six sizes and three weights, and no heavy headings: size and the
+      // muted colour carry the hierarchy. Bold is left for buttons and the
+      // playing line; titles are medium, everything that supports a line
+      // is regular and muted.
+      displaySmall: style(base.displaySmall, 24, FontWeight.w500, 1.35),
+      headlineMedium: style(base.headlineMedium, 20, FontWeight.w500, 1.4),
+      headlineSmall: style(base.headlineSmall, 18, FontWeight.w500, 1.4),
+      titleLarge: style(base.titleLarge, 15, FontWeight.w500, 1.45),
+      titleMedium: style(base.titleMedium, 15, FontWeight.w500, 1.6),
+      titleSmall: style(base.titleSmall, 13, FontWeight.w500, 1.45),
       bodyLarge: style(base.bodyLarge, 15, FontWeight.w400, 1.6),
       bodyMedium: style(base.bodyMedium, 13, FontWeight.w400, 1.6),
-      bodySmall: style(base.bodySmall, 11.5, FontWeight.w400, 1.55),
-      labelLarge: style(base.labelLarge, 13, FontWeight.w600, 1.4),
-      labelMedium: style(base.labelMedium, 11.5, FontWeight.w500, 1.4),
-      labelSmall: style(base.labelSmall, 10.5, FontWeight.w500, 1.4),
+      bodySmall: style(base.bodySmall, 12, FontWeight.w400, 1.5),
+      labelLarge: style(base.labelLarge, 13, FontWeight.w500, 1.4),
+      labelMedium: style(base.labelMedium, 12, FontWeight.w500, 1.4),
+      labelSmall: style(base.labelSmall, 11, FontWeight.w500, 1.4),
     );
   }
 }

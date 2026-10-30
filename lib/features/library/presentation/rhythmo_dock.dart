@@ -12,11 +12,12 @@ class DockItem {
   final IconData selectedIcon;
 }
 
-/// Where the signed-in dock's pill takes the listener.
+/// Where the signed-in dock takes the listener. Each place in the app has
+/// this one way in; «پسندیده‌ها» is a tab of «موسیقی من».
 enum DockDestination {
   home('خانه', RhythmoIcons.house, RhythmoIcons.houseFill),
+  search('جست‌وجو', RhythmoIcons.magnifyingGlass, RhythmoIcons.magnifyingGlass),
   library('موسیقی من', RhythmoIcons.books, RhythmoIcons.booksFill),
-  liked('پسندیده‌ها', RhythmoIcons.heart, RhythmoIcons.heartFill),
   account('حساب', RhythmoIcons.user, RhythmoIcons.userFill);
 
   const DockDestination(this.label, this.icon, this.selectedIcon);
@@ -31,20 +32,18 @@ enum DockDestination {
 /// in the middle of wide windows.
 const dockNavWidth = 520.0;
 
-/// The signed-in app's dock: [DockDestination]s and library search.
+/// The signed-in app's dock: the [DockDestination]s.
 class RhythmoDock extends StatelessWidget {
   const RhythmoDock({
     super.key,
     required this.player,
     required this.selected,
     required this.onSelect,
-    required this.onSearch,
   });
 
   final PlayerController player;
   final DockDestination selected;
   final ValueChanged<DockDestination> onSelect;
-  final VoidCallback onSearch;
 
   @override
   Widget build(BuildContext context) => RhythmoDockBar(
@@ -52,15 +51,12 @@ class RhythmoDock extends StatelessWidget {
         items: [for (final d in DockDestination.values) d.item],
         selected: selected.index,
         onSelect: (index) => onSelect(DockDestination.values[index]),
-        onSearch: onSearch,
-        searchLabel: 'جست‌وجو در موسیقی من',
       );
 }
 
 /// The bottom of the main screens, signed in or not: the mini player above
-/// a pill of [items] and, apart from it, the search bubble when there is
-/// [onSearch]. The selected item is a white pill with its name; the others
-/// show their icon.
+/// one centred pill of [items], evenly spaced. The selected item is a white
+/// pill with its name; the others show their icon.
 class RhythmoDockBar extends StatelessWidget {
   const RhythmoDockBar({
     super.key,
@@ -68,16 +64,12 @@ class RhythmoDockBar extends StatelessWidget {
     required this.items,
     required this.selected,
     required this.onSelect,
-    this.onSearch,
-    this.searchLabel = 'جست‌وجو',
   });
 
   final PlayerController player;
   final List<DockItem> items;
   final int selected;
   final ValueChanged<int> onSelect;
-  final VoidCallback? onSearch;
-  final String searchLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -99,39 +91,27 @@ class RhythmoDockBar extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
                     RhythmoSpace.md, 0, RhythmoSpace.md, RhythmoSpace.sm),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _DockPill(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            for (final (index, item) in items.indexed)
-                              // The selected name gives way on a narrow
-                              // phone, so every icon stays in the pill.
-                              Flexible(
-                                flex: index == selected ? 1 : 0,
-                                child: _DockItem(
-                                  item: item,
-                                  selected: index == selected,
-                                  onTap: () => onSelect(index),
-                                ),
-                              ),
-                          ],
+                // As wide as its items, centred, with the same gap between
+                // every two of them.
+                child: _DockPill(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final (index, item) in items.indexed) ...[
+                        if (index > 0) const SizedBox(width: RhythmoSpace.sm),
+                        // The selected name gives way on a narrow phone, so
+                        // every icon stays in the pill.
+                        Flexible(
+                          flex: index == selected ? 1 : 0,
+                          child: _DockItem(
+                            item: item,
+                            selected: index == selected,
+                            onTap: () => onSelect(index),
+                          ),
                         ),
-                      ),
-                    ),
-                    if (onSearch != null) ...[
-                      const SizedBox(width: RhythmoSpace.sm),
-                      _DockPill(
-                        child: IconButton(
-                          tooltip: searchLabel,
-                          onPressed: onSearch,
-                          icon: const Icon(RhythmoIcons.magnifyingGlass),
-                        ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),

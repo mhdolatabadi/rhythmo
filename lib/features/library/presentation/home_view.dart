@@ -10,6 +10,9 @@ import 'package:rhythmo/features/player/presentation/now_playing_screen.dart';
 const homeShelfLength = 12;
 const homeRecentLength = 5;
 
+/// The widest «خانه»'s content grows, matching the library's list.
+const homeMaxWidth = 880.0;
+
 /// «صبح بخیر» and so on, for the hour of [now].
 String homeGreeting(DateTime now) => switch (now.hour) {
       >= 5 && < 12 => 'صبح بخیر',
@@ -31,8 +34,9 @@ List<Track> newestTracks(List<Track> tracks, {int limit = homeShelfLength}) {
   return dated.take(limit).toList();
 }
 
-/// «خانه»: a greeting, what to pick up again, the newest tracks and what
-/// was played lately. Everything on it plays with one tap.
+/// «خانه»: a greeting, what to pick up again, the ways to find new music
+/// (popular playlists, گنجینه, «این آهنگ چیه؟»), the newest tracks and what
+/// was played lately. Those three places open only from here.
 class HomeView extends StatelessWidget {
   const HomeView({
     super.key,
@@ -43,6 +47,9 @@ class HomeView extends StatelessWidget {
     required this.onAddMusic,
     this.recent,
     this.now,
+    this.onPopular,
+    this.onStore,
+    this.onIdentify,
   });
 
   /// The app bar, as a sliver.
@@ -54,6 +61,12 @@ class HomeView extends StatelessWidget {
   final List<Track> Function() tracks;
   final VoidCallback onAddMusic;
   final RecentlyPlayedController? recent;
+
+  /// Opens popular playlists, گنجینه and song identification; a null one
+  /// hides its card.
+  final VoidCallback? onPopular;
+  final VoidCallback? onStore;
+  final VoidCallback? onIdentify;
 
   /// The clock for the greeting; the real one by default.
   final DateTime Function()? now;
@@ -70,19 +83,42 @@ class HomeView extends StatelessWidget {
             (recent?.tracks ?? const <Track>[]).take(homeRecentLength).toList();
         final newest = newestTracks(library);
         final resume = player.track ?? played.firstOrNull;
+        final discover = [
+          if (onPopular case final open?)
+            _DiscoverCard('محبوب‌ها', RhythmoIcons.fire, open),
+          if (onStore case final open?)
+            _DiscoverCard('گنجینه', RhythmoIcons.vinylRecord, open),
+          if (onIdentify case final open?)
+            _DiscoverCard('این آهنگ چیه؟', RhythmoIcons.microphoneStage, open),
+        ];
+        // As wide as «موسیقی من»'s list: 880 px at most, centred.
+        final width = MediaQuery.sizeOf(context).width;
+        final gutter = width >= 900
+            ? ((width - homeMaxWidth) / 2).clamp(40.0, double.infinity)
+            : RhythmoSpace.lg;
         return CustomScrollView(
           slivers: [
             header,
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(RhythmoSpace.lg, RhythmoSpace.sm,
-                  RhythmoSpace.lg, MediaQuery.paddingOf(context).bottom + 24),
+              padding: EdgeInsets.fromLTRB(gutter, RhythmoSpace.sm, gutter,
+                  MediaQuery.paddingOf(context).bottom + 24),
               sliver: SliverList.list(
                 children: [
                   Text(
                     homeGreeting((now ?? DateTime.now)()),
                     style: theme.textTheme.headlineMedium,
                   ),
-                  const SizedBox(height: RhythmoSpace.md),
+                  // Ways to find new music sit right under the greeting, as
+                  // small chips: a door, not a section.
+                  if (discover.isNotEmpty) ...[
+                    const SizedBox(height: RhythmoSpace.md),
+                    Wrap(
+                      spacing: RhythmoSpace.sm,
+                      runSpacing: RhythmoSpace.sm,
+                      children: discover,
+                    ),
+                  ],
+                  const SizedBox(height: RhythmoSpace.lg),
                   if (resume == null && library.isEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: RhythmoSpace.xxxl),
@@ -153,7 +189,10 @@ class _Heading extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(
             top: RhythmoSpace.lg, bottom: RhythmoSpace.sm),
-        child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+        // Muted, like every section label.
+        child: Text(title,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
       );
 }
 
@@ -275,6 +314,43 @@ class _ShelfItem extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A way to find new music on «خانه»: a small chip with an icon and a name.
+class _DiscoverCard extends StatelessWidget {
+  const _DiscoverCard(this.label, this.icon, this.onTap);
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.6),
+      shape: const StadiumBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: RhythmoSpace.target),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(
+                RhythmoSpace.md, 0, RhythmoSpace.lg, 0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: RhythmoSpace.sm),
+                Text(label, style: theme.textTheme.labelLarge),
+              ],
+            ),
+          ),
         ),
       ),
     );

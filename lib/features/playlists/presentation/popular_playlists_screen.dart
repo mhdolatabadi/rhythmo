@@ -620,8 +620,7 @@ class _PopularTile extends StatelessWidget {
                         playlist.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                        style: theme.textTheme.titleSmall,
                       ),
                       Text(
                         playlist.isOwner ? 'فهرست پخش خودت · $count' : count,
@@ -707,7 +706,7 @@ class _RankBadge extends StatelessWidget {
         persianDigits(rank),
         textAlign: TextAlign.center,
         style: theme.textTheme.labelLarge?.copyWith(
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           color: top ? theme.colorScheme.surface : RhythmoColors.onSurface,
         ),
       ),

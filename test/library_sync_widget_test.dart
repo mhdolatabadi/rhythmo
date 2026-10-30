@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
@@ -101,6 +102,21 @@ void main() {
     expect(
         find.descendant(
             of: _row('Phone only'), matching: find.byTooltip('فقط روی دستگاه')),
+        findsOneWidget);
+    // Only the place that needs attention wears a badge; the usual ones
+    // are named on hover alone, so rows stay quiet.
+    expect(
+        find.descendant(
+            of: _row('Server only'), matching: find.byIcon(RhythmoIcons.cloud)),
+        findsNothing);
+    expect(
+        find.descendant(
+            of: _row('Both'), matching: find.byIcon(RhythmoIcons.checkCircle)),
+        findsNothing);
+    expect(
+        find.descendant(
+            of: _row('Phone only'),
+            matching: find.byIcon(RhythmoIcons.deviceMobile)),
         findsOneWidget);
 
     await _openMenu(tester, 'Both');

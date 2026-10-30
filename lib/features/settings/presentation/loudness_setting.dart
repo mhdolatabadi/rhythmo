@@ -20,7 +20,7 @@ class LoudnessSetting extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Divider(height: 1),
+            const SizedBox(height: 4),
             SwitchListTile(
               secondary: const Icon(RhythmoIcons.speakerHigh),
               title: const Text('یکسان‌سازی بلندی صدا'),

@@ -19,6 +19,7 @@ import 'package:rhythmo/features/settings/presentation/playback_settings_section
 import 'package:rhythmo/features/settings/presentation/queue_settings_section.dart';
 import 'package:rhythmo/features/settings/application/cache_controller.dart';
 import 'package:rhythmo/features/settings/presentation/delete_account_screen.dart';
+import 'package:rhythmo/features/settings/presentation/settings_group.dart';
 import 'package:rhythmo/features/settings/presentation/storage_usage_card.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -31,6 +32,9 @@ class SettingsScreen extends StatefulWidget {
     this.player,
     this.onManagePlaylists,
     this.email,
+    this.verified = false,
+    this.onAdmin,
+    this.onLogout,
     this.onDeleteAccount,
     this.onSignOutEverywhere,
     this.siteUri = AppConfiguration.sitePage,
@@ -40,6 +44,13 @@ class SettingsScreen extends StatefulWidget {
   /// The signed-in account; null hides the account section.
   final VoidCallback? onFeedback;
   final String? email;
+  final bool verified;
+
+  /// Opens account management for admins; null hides it.
+  final VoidCallback? onAdmin;
+
+  /// Signs out of this device; null hides it.
+  final VoidCallback? onLogout;
 
   /// Deletes the account; null hides the option.
   final Future<void> Function(String password)? onDeleteAccount;
@@ -134,7 +145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final error = Theme.of(context).colorScheme.error;
     return Scaffold(
-      appBar: AppBar(title: const Text('تنظیمات')),
+      appBar: AppBar(title: const Text('حساب و تنظیمات')),
       // Centred and capped on desktop, so rows never span the window.
       body: RhythmoBackdrop(
           child: Center(
@@ -146,26 +157,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
               bottom: 24 + MediaQuery.paddingOf(context).bottom,
             ),
             children: [
-              if (widget.onFeedback != null)
-                ListTile(
-                    leading: const Icon(Icons.feedback_outlined),
-                    title: const Text('ارتباط با مدیر'),
-                    subtitle: const Text('گزارش باگ، درخواست قابلیت و پیام'),
-                    onTap: widget.onFeedback),
-              if (widget.player?.journey case final journey?)
-                JourneySetting(journey: journey),
-              if (widget.player case final player?)
-                PlaybackSettingsSection(player: player),
-              if (widget.player case final player?)
-                QueueSettingsSection(player: player),
-              if (AppPreferencesScope.maybeOf(context) case final preferences?)
-                AppearanceSettingsSection(preferences: preferences),
-              if (widget.onManagePlaylists case final manage?)
-                ListTile(
-                  leading: const Icon(RhythmoIcons.playlist),
-                  title: const Text('مدیریت فهرست‌های پخش'),
-                  onTap: manage,
-                ),
+              // The account first: «حساب» in the dock is the one way here.
+              SettingsGroup(children: [
+                if (widget.email case final email?)
+                  ListTile(
+                    leading: AccountAvatar(verified: widget.verified, size: 32),
+                    title: Text(
+                      email,
+                      textDirection: TextDirection.ltr,
+                      textAlign: TextAlign.end,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle:
+                        widget.verified ? const Text('حساب تأییدشده') : null,
+                  ),
+                if (widget.onManagePlaylists case final manage?)
+                  ListTile(
+                    leading: const Icon(RhythmoIcons.playlist),
+                    title: const Text('مدیریت فهرست‌های پخش'),
+                    onTap: manage,
+                  ),
+                if (widget.onAdmin case final admin?)
+                  ListTile(
+                    leading: const Icon(RhythmoIcons.usersFill),
+                    title: const Text('مدیریت حساب‌ها'),
+                    onTap: admin,
+                  ),
+              ]),
               if (widget.library case final library?)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -177,93 +196,115 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ),
-              const ListTile(
-                title: Text('کش موسیقی'),
-                subtitle: Text(
-                  'آهنگ‌هایی که پخش کرده‌ای روی همین دستگاه نگه داشته می‌شوند تا '
-                  'دفعه‌ی بعد سریع‌تر و بدون اینترنت پخش شوند.',
+              if (widget.player case final player?)
+                PlaybackSettingsSection(player: player),
+              if (widget.player case final player?)
+                QueueSettingsSection(player: player),
+              if (widget.player?.journey case final journey?)
+                SettingsGroup(
+                  label: 'سفر شنیداری',
+                  children: [JourneySetting(journey: journey)],
                 ),
-              ),
-              if (widget.cache.isManaged)
-                ListenableBuilder(
-                  listenable: widget.cache,
-                  builder: (context, _) {
-                    final cache = widget.cache;
-                    final size = cache.sizeBytes;
-                    return ListTile(
-                      leading: const Icon(RhythmoIcons.database),
-                      title: Text(switch ((size, cache.failed)) {
-                        (_, true) => 'حجم کش معلوم نشد',
-                        (null, _) => 'در حال محاسبه…',
-                        (final int bytes, _) => 'حجم کش: ${formatSize(bytes)}',
-                      }),
-                      trailing: OutlinedButton(
-                        onPressed: cache.busy || size == 0 ? null : _clear,
-                        child: const Text('پاک کردن کش'),
-                      ),
-                    );
-                  },
-                )
-              else
-                const ListTile(
-                  leading: Icon(RhythmoIcons.globe),
-                  title: Text('در نسخه‌ی وب، کش را خود مرورگر مدیریت می‌کند.'),
+              if (AppPreferencesScope.maybeOf(context) case final preferences?)
+                AppearanceSettingsSection(preferences: preferences),
+              SettingsGroup(label: 'این دستگاه', children: [
+                if (widget.cache.isManaged)
+                  ListenableBuilder(
+                    listenable: widget.cache,
+                    builder: (context, _) {
+                      final cache = widget.cache;
+                      final size = cache.sizeBytes;
+                      return ListTile(
+                        leading: const Icon(RhythmoIcons.database),
+                        title: const Text('کش موسیقی'),
+                        subtitle: Text(switch ((size, cache.failed)) {
+                          (_, true) => 'حجم کش معلوم نشد',
+                          (null, _) => 'در حال محاسبه…',
+                          (final int bytes, _) =>
+                            'حجم کش: ${formatSize(bytes)}',
+                        }),
+                        trailing: OutlinedButton(
+                          onPressed: cache.busy || size == 0 ? null : _clear,
+                          child: const Text('پاک کردن کش'),
+                        ),
+                      );
+                    },
+                  )
+                else
+                  const ListTile(
+                    leading: Icon(RhythmoIcons.database),
+                    title: Text('کش موسیقی'),
+                    subtitle:
+                        Text('در نسخه‌ی وب، کش را خود مرورگر مدیریت می‌کند.'),
+                  ),
+                ListTile(
+                  leading: const Icon(RhythmoIcons.shieldCheck),
+                  title: const Text('دسترسی‌ها'),
+                  trailing: const Icon(RhythmoIcons.caretLeft, size: 20),
+                  onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                          builder: (_) => const PermissionsScreen())),
                 ),
+              ]),
               if (widget.botLinks case final botLinks?)
                 BotLinkSection(controller: botLinks),
-              const Divider(),
-              ListTile(
-                title: const Text('دسترسی‌ها'),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => const PermissionsScreen())),
-              ),
-              ListTile(
-                title: const Text('دربارهٔ ریتمو'),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => AboutScreen(openPage: _openPage))),
-              ),
-              ListTile(
-                title: const Text('حساب کاربری'),
-                subtitle: widget.email == null
-                    ? null
-                    : Text(
-                        widget.email!,
-                        textDirection: TextDirection.ltr,
-                        textAlign: TextAlign.end,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-              ),
-              ListTile(
-                leading: const Icon(RhythmoIcons.shieldCheck),
-                title: const Text('حریم خصوصی'),
-                subtitle:
-                    const Text('چه چیزهایی نگه می‌داریم و چه کسی می‌بیند'),
-                trailing: const Icon(RhythmoIcons.arrowSquareOut, size: 20),
-                onTap: () => _openPage('/privacy'),
-              ),
-              if (widget.onSignOutEverywhere case final signOut?)
+              SettingsGroup(label: 'پشتیبانی', children: [
+                if (widget.onFeedback != null)
+                  ListTile(
+                      leading: const Icon(RhythmoIcons.paperPlaneTilt),
+                      title: const Text('ارتباط با مدیر'),
+                      subtitle: const Text('گزارش باگ، درخواست قابلیت و پیام'),
+                      onTap: widget.onFeedback),
                 ListTile(
-                  leading: const Icon(RhythmoIcons.signOut),
-                  title: const Text('خروج از همه‌ی دستگاه‌ها'),
-                  subtitle: const Text(
-                    'اگر گوشی یا رمزت دست کس دیگری افتاده، بقیه‌ی نشست‌ها را ببند',
-                  ),
-                  onTap: () => _signOutEverywhere(signOut),
-                ),
-              if ((widget.email, widget.onDeleteAccount)
-                  case (final String email, final delete?))
-                ListTile(
-                  leading: Icon(RhythmoIcons.userCircleMinus, color: error),
-                  iconColor: error,
-                  textColor: error,
-                  title: const Text('حذف حساب کاربری'),
-                  subtitle: const Text(
-                    'حساب، موسیقی‌های ابری و فهرست‌های پخشت برای همیشه پاک می‌شوند',
-                  ),
+                  leading: const Icon(RhythmoIcons.musicNotes),
+                  title: const Text('دربارهٔ ریتمو'),
                   trailing: const Icon(RhythmoIcons.caretLeft, size: 20),
-                  onTap: () => _openDeleteAccount(email, delete),
+                  onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                          builder: (_) => AboutScreen(openPage: _openPage))),
                 ),
+                ListTile(
+                  leading: const Icon(RhythmoIcons.eyeSlash),
+                  title: const Text('حریم خصوصی'),
+                  subtitle:
+                      const Text('چه چیزهایی نگه می‌داریم و چه کسی می‌بیند'),
+                  trailing: const Icon(RhythmoIcons.arrowSquareOut, size: 20),
+                  onTap: () => _openPage('/privacy'),
+                ),
+              ]),
+              SettingsGroup(children: [
+                if (widget.onLogout case final logout?)
+                  ListTile(
+                    leading: const Icon(RhythmoIcons.signOut),
+                    title: const Text('خروج از حساب'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      logout();
+                    },
+                  ),
+                if (widget.onSignOutEverywhere case final signOut?)
+                  ListTile(
+                    leading: const Icon(RhythmoIcons.signOut),
+                    title: const Text('خروج از همه‌ی دستگاه‌ها'),
+                    subtitle: const Text(
+                      'اگر گوشی یا رمزت دست کس دیگری افتاده، بقیه‌ی نشست‌ها را ببند',
+                    ),
+                    onTap: () => _signOutEverywhere(signOut),
+                  ),
+                if ((widget.email, widget.onDeleteAccount)
+                    case (final String email, final delete?))
+                  ListTile(
+                    leading: Icon(RhythmoIcons.userCircleMinus, color: error),
+                    iconColor: error,
+                    textColor: error,
+                    title: const Text('حذف حساب کاربری'),
+                    subtitle: const Text(
+                      'حساب، موسیقی‌های ابری و فهرست‌های پخشت برای همیشه پاک می‌شوند',
+                    ),
+                    trailing: const Icon(RhythmoIcons.caretLeft, size: 20),
+                    onTap: () => _openDeleteAccount(email, delete),
+                  ),
+              ]),
               // Debug builds only: every token and component on one page.
               if (kDebugMode)
                 ListTile(
