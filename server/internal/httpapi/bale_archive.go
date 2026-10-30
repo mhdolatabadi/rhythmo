@@ -16,7 +16,7 @@ import (
 type BaleArchive interface {
 	Preview(context.Context, int64) (balearchive.Page, error)
 	Submit(context.Context, string, string, int64, string, int) (store.BotImport, error)
-	Recent(context.Context, string) ([]store.BotImport, error)
+	Recent(context.Context, string) ([]store.BaleArchiveImport, error)
 }
 
 func (h *AdminHandlers) WithBaleArchive(archive BaleArchive, rate *RateLimiter) *AdminHandlers {
@@ -24,6 +24,13 @@ func (h *AdminHandlers) WithBaleArchive(archive BaleArchive, rate *RateLimiter) 
 	h.archiveRate = rate
 	return h
 }
+
+type BaleTopicCatalog interface {
+	Catalog(context.Context, string) (store.BaleCatalog, error)
+	RefreshCatalog(context.Context) error
+	ImportTopic(context.Context, string, string) error
+}
+
 func (h *AdminHandlers) registerBaleArchive(mux *http.ServeMux) {
 	if h.baleArchive == nil {
 		return
@@ -31,6 +38,11 @@ func (h *AdminHandlers) registerBaleArchive(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/bale-archive/preview", h.previewBale)
 	mux.HandleFunc("POST /api/v1/admin/bale-archive/import", h.importBale)
 	mux.HandleFunc("GET /api/v1/admin/bale-archive/imports", h.recentBale)
+	if _, ok := h.baleArchive.(BaleTopicCatalog); ok {
+		mux.HandleFunc("GET /api/v1/admin/bale-archive/topics", h.baleTopics)
+		mux.HandleFunc("POST /api/v1/admin/bale-archive/scan", h.refreshBaleCatalog)
+		mux.HandleFunc("POST /api/v1/admin/bale-archive/topics/import", h.importBaleTopic)
+	}
 }
 func (h *AdminHandlers) previewBale(w http.ResponseWriter, r *http.Request) {
 	userID, ok := h.authorize(w, r)
@@ -111,9 +123,60 @@ func (h *AdminHandlers) recentBale(w http.ResponseWriter, r *http.Request) {
 		internalError(w, "list bale archive", err)
 		return
 	}
-	out := make([]map[string]any, 0, len(jobs))
-	for _, j := range jobs {
-		out = append(out, map[string]any{"id": j.ID, "state": j.State, "fileName": j.FileName, "trackId": j.TrackID, "playlistId": j.PlaylistID, "error": j.Error})
+	writeJSON(w, http.StatusOK, map[string]any{"imports": jobs})
+}
+
+func (h *AdminHandlers) baleTopics(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.authorize(w, r)
+	if !ok {
+		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"imports": out})
+	result, err := h.baleArchive.(BaleTopicCatalog).Catalog(r.Context(), actor)
+	if err != nil {
+		internalError(w, "list bale topics", err)
+		return
+	}
+	writeJSON(w, 200, result)
+}
+func (h *AdminHandlers) refreshBaleCatalog(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.authorize(w, r)
+	if !ok {
+		return
+	}
+	if h.archiveRate != nil && !enforceRateLimit(w, h.archiveRate, actor) {
+		return
+	}
+	if err := h.baleArchive.(BaleTopicCatalog).RefreshCatalog(r.Context()); err != nil {
+		internalError(w, "refresh bale catalog", err)
+		return
+	}
+	writeJSON(w, 202, map[string]bool{"accepted": true})
+}
+func (h *AdminHandlers) importBaleTopic(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.authorize(w, r)
+	if !ok {
+		return
+	}
+	if h.archiveRate != nil && !enforceRateLimit(w, h.archiveRate, actor) {
+		return
+	}
+	var input struct {
+		Key string `json:"key"`
+	}
+	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
+	d.DisallowUnknownFields()
+	if d.Decode(&input) != nil || d.Decode(new(any)) != io.EOF || !balearchive.ValidTopic(input.Key) {
+		writeError(w, 400, "invalid_topic")
+		return
+	}
+	err := h.baleArchive.(BaleTopicCatalog).ImportTopic(r.Context(), actor, input.Key)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, 404, "topic_not_found")
+		return
+	}
+	if err != nil {
+		internalError(w, "request bale topic", err)
+		return
+	}
+	writeJSON(w, 202, map[string]bool{"accepted": true})
 }

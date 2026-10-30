@@ -94,7 +94,7 @@ func enforceRateLimit(w http.ResponseWriter, limiter *RateLimiter, key string) b
 		seconds = 1
 	}
 	w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
-	writeError(w, http.StatusTooManyRequests, "rate_limited")
+	writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": "rate_limited", "retryAfterSeconds": seconds})
 	return false
 }
 

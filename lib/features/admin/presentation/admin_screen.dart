@@ -259,7 +259,7 @@ class _AdminScreenState extends State<AdminScreen> {
       appBar: AppBar(
         title: const Text('مدیریت حساب‌ها'),
         actions: [
-          if (widget.api is BaleArchiveApi)
+          if (widget.api is BaleTopicCatalogApi)
             IconButton(
               tooltip: 'آرشیو حامد کاشانی',
               icon: const Icon(Icons.library_music_outlined),
@@ -267,7 +267,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   ? null
                   : () => Navigator.of(context).push(MaterialPageRoute<void>(
                       builder: (_) => BaleArchiveScreen(
-                          api: widget.api as BaleArchiveApi,
+                          api: widget.api as BaleTopicCatalogApi,
                           token: widget.token))),
             ),
           if (widget.api is AdminSongReportsApi)

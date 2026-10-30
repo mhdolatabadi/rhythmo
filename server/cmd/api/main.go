@@ -342,8 +342,14 @@ func run() error {
 		return err
 	}
 	trackLikes := store.NewTrackLikes(pool)
+	// Curated archive browsing must not consume the general link-import
+	// budget. The archive still has its own bounded admin request window.
+	archiveRate, err := rateLimiterEnv("BALE_ARCHIVE_ADMIN_RATE", 120, 10*time.Minute)
+	if err != nil {
+		return err
+	}
 	adminHandlers := httpapi.NewAdminHandlers(authHandlers, users).WithQuota(ownerQuotaBytes).WithPlaylists(playlists).
-		WithPublications(store.NewPublications(pool), objects).WithBaleArchive(baleArchive, linkImportRate)
+		WithPublications(store.NewPublications(pool), objects).WithBaleArchive(baleArchive, archiveRate)
 	storeHandlers := httpapi.NewCatalogHandlers(storeCatalog, tokens, objects,
 		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 		WithSave(store.NewFingerprints(pool), httpapi.SavePolicy{

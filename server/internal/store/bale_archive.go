@@ -138,3 +138,42 @@ func (b *BaleImports) UnfinishedImports(ctx context.Context, limit int) ([]BotIm
 	}
 	return jobs, rows.Err()
 }
+
+// BaleArchiveImport includes the persisted source identity and topic so a
+// reopened archive does not depend on a fresh Bale preview to show its library.
+type BaleArchiveImport struct {
+	ID         string      `json:"id"`
+	MessageID  string      `json:"messageId"`
+	Date       int64       `json:"date"`
+	Title      string      `json:"title"`
+	Topic      string      `json:"topic"`
+	Session    int         `json:"session"`
+	State      ImportState `json:"state"`
+	FileName   string      `json:"fileName"`
+	TrackID    *string     `json:"trackId,omitempty"`
+	PlaylistID *string     `json:"playlistId,omitempty"`
+	Error      *string     `json:"error,omitempty"`
+}
+
+func (b *BaleImports) RecentBale(ctx context.Context, userID string) ([]BaleArchiveImport, error) {
+	rows, err := b.pool.Query(ctx, `SELECT i.id::text,p.message_id,p.message_date,
+ COALESCE(t.title,i.title,i.file_name),p.topic,p.session_number,i.state,i.file_name,
+ i.track_id::text,i.playlist_id::text,i.error
+ FROM bot_imports i JOIN bale_archive_posts p ON p.import_id=i.id
+ LEFT JOIN tracks t ON t.id=i.track_id
+ WHERE i.provider='bale_archive' AND i.user_id::text=$1 AND p.owner_id=i.user_id
+ ORDER BY i.created_at DESC,i.id LIMIT 500`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []BaleArchiveImport{}
+	for rows.Next() {
+		var j BaleArchiveImport
+		if err := rows.Scan(&j.ID, &j.MessageID, &j.Date, &j.Title, &j.Topic, &j.Session, &j.State, &j.FileName, &j.TrackID, &j.PlaylistID, &j.Error); err != nil {
+			return nil, err
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
+}

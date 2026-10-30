@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/mhdolatabadi/rhythmo/server/internal/auth"
 	"github.com/mhdolatabadi/rhythmo/server/internal/balearchive"
@@ -28,9 +29,22 @@ func (f *fakeBaleArchive) Submit(_ context.Context, _, _ string, _ int64, topic 
 	f.session = session
 	return store.BotImport{ID: "job", State: store.ImportQueued}, nil
 }
-func (f *fakeBaleArchive) Recent(context.Context, string) ([]store.BotImport, error) {
+func (f *fakeBaleArchive) Recent(context.Context, string) ([]store.BaleArchiveImport, error) {
 	f.calls++
-	return []store.BotImport{}, nil
+	return []store.BaleArchiveImport{{ID: "job", MessageID: "-123", Date: 1234, Title: "فاطمیه؛ جلسه اول", Topic: "فاطمیه", Session: 1, State: store.ImportDone}}, nil
+}
+func (f *fakeBaleArchive) Catalog(context.Context, string) (store.BaleCatalog, error) {
+	f.calls++
+	return store.BaleCatalog{Scan: store.BaleScan{State: "scanning"}, Topics: []store.BaleTopic{}}, nil
+}
+func (f *fakeBaleArchive) RefreshCatalog(context.Context) error { f.calls++; return nil }
+func (f *fakeBaleArchive) ImportTopic(_ context.Context, actor, key string) error {
+	f.calls++
+	f.topic = key
+	if key == "unknown" {
+		return store.ErrNotFound
+	}
+	return nil
 }
 func TestBaleAdminAuthorizationAndInput(t *testing.T) {
 	api := newTestAPI(t)
@@ -48,6 +62,9 @@ func TestBaleAdminAuthorizationAndInput(t *testing.T) {
 	for _, tc := range []struct{ method, path, body string }{
 		{"GET", "/api/v1/admin/bale-archive/preview", ""}, {"GET", "/api/v1/admin/bale-archive/imports", ""},
 		{"POST", "/api/v1/admin/bale-archive/import", `{"id":"-123","date":1234,"topic":"فاطمیه","session":1}`},
+		{"GET", "/api/v1/admin/bale-archive/topics", ""},
+		{"POST", "/api/v1/admin/bale-archive/scan", ""},
+		{"POST", "/api/v1/admin/bale-archive/topics/import", `{"key":"موضوع"}`},
 	} {
 		expectError(t, api.do(t, tc.method, tc.path, tc.body, ""), http.StatusUnauthorized, "unauthorized")
 		expectError(t, api.do(t, tc.method, tc.path, tc.body, mt), http.StatusForbidden, "admin_required")
@@ -76,4 +93,33 @@ func TestBaleAdminAuthorizationAndInput(t *testing.T) {
 	if source.calls != calls {
 		t.Fatal("invalid input reached source")
 	}
+	r = api.do(t, "GET", "/api/v1/admin/bale-archive/topics", "", at)
+	if r.Code != 200 {
+		t.Fatal(r.Body)
+	}
+	r = api.do(t, "POST", "/api/v1/admin/bale-archive/topics/import", `{"key":"موضوع"}`, at)
+	if r.Code != 202 || source.topic != "موضوع" {
+		t.Fatal(r.Body)
+	}
+	expectError(t, api.do(t, "POST", "/api/v1/admin/bale-archive/topics/import", `{"key":"unknown"}`, at), 404, "topic_not_found")
+	for _, body := range []string{`{}`, `{"key":""}`, `{"key":"موضوع","ownerId":"other"}`, `{"key":"موضوع"} {}`} {
+		expectError(t, api.do(t, "POST", "/api/v1/admin/bale-archive/topics/import", body, at), 400, "invalid_topic")
+	}
+
+	// Import status is independent of preview throttling and includes the
+	// persisted source/topic metadata needed to restore a reopened screen.
+	api.handler = NewHandler(Config{Admin: NewAdminHandlers(h, &fakeAdminStore{}).WithBaleArchive(source, NewRateLimiter(RateLimit{Requests: 1, Window: time.Minute}, 10))})
+	r = api.do(t, "GET", "/api/v1/admin/bale-archive/preview", "", at)
+	if r.Code != http.StatusOK {
+		t.Fatal(r.Body)
+	}
+	expectError(t, api.do(t, "GET", "/api/v1/admin/bale-archive/preview", "", at), 429, "rate_limited")
+	r = api.do(t, "GET", "/api/v1/admin/bale-archive/imports", "", at)
+	result := decode[struct {
+		Imports []store.BaleArchiveImport `json:"imports"`
+	}](t, r)
+	if r.Code != 200 || len(result.Imports) != 1 || result.Imports[0].Topic != "فاطمیه" || result.Imports[0].Session != 1 || result.Imports[0].MessageID != "-123" {
+		t.Fatalf("lost archive metadata: %s", r.Body)
+	}
+
 }
