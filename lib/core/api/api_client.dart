@@ -1,3 +1,4 @@
+import 'package:rhythmo/features/bale_archive/bale_archive.dart';
 import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/data/admin_song_reports.dart';
@@ -392,9 +393,57 @@ class ApiClient
         AdminApi,
         AdminSongReportsApi,
         FeedbackApi,
-        AdminQuotaApi {
+        AdminQuotaApi,
+        BaleArchiveApi {
   ApiClient(this.baseUri, {http.Client? httpClient})
       : _httpClient = httpClient ?? http.Client();
+
+  @override
+  Future<BaleArchivePage> previewBaleArchive(
+    String token, {
+    int? before,
+  }) async {
+    final body = await _send(
+      'GET',
+      '/api/v1/admin/bale-archive/preview${before == null ? '' : '?before=$before'}',
+      token: token,
+      requestTimeout: const Duration(seconds: 80),
+    );
+    return BaleArchivePage.fromJson(body);
+  }
+
+  @override
+  Future<BaleArchiveJob> importBaleLecture(
+    String token,
+    BaleLecture lecture,
+  ) async {
+    final body = await _send(
+      'POST',
+      '/api/v1/admin/bale-archive/import',
+      token: token,
+      body: {
+        'id': lecture.id,
+        'date': lecture.date,
+        'topic': lecture.topic,
+        'session': lecture.session,
+      },
+      requestTimeout: const Duration(seconds: 80),
+    );
+    return BaleArchiveJob.fromJson(body);
+  }
+
+  @override
+  Future<List<BaleArchiveJob>> baleArchiveJobs(String token) async {
+    final body = await _send(
+      'GET',
+      '/api/v1/admin/bale-archive/imports',
+      token: token,
+    );
+    return [
+      for (final job in body['imports'] as List<dynamic>)
+        BaleArchiveJob.fromJson(job as Map<String, dynamic>),
+    ];
+  }
 
   @override
   Future<void> submitFeedback(

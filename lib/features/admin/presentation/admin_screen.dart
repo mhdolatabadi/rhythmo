@@ -1,3 +1,5 @@
+import 'package:rhythmo/features/bale_archive/bale_archive.dart';
+import 'package:rhythmo/features/bale_archive/bale_archive_screen.dart';
 import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:flutter/material.dart';
 import 'package:rhythmo/features/feedback/feedback_screen.dart';
@@ -257,6 +259,17 @@ class _AdminScreenState extends State<AdminScreen> {
       appBar: AppBar(
         title: const Text('مدیریت حساب‌ها'),
         actions: [
+          if (widget.api is BaleArchiveApi)
+            IconButton(
+              tooltip: 'آرشیو حامد کاشانی',
+              icon: const Icon(Icons.library_music_outlined),
+              onPressed: _forbidden
+                  ? null
+                  : () => Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => BaleArchiveScreen(
+                          api: widget.api as BaleArchiveApi,
+                          token: widget.token))),
+            ),
           if (widget.api is AdminSongReportsApi)
             IconButton(
                 tooltip: 'گزارش آهنگ‌ها',

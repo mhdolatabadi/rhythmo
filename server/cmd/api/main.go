@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/mhdolatabadi/rhythmo/server/internal/auth"
+	"github.com/mhdolatabadi/rhythmo/server/internal/balearchive"
 	"github.com/mhdolatabadi/rhythmo/server/internal/bot"
 	"github.com/mhdolatabadi/rhythmo/server/internal/catalog"
 	"github.com/mhdolatabadi/rhythmo/server/internal/fingerprint"
@@ -297,6 +298,10 @@ func run() error {
 		linkImports.WithMedia(media)
 	}
 	go linkImports.Resume(ctx)
+	baleArchive := balearchive.New(linkFetcher, linkimport.NewProvider(linkFetcher, maxUploadBytes), store.NewBaleImports(pool), tracks, objects, bot.UploadPolicy{
+		Enabled: uploadsEnabled, MaxFileBytes: maxUploadBytes, MaxOwnerBytes: ownerQuotaBytes, MaxPending: maxPending,
+	})
+	go baleArchive.Run(ctx)
 
 	lyricsHandlers, err := setupLyrics(pool, tracks, playlists, tokens)
 	if err != nil {
@@ -338,7 +343,7 @@ func run() error {
 	}
 	trackLikes := store.NewTrackLikes(pool)
 	adminHandlers := httpapi.NewAdminHandlers(authHandlers, users).WithQuota(ownerQuotaBytes).WithPlaylists(playlists).
-		WithPublications(store.NewPublications(pool), objects)
+		WithPublications(store.NewPublications(pool), objects).WithBaleArchive(baleArchive, linkImportRate)
 	storeHandlers := httpapi.NewCatalogHandlers(storeCatalog, tokens, objects,
 		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 		WithSave(store.NewFingerprints(pool), httpapi.SavePolicy{
