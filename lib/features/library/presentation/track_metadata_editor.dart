@@ -502,7 +502,7 @@ class _Section extends StatelessWidget {
               title,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
             ),
           ),

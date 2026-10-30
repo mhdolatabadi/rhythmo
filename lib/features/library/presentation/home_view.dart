@@ -190,7 +190,10 @@ class _Heading extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(
             top: RhythmoSpace.lg, bottom: RhythmoSpace.sm),
-        child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+        // Muted, like every section label.
+        child: Text(title,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
       );
 }
 

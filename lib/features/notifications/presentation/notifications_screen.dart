@@ -323,7 +323,7 @@ class _Row extends StatelessWidget {
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: unread ? const TextStyle(fontWeight: FontWeight.w800) : null,
+            style: unread ? const TextStyle(fontWeight: FontWeight.w700) : null,
           ),
           subtitle:
               Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),

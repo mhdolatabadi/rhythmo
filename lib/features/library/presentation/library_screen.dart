@@ -712,14 +712,11 @@ class _LibraryScreenState extends State<LibraryScreen>
       tabAlignment: wide || _visibleTabs.length > 4
           ? TabAlignment.start
           : TabAlignment.fill,
-      labelStyle: Theme.of(context)
-          .textTheme
-          .titleSmall
-          ?.copyWith(fontWeight: FontWeight.w800),
+      labelStyle: Theme.of(context).textTheme.titleSmall,
       unselectedLabelStyle: Theme.of(context)
           .textTheme
           .titleSmall
-          ?.copyWith(fontWeight: FontWeight.w500),
+          ?.copyWith(fontWeight: FontWeight.w400),
       // Phone tabs share a narrow width: tighter padding, and a label that
       // still does not fit shrinks a little instead of being clipped.
       labelPadding: wide
@@ -1150,8 +1147,7 @@ class _GroupList extends StatelessWidget {
                 group.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+                style: theme.textTheme.bodyLarge?.copyWith(
                   color: group.unknown ? colors.onSurfaceVariant : null,
                 ),
               ),
@@ -1229,7 +1225,7 @@ class _AlbumCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: group.unknown ? colors.onSurfaceVariant : null,
             ),
           ),
@@ -1314,8 +1310,7 @@ class _TrackGroupScreen extends StatelessWidget {
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
-                                    style: theme.textTheme.headlineSmall
-                                        ?.copyWith(fontWeight: FontWeight.w800),
+                                    style: theme.textTheme.headlineSmall,
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -2040,8 +2035,10 @@ class _TrackRow extends StatelessWidget {
                     track.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: current ? FontWeight.w700 : FontWeight.w600,
+                    // Regular, as every list title; the playing one is
+                    // medium and ember.
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: current ? FontWeight.w500 : FontWeight.w400,
                       color: current ? colors.primary : colors.onSurface,
                     ),
                   ),
@@ -2963,8 +2960,7 @@ class _RecentSearches extends StatelessWidget {
                   header: true,
                   child: Text(
                     'جست‌وجوهای اخیر',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
+                    style: theme.textTheme.titleMedium,
                   ),
                 ),
               ),
@@ -3017,14 +3013,13 @@ class _Hairline extends StatelessWidget {
 }
 
 /// The hairline between track rows: from the title's start edge.
+/// The space between two track rows. Rows are told apart by their artwork
+/// and spacing, not by lines, which made long lists read as busy.
 class _RowHairline extends StatelessWidget {
   const _RowHairline();
 
-  // Row padding, the 48 px artwork and the gap before the title.
-  static const indent = 8.0 + 48 + 12;
-
   @override
-  Widget build(BuildContext context) => const _Hairline(indent: indent);
+  Widget build(BuildContext context) => const SizedBox(height: 2);
 }
 
 /// A group's title in the search results, with how many it found.
@@ -3053,8 +3048,7 @@ class _ResultsHeader extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800),
+                  style: theme.textTheme.titleMedium,
                 ),
               ),
               if (count > 0)

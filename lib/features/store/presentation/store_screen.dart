@@ -185,7 +185,7 @@ class _StoreScreenState extends State<StoreScreen>
       controller: _tabs,
       isScrollable: wide,
       tabAlignment: wide ? TabAlignment.start : TabAlignment.fill,
-      labelStyle: text.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+      labelStyle: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
       unselectedLabelStyle:
           text.titleSmall?.copyWith(fontWeight: FontWeight.w500),
       labelPadding: EdgeInsets.symmetric(
@@ -326,10 +326,7 @@ class _StoreScreenState extends State<StoreScreen>
                               header: true,
                               child: Text(
                                 'همه‌ی آهنگ‌ها',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w800),
+                                style: Theme.of(context).textTheme.titleMedium,
                               ),
                             ),
                           ),

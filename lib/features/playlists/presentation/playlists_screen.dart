@@ -342,7 +342,7 @@ class _PlaylistsOverview extends StatelessWidget {
             child: Text(
               'همهٔ فهرست‌های پخش',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
             ),
           ),
@@ -407,7 +407,7 @@ class _PlaylistFeatureCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
             ),
             Text(
@@ -898,7 +898,7 @@ class _PlaylistDetailHeader extends StatelessWidget {
             style: (wide
                     ? theme.textTheme.displaySmall
                     : theme.textTheme.headlineMedium)
-                ?.copyWith(fontWeight: FontWeight.w800, height: 1.3),
+                ?.copyWith(fontWeight: FontWeight.w500, height: 1.3),
           ),
           const SizedBox(height: RhythmoSpace.sm),
           Text(

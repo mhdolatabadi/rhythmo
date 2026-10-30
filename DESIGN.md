@@ -14,7 +14,7 @@ colors:
   violet-container: "#2A2454"
   on-violet-container: "#E5DFFF"
   text: "#F5F1F7"
-  text-muted: "#D0C8D4"
+  text-muted: "#A9A1AE"
   outline: "#8B8290"
   outline-quiet: "#3C3743"
   glass-border: "#FFFFFF33"
@@ -22,19 +22,19 @@ colors:
 typography:
   display:
     fontFamily: "Vazirmatn"
-    fontSize: "26px"
-    fontWeight: 800
-    lineHeight: 1.3
+    fontSize: "24px"
+    fontWeight: 500
+    lineHeight: 1.35
   headline:
     fontFamily: "Vazirmatn"
-    fontSize: "22px"
-    fontWeight: 800
-    lineHeight: 1.35
+    fontSize: "20px"
+    fontWeight: 500
+    lineHeight: 1.4
   title:
     fontFamily: "Vazirmatn"
-    fontSize: "17px"
-    fontWeight: 800
-    lineHeight: 1.4
+    fontSize: "15px"
+    fontWeight: 500
+    lineHeight: 1.45
   body:
     fontFamily: "Vazirmatn"
     fontSize: "15px"
@@ -43,7 +43,7 @@ typography:
   label:
     fontFamily: "Vazirmatn"
     fontSize: "13px"
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: 1.4
 rounded:
   xs: "8px"
@@ -155,8 +155,9 @@ A near-black night with one warm and one cool light.
   into night at the bottom (`RhythmoBackdrop`). The aurora never moves.
 - **Surface / Surface Strong / Surface Raised** (#121522, #191D2D,
   #23283A): glass bases, sheets and the highest container.
-- **Text** (#F5F1F7) and **Text Muted** (#D0C8D4): both meet 4.5:1 on every
-  surface, including every artwork tint.
+- **Text** (#F5F1F7) and **Text Muted** (#A9A1AE): both meet 4.5:1 on every
+  surface (muted is 8:1 on night, 5.9:1 on Surface Raised). Muted carries
+  every secondary line, so the main line reads first.
 - **Outline** (#8B8290) for control borders (3:1). **Outline Quiet**
   (#3C3743) for dividers.
 - **Glass Border** (white at 20%) and **Glass Border Soft** (white at 12%).
@@ -172,25 +173,36 @@ container's own "on" colour, never a generic grey.
 
 ## Typography
 
-**Font:** Vazirmatn (bundled, weights 400, 500 and 700; 800 renders as the 700 cut), with Latin and
+**Font:** Vazirmatn (bundled, weights 400, 500 and 700), with Latin and
 digits in the same family. Persian digits come from `persianDigits()`.
 
-**Character:** One family carries everything. Hierarchy comes from weight
-(800 for headings, 400 for reading) and size steps, never from a second
-typeface.
+**Character:** Calm. Six sizes and three weights. Hierarchy comes first from
+colour (text vs. muted), then from size, and only last from weight. Nothing
+on a screen is heavier than it needs to be.
 
 ### Hierarchy
-- **Display** (800, 26px, 1.3): rare. The library's large collapsing title.
-- **Headline** (800, 22px, 1.35; headlineSmall 20px): the now-playing
-  title, dialog titles. Titles are bold, not big.
-- **Title** (800, 17px, 1.4; titleMedium 700, 14px): section and sheet
-  headings, list titles.
-- **Body** (400, 15/13px, 1.6): descriptions and lyrics. Lines stay within
-  65–75 characters (`RhythmoSpace.readingWidth`).
-- **Label** (600, 13px; 500, 11.5px): buttons, chips, times. Times use
-  tabular figures.
+- **Display** (500, 24px, 1.35): rare. The library's large collapsing title.
+- **Headline** (500, 20px; headlineSmall 18px): the now-playing title and
+  dialog titles. Big enough, never bold.
+- **Title** (500, 15px; titleSmall 13px): sheet titles. Section labels use
+  titleSmall in Text Muted: quiet signposts, not headings.
+- **Body** (400, 15/13/12px, 1.5–1.6): list rows use bodyLarge for the main
+  line and bodyMedium in Text Muted for the second. Lines stay within 65–75
+  characters (`RhythmoSpace.readingWidth`).
+- **Label** (500, 13/12/11px): buttons, chips, times. Times use tabular
+  figures.
 
 ### Named Rules
+**The Quiet Weight Rule.** Bold (700) is for buttons, the playing line in
+lyrics and nothing else. A row that is playing goes to 500, not bold.
+
+**The Two Tones Rule.** A row has at most two lines: the name in Text, the
+detail in Text Muted at a smaller size. Never a third colour, never two
+bold lines.
+
+**The No Divider Rule.** Rows in a list are separated by space and artwork,
+not by lines.
+
 **The Diacritic Room Rule.** Persian body text never goes below a 1.5 line
 height; Arabic-script marks must not collide.
 

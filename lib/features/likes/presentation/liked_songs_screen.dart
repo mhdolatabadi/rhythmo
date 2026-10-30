@@ -63,7 +63,7 @@ class LikedSongsEntry extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w500,
                               color: scheme.onSecondaryContainer,
                             ),
                           ),

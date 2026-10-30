@@ -51,8 +51,7 @@ class StorageUsageCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   'فضای ابری',
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                  style: theme.textTheme.titleSmall,
                 ),
                 const SizedBox(width: 12),
                 Expanded(

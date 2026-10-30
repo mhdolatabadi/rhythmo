@@ -226,7 +226,7 @@ class _SheetHeading extends StatelessWidget {
           Text(
             title,
             style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 4),

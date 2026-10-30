@@ -145,7 +145,7 @@ void main() {
     });
 
     testWidgets(
-        'rows are compact: artist only, faint inset hairlines, '
+        'rows are compact: artist only, no lines between them, '
         'and tabs inside the gutter at $label', (tester) async {
       await _pump(tester, size, [
         for (var i = 1; i <= 3; i++)
@@ -162,17 +162,11 @@ void main() {
       expect(find.text('خواننده نامشخص'), findsOneWidget);
       expect(find.textContaining('مگابایت'), findsNothing);
 
-      // A hairline between each pair of rows, none after the last.
-      final hairlines = find.byWidgetPredicate(
-          (w) => w is Divider && w.height == 1 && (w.indent ?? 0) > 48);
-      expect(hairlines, findsNWidgets(2));
-      final row = tester.getRect(find.ancestor(
-          of: find.text('آهنگ 1'), matching: find.byType(ListTile)));
-      final title = tester.getRect(find.text('آهنگ 1'));
-      final line = tester.widget<Divider>(hairlines.first);
-      // RTL: the line starts after the artwork, at the title's edge.
-      expect(line.indent, closeTo(row.right - title.right, 1));
-      expect(tester.getSize(hairlines.first).height, 1);
+      // No lines between rows: artwork and spacing tell them apart.
+      expect(
+          find.byWidgetPredicate(
+              (w) => w is Divider && w.height == 1 && (w.indent ?? 0) > 48),
+          findsNothing);
 
       // Each tab is a 48 px target; its pill stays inside the gutter.
       final gutter = size.width > RhythmoSpace.pageWidth
