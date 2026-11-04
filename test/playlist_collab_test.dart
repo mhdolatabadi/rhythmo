@@ -216,7 +216,7 @@ void main() {
     expect(find.byTooltip('اشتراک‌گذاری'), findsNothing);
     await tester.tap(find.byTooltip('گزینه‌های فهرست پخش'));
     await tester.pumpAndSettle();
-    expect(find.text('تغییر نام'), findsNothing);
+    expect(find.text('ویرایش نام و توضیح'), findsNothing);
     expect(find.text('حذف فهرست پخش'), findsNothing);
     expect(find.text('ترک فهرست پخش'), findsOneWidget);
     await tester.tapAt(const Offset(4, 300));
@@ -421,7 +421,7 @@ void main() {
     // Rename and delete live in the page's menu.
     await tester.tap(find.byTooltip('گزینه‌های فهرست پخش'));
     await tester.pumpAndSettle();
-    expect(find.text('تغییر نام'), findsOneWidget);
+    expect(find.text('ویرایش نام و توضیح'), findsOneWidget);
     expect(find.text('حذف فهرست پخش'), findsOneWidget);
     expect(find.text('ترک فهرست پخش'), findsNothing);
     await tester.tapAt(const Offset(4, 500));

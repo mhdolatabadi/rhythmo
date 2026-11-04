@@ -72,7 +72,10 @@ abstract final class RhythmoIcons {
   static const IconData repeat = IconData(0xe3f6, fontFamily: 'Phosphor');
   static const IconData robot = IconData(0xe762, fontFamily: 'Phosphor');
   static const IconData shareNetwork = IconData(0xe408, fontFamily: 'Phosphor');
+  static const IconData shield = IconData(0xe40a, fontFamily: 'Phosphor');
   static const IconData shieldCheck = IconData(0xe40c, fontFamily: 'Phosphor');
+  static const IconData shieldCheckFill =
+      IconData(0xe40c, fontFamily: 'PhosphorFill');
   static const IconData shuffle = IconData(0xe422, fontFamily: 'Phosphor');
   static const IconData signOut = IconData(0xe42a, fontFamily: 'Phosphor');
   static const IconData speakerHigh = IconData(0xe44a, fontFamily: 'Phosphor');

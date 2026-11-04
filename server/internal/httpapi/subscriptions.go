@@ -17,6 +17,7 @@ import (
 type SubscriptionStore interface {
 	SubscriptionFor(ctx context.Context, playlistID, userID string) (store.Subscription, error)
 	SetSubscription(ctx context.Context, userID, token string, subscribed bool) (store.Subscription, error)
+	SetMuted(ctx context.Context, userID, token string, muted bool) (store.Subscription, error)
 	Subscribed(ctx context.Context, userID string) ([]store.SubscribedPlaylist, error)
 }
 
@@ -45,6 +46,8 @@ func (h *PlaylistHandlers) WithSubscriptions(subscriptions SubscriptionStore, no
 func (h *PlaylistHandlers) registerSubscriptions(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/shared-playlists/{token}/subscription", h.handleSubscribe(true))
 	mux.HandleFunc("DELETE /api/v1/shared-playlists/{token}/subscription", h.handleSubscribe(false))
+	mux.HandleFunc("PUT /api/v1/shared-playlists/{token}/subscription/mute", h.handleMute(true))
+	mux.HandleFunc("DELETE /api/v1/shared-playlists/{token}/subscription/mute", h.handleMute(false))
 	mux.HandleFunc("GET /api/v1/subscriptions", h.handleSubscribed)
 	mux.HandleFunc("GET /api/v1/notifications", h.handleNotifications)
 	mux.HandleFunc("GET /api/v1/notifications/unread-count", h.handleUnreadCount)
@@ -54,6 +57,7 @@ func (h *PlaylistHandlers) registerSubscriptions(mux *http.ServeMux) {
 type subscriptionResponse struct {
 	Subscribed      bool `json:"subscribed"`
 	SubscriberCount int  `json:"subscriberCount"`
+	Muted           bool `json:"muted"`
 }
 
 // handleSubscribe subscribes (PUT) to or unsubscribes (DELETE) from the
@@ -78,7 +82,33 @@ func (h *PlaylistHandlers) handleSubscribe(subscribed bool) http.HandlerFunc {
 		case err != nil:
 			internalError(w, "subscribe to playlist", err)
 		default:
-			writeJSON(w, http.StatusOK, subscriptionResponse{Subscribed: s.Subscribed, SubscriberCount: s.Count})
+			writeJSON(w, http.StatusOK, subscriptionResponse{Subscribed: s.Subscribed, Muted: s.Muted, SubscriberCount: s.Count})
+		}
+	}
+}
+
+// handleMute mutes (PUT) or unmutes (DELETE) the caller's subscription to
+// the playlist shared at {token} (#428). Both are idempotent; it is 404
+// unless the caller is subscribed.
+func (h *PlaylistHandlers) handleMute(muted bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := authenticate(h.tokens, w, r)
+		if !ok {
+			return
+		}
+		token := r.PathValue("token")
+		if !validShareToken(token) {
+			writeError(w, http.StatusNotFound, "not_found")
+			return
+		}
+		s, err := h.subscriptions.SetMuted(r.Context(), userID, token, muted)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			writeError(w, http.StatusNotFound, "not_found")
+		case err != nil:
+			internalError(w, "mute playlist subscription", err)
+		default:
+			writeJSON(w, http.StatusOK, subscriptionResponse{Subscribed: s.Subscribed, Muted: s.Muted, SubscriberCount: s.Count})
 		}
 	}
 }
@@ -89,6 +119,7 @@ type subscribedPlaylistResponse struct {
 	Owner        string    `json:"owner"`
 	TrackCount   int       `json:"trackCount"`
 	UnreadCount  int       `json:"unreadCount"`
+	Muted        bool      `json:"muted"`
 	SubscribedAt time.Time `json:"subscribedAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
@@ -109,7 +140,7 @@ func (h *PlaylistHandlers) handleSubscribed(w http.ResponseWriter, r *http.Reque
 	for _, p := range listed {
 		response = append(response, subscribedPlaylistResponse{
 			ShareToken: p.ShareToken, Name: p.Name, Owner: bot.MaskEmail(p.OwnerEmail), TrackCount: p.TrackCount,
-			UnreadCount: p.Unread, SubscribedAt: p.SubscribedAt.UTC(), UpdatedAt: p.UpdatedAt.UTC(),
+			UnreadCount: p.Unread, Muted: p.Muted, SubscribedAt: p.SubscribedAt.UTC(), UpdatedAt: p.UpdatedAt.UTC(),
 		})
 	}
 	w.Header().Set("Cache-Control", "no-store")

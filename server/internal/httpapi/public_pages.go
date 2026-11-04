@@ -228,10 +228,12 @@ type publicTrack struct {
 type publicPlaylist struct {
 	ShareToken string
 	Name       string
-	Owner      string
-	TrackCount int
-	LikeCount  int
-	Tracks     []publicTrack
+	// Description is the channel's blurb (#428), if it has one.
+	Description string
+	Owner       string
+	TrackCount  int
+	LikeCount   int
+	Tracks      []publicTrack
 }
 
 // WithSite sets the origin, such as https://rhythmo.ir, that canonical,
@@ -463,7 +465,7 @@ func (p *PublicPages) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	site := p.origin(r)
 	token := *shared.ShareToken
 	page := publicPlaylist{
-		ShareToken: token, Name: shared.Name, Owner: bot.MaskEmail(shared.OwnerEmail),
+		ShareToken: token, Name: shared.Name, Description: shared.Description, Owner: bot.MaskEmail(shared.OwnerEmail),
 		TrackCount: len(shared.Tracks), LikeCount: likes.Count,
 	}
 	inStore := p.storeEntriesFor(r, shared.Tracks)
@@ -494,6 +496,9 @@ func (p *PublicPages) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 		description += "، از " + strings.Join(artists, "، ")
 	}
 	description += ". آنلاین و بدون ثبت‌نام بشنو."
+	if shared.Description != "" {
+		description = shared.Description + " — " + description
+	}
 	canonical := site + "/p/" + token
 	meta := pageMeta{
 		Title:       shared.Name + " | فهرست پخش آنلاین در ریتمو",

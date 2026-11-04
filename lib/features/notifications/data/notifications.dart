@@ -2,31 +2,47 @@
 /// subscribed, the way a channel shows its members.
 class PlaylistSubscription {
   const PlaylistSubscription(
-      {required this.subscribed, required this.subscriberCount});
+      {required this.subscribed,
+      required this.subscriberCount,
+      this.muted = false});
 
   factory PlaylistSubscription.fromJson(Map<String, dynamic> json) =>
       PlaylistSubscription(
         subscribed: json['subscribed'] == true,
         subscriberCount: json['subscriberCount'] as int? ?? 0,
+        muted: json['muted'] == true,
       );
 
   final bool subscribed;
   final int subscriberCount;
 
+  /// Whether this account muted the channel: its notices stay in the list
+  /// but don't count as new and aren't sent to the linked bots.
+  final bool muted;
+
   /// The subscription after pressing the button, before the server answers.
+  /// Leaving a channel forgets that it was muted.
   PlaylistSubscription toggled() => PlaylistSubscription(
         subscribed: !subscribed,
         subscriberCount: subscriberCount + (subscribed ? -1 : 1),
+      );
+
+  /// The subscription after pressing mute or unmute.
+  PlaylistSubscription withMuted(bool muted) => PlaylistSubscription(
+        subscribed: subscribed,
+        subscriberCount: subscriberCount,
+        muted: muted,
       );
 
   @override
   bool operator ==(Object other) =>
       other is PlaylistSubscription &&
       other.subscribed == subscribed &&
-      other.subscriberCount == subscriberCount;
+      other.subscriberCount == subscriberCount &&
+      other.muted == muted;
 
   @override
-  int get hashCode => Object.hash(subscribed, subscriberCount);
+  int get hashCode => Object.hash(subscribed, subscriberCount, muted);
 }
 
 /// Tells a subscriber that [trackCount] audio files were added to a public
@@ -82,6 +98,7 @@ class SubscribedPlaylist {
     required this.owner,
     required this.trackCount,
     required this.unreadCount,
+    this.muted = false,
   });
 
   factory SubscribedPlaylist.fromJson(Map<String, dynamic> json) =>
@@ -91,6 +108,7 @@ class SubscribedPlaylist {
         owner: json['owner'] as String? ?? '',
         trackCount: json['trackCount'] as int? ?? 0,
         unreadCount: json['unreadCount'] as int? ?? 0,
+        muted: json['muted'] == true,
       );
 
   final String shareToken;
@@ -100,4 +118,7 @@ class SubscribedPlaylist {
   final String owner;
   final int trackCount;
   final int unreadCount;
+
+  /// Whether this account muted it.
+  final bool muted;
 }

@@ -17,19 +17,22 @@ import (
 const (
 	maxPlaylistBodyBytes = 64 << 10
 	maxPlaylistNameRunes = 200
-	maxPlaylistTracks    = 1000
+	// maxPlaylistDescriptionRunes is about a channel bio's length.
+	maxPlaylistDescriptionRunes = 500
+	maxPlaylistTracks           = 1000
 )
 
 type PlaylistStore interface {
 	ListForUser(ctx context.Context, userID string) ([]store.Playlist, error)
 	ForUser(ctx context.Context, userID, playlistID string) (store.Playlist, error)
 	Create(ctx context.Context, ownerID, name string) (store.Playlist, error)
-	Rename(ctx context.Context, ownerID, playlistID, name string) (store.Playlist, error)
+	Rename(ctx context.Context, actorID, playlistID, name string, description *string) (store.Playlist, error)
 	ReplaceTracks(ctx context.Context, userID, playlistID string, trackIDs []string) error
 	Delete(ctx context.Context, ownerID, playlistID string) error
 	SetCollabToken(ctx context.Context, ownerID, playlistID string, token *string) (store.Playlist, error)
 	Join(ctx context.Context, userID, token string) (store.Playlist, error)
 	RemoveMember(ctx context.Context, actorID, playlistID, memberID string) error
+	SetMemberRole(ctx context.Context, ownerID, playlistID, memberID, role string) error
 	PlaylistTrack(ctx context.Context, userID, playlistID, trackID string) (store.Track, error)
 }
 
@@ -89,11 +92,14 @@ func (h *PlaylistHandlers) register(mux *http.ServeMux) {
 }
 
 type playlistResponse struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	TrackCount int    `json:"trackCount"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	TrackCount  int    `json:"trackCount"`
 	// IsOwner is false for a playlist the user joined as a member.
 	IsOwner bool `json:"isOwner"`
+	// IsAdmin is true for a member the owner made an admin (#428).
+	IsAdmin bool `json:"isAdmin"`
 	// ShareToken is set while the playlist is shared; only its owner sees it.
 	ShareToken *string `json:"shareToken,omitempty"`
 	// Public is whether a shared playlist is listed for everyone.
@@ -114,6 +120,7 @@ type playlistResponse struct {
 type playlistMemberResponse struct {
 	ID       string    `json:"id"`
 	Name     string    `json:"name"`
+	Role     string    `json:"role"`
 	JoinedAt time.Time `json:"joinedAt"`
 }
 
@@ -133,7 +140,8 @@ func toPlaylistResponse(playlist store.Playlist, viewerID string, includeTracks 
 		trackCount = len(playlist.Tracks)
 	}
 	response := playlistResponse{
-		ID: playlist.ID, Name: playlist.Name, TrackCount: trackCount, IsOwner: isOwner,
+		ID: playlist.ID, Name: playlist.Name, Description: playlist.Description, TrackCount: trackCount,
+		IsOwner: isOwner, IsAdmin: playlist.ViewerAdmin,
 		Public: playlist.IsPublic, CreatedAt: playlist.CreatedAt.UTC(), UpdatedAt: playlist.UpdatedAt.UTC(),
 	}
 	if isOwner {
@@ -148,7 +156,7 @@ func toPlaylistResponse(playlist store.Playlist, viewerID string, includeTracks 
 	response.Members = make([]playlistMemberResponse, 0, len(playlist.Members))
 	for _, m := range playlist.Members {
 		names[m.UserID] = bot.MaskEmail(m.Email)
-		response.Members = append(response.Members, playlistMemberResponse{ID: m.UserID, Name: names[m.UserID], JoinedAt: m.JoinedAt.UTC()})
+		response.Members = append(response.Members, playlistMemberResponse{ID: m.UserID, Name: names[m.UserID], Role: m.Role, JoinedAt: m.JoinedAt.UTC()})
 	}
 	response.Tracks = make([]playlistTrackResponse, 0, len(playlist.Tracks))
 	for _, track := range playlist.Tracks {
@@ -198,6 +206,8 @@ func (h *PlaylistHandlers) handleGet(w http.ResponseWriter, r *http.Request) {
 
 type playlistNameRequest struct {
 	Name string `json:"name"`
+	// Description is only read when renaming; nil keeps it.
+	Description *string `json:"description,omitempty"`
 }
 
 func (h *PlaylistHandlers) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -205,11 +215,11 @@ func (h *PlaylistHandlers) handleCreate(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	name, ok := decodePlaylistName(w, r)
+	input, ok := decodePlaylistName(w, r)
 	if !ok {
 		return
 	}
-	playlist, err := h.playlists.Create(r.Context(), userID, name)
+	playlist, err := h.playlists.Create(r.Context(), userID, input.Name)
 	if err != nil {
 		internalError(w, "create playlist", err)
 		return
@@ -222,11 +232,11 @@ func (h *PlaylistHandlers) handleRename(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	name, ok := decodePlaylistName(w, r)
+	input, ok := decodePlaylistName(w, r)
 	if !ok {
 		return
 	}
-	playlist, err := h.playlists.Rename(r.Context(), userID, r.PathValue("id"), name)
+	playlist, err := h.playlists.Rename(r.Context(), userID, r.PathValue("id"), input.Name, input.Description)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
@@ -300,18 +310,28 @@ func (h *PlaylistHandlers) handleDelete(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func decodePlaylistName(w http.ResponseWriter, r *http.Request) (string, bool) {
+// decodePlaylistName reads a playlist's name, and its description if one is
+// sent, both trimmed.
+func decodePlaylistName(w http.ResponseWriter, r *http.Request) (playlistNameRequest, bool) {
 	var input playlistNameRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPlaylistBodyBytes))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json")
-		return "", false
+		return input, false
 	}
-	name := strings.TrimSpace(input.Name)
-	if name == "" || utf8.RuneCountInString(name) > maxPlaylistNameRunes {
+	input.Name = strings.TrimSpace(input.Name)
+	if input.Name == "" || utf8.RuneCountInString(input.Name) > maxPlaylistNameRunes {
 		writeError(w, http.StatusBadRequest, "invalid_playlist_name")
-		return "", false
+		return input, false
 	}
-	return name, true
+	if input.Description != nil {
+		description := strings.TrimSpace(*input.Description)
+		if utf8.RuneCountInString(description) > maxPlaylistDescriptionRunes {
+			writeError(w, http.StatusBadRequest, "invalid_playlist_description")
+			return input, false
+		}
+		input.Description = &description
+	}
+	return input, true
 }

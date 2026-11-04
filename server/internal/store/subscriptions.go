@@ -14,15 +14,19 @@ import (
 type Subscription struct {
 	Count      int
 	Subscribed bool
+	// Muted is whether the user muted the channel (#428): its notices stay
+	// in the inbox, but don't count as unread and aren't pushed.
+	Muted bool
 }
 
 // SubscriptionFor returns the playlist's subscription as userID sees it.
 func (p *Playlists) SubscriptionFor(ctx context.Context, playlistID, userID string) (Subscription, error) {
 	var s Subscription
 	err := p.pool.QueryRow(ctx, `
-		SELECT count(*)::int, COALESCE(bool_or(user_id::text = $2), false)
+		SELECT count(*)::int, COALESCE(bool_or(user_id::text = $2), false),
+			COALESCE(bool_or(user_id::text = $2 AND muted_at IS NOT NULL), false)
 		FROM playlist_subscriptions WHERE playlist_id = $1::uuid
-	`, playlistID, userID).Scan(&s.Count, &s.Subscribed)
+	`, playlistID, userID).Scan(&s.Count, &s.Subscribed, &s.Muted)
 	return s, err
 }
 
@@ -71,11 +75,43 @@ func (p *Playlists) SetSubscription(ctx context.Context, userID, token string, s
 			return err
 		}
 		return tx.QueryRow(ctx, `
-			SELECT count(*)::int FROM playlist_subscriptions WHERE playlist_id = $1::uuid
-		`, playlistID).Scan(&s.Count)
+			SELECT count(*)::int, COALESCE(bool_or(user_id::text = $2 AND muted_at IS NOT NULL), false)
+			FROM playlist_subscriptions WHERE playlist_id = $1::uuid
+		`, playlistID, userID).Scan(&s.Count, &s.Muted)
 	})
 	s.Subscribed = subscribed
 	return s, err
+}
+
+// SetMuted mutes or unmutes the user's subscription to the playlist shared
+// with token and returns its subscription after; doing it twice is the same
+// as once. It is ErrNotFound unless the user is subscribed.
+func (p *Playlists) SetMuted(ctx context.Context, userID, token string, muted bool) (Subscription, error) {
+	var playlistID string
+	err := p.pool.QueryRow(ctx, `
+		UPDATE playlist_subscriptions s
+		SET muted_at = CASE WHEN $3 THEN COALESCE(s.muted_at, now()) END
+		FROM playlists
+		WHERE playlists.id = s.playlist_id AND playlists.share_token = $2 AND s.user_id::text = $1
+		RETURNING s.playlist_id::text
+	`, userID, token, muted).Scan(&playlistID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Subscription{}, ErrNotFound
+	}
+	if err != nil {
+		return Subscription{}, err
+	}
+	if !muted {
+		// What was added while it was muted stays in the inbox but isn't
+		// pushed late; only new additions are.
+		if _, err := p.pool.Exec(ctx, `
+			UPDATE playlist_notifications SET pushed_at = updated_at
+			WHERE user_id::text = $1 AND playlist_id = $2::uuid AND read_at IS NULL
+		`, userID, playlistID); err != nil {
+			return Subscription{}, err
+		}
+	}
+	return p.SubscriptionFor(ctx, playlistID, userID)
 }
 
 // SubscribedPlaylist is a public playlist a user subscribed to, with how
@@ -86,6 +122,7 @@ type SubscribedPlaylist struct {
 	OwnerEmail   string
 	TrackCount   int
 	Unread       int
+	Muted        bool
 	SubscribedAt time.Time
 	UpdatedAt    time.Time
 }
@@ -99,7 +136,7 @@ func (p *Playlists) Subscribed(ctx context.Context, userID string) ([]Subscribed
 			(SELECT count(*)::int FROM playlist_tracks pt JOIN tracks ON tracks.id = pt.track_id
 			 WHERE pt.playlist_id = playlists.id AND `+trackBelongs("tracks", "playlists")+`
 			   AND tracks.status = 'ready'),
-			COALESCE(n.track_count, 0), s.created_at, playlists.updated_at
+			COALESCE(n.track_count, 0), s.muted_at IS NOT NULL, s.created_at, playlists.updated_at
 		FROM playlist_subscriptions s
 		JOIN playlists ON playlists.id = s.playlist_id
 		JOIN users ON users.id = playlists.owner_id
@@ -116,7 +153,7 @@ func (p *Playlists) Subscribed(ctx context.Context, userID string) ([]Subscribed
 	for rows.Next() {
 		var sp SubscribedPlaylist
 		if err := rows.Scan(&sp.ShareToken, &sp.Name, &sp.OwnerEmail, &sp.TrackCount, &sp.Unread,
-			&sp.SubscribedAt, &sp.UpdatedAt); err != nil {
+			&sp.Muted, &sp.SubscribedAt, &sp.UpdatedAt); err != nil {
 			return nil, err
 		}
 		listed = append(listed, sp)
@@ -194,13 +231,18 @@ func (s *Notifications) List(ctx context.Context, userID string, limit int) ([]N
 	return list, unread, err
 }
 
-// UnreadCount is how many of the user's visible notices are unread.
+// notMuted keeps notices of channels the user hasn't muted.
+const notMuted = `NOT EXISTS (SELECT 1 FROM playlist_subscriptions ms
+	WHERE ms.playlist_id = n.playlist_id AND ms.user_id = n.user_id AND ms.muted_at IS NOT NULL)`
+
+// UnreadCount is how many of the user's visible notices are unread, leaving
+// out those of channels they muted.
 func (s *Notifications) UnreadCount(ctx context.Context, userID string) (int, error) {
 	var unread int
 	err := s.pool.QueryRow(ctx, `
 		SELECT count(*)::int FROM playlist_notifications n
 		JOIN playlists ON playlists.id = n.playlist_id
-		WHERE n.user_id::text = $1 AND n.read_at IS NULL AND `+visibleNotification+`
+		WHERE n.user_id::text = $1 AND n.read_at IS NULL AND `+visibleNotification+` AND `+notMuted+`
 	`, userID).Scan(&unread)
 	return unread, err
 }
@@ -222,7 +264,8 @@ func (s *Notifications) MarkRead(ctx context.Context, userID string, ids []strin
 
 // PendingPushes returns up to limit unread notices that changed since they
 // were last pushed, oldest change first. Notices older than since are left
-// alone, so a long outage doesn't send stale news.
+// alone, so a long outage doesn't send stale news, and so are those of
+// channels the subscriber muted.
 func (s *Notifications) PendingPushes(ctx context.Context, since time.Time, limit int) ([]Notification, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT `+notificationColumns+`
@@ -230,7 +273,7 @@ func (s *Notifications) PendingPushes(ctx context.Context, since time.Time, limi
 		JOIN playlists ON playlists.id = n.playlist_id
 		LEFT JOIN tracks ON tracks.id = n.track_id
 		WHERE n.read_at IS NULL AND n.updated_at >= $1
-		  AND (n.pushed_at IS NULL OR n.pushed_at < n.updated_at) AND `+visibleNotification+`
+		  AND (n.pushed_at IS NULL OR n.pushed_at < n.updated_at) AND `+visibleNotification+` AND `+notMuted+`
 		ORDER BY n.updated_at, n.id
 		LIMIT $2
 	`, since, limit)

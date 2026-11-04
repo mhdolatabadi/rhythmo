@@ -40,6 +40,8 @@ const maxPendingPublications = 200
 
 type AdminHandlers struct {
 	defaultQuota int64
+	baleArchive  BaleArchive
+	archiveRate  *RateLimiter
 	auth         *AuthHandlers
 	users        AdminStore
 	playlists    AdminPlaylistStore
@@ -68,6 +70,7 @@ func (h *AdminHandlers) WithQuota(bytes int64) *AdminHandlers { h.defaultQuota =
 
 func (h *AdminHandlers) register(mux *http.ServeMux) {
 	h.registerFeedback(mux)
+	h.registerBaleArchive(mux)
 	mux.HandleFunc("GET /api/v1/admin/accounts", h.list)
 	mux.HandleFunc("PATCH /api/v1/admin/accounts/{id}/storage-quota", h.setStorageQuota)
 	mux.HandleFunc("PATCH /api/v1/admin/accounts/{id}/verification", h.verify)

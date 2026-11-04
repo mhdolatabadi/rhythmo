@@ -142,6 +142,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
           accountId: () => _auth?.user?.id,
           deviceStore: SecureDevicePlaylistStore(),
           subscriptions: _notificationsApi,
+          channels: _apiClient,
           token: () => _auth?.token,
           isAdmin: () => _auth?.user?.isAdmin ?? false);
 

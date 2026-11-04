@@ -64,6 +64,8 @@ type botDeps struct {
 	// notifications are pushed to linked chats; webOrigin builds the links.
 	notifications *store.Notifications
 	webOrigin     string
+	// playlists receive the audio posted in synced channels (#430).
+	playlists *store.Playlists
 }
 
 // setupBots starts every messenger bot with a token configured. It returns
@@ -149,6 +151,9 @@ func setupBots(ctx context.Context, deps botDeps) (map[string]http.Handler, *htt
 		listed = append(listed, info)
 
 		service := bot.NewService(client, deps.bots, linker, deps.users, importer)
+		if deps.playlists != nil {
+			service.WithChannels(deps.bots, deps.playlists)
+		}
 		webhookURL := strings.TrimSuffix(publicURL, "/") + "/api/v1/bots/" + m.name + "/webhook/" + secret
 		go registerWebhook(ctx, client, webhookURL)
 		go service.Resume(ctx)
@@ -168,7 +173,8 @@ func setupBots(ctx context.Context, deps botDeps) (map[string]http.Handler, *htt
 	}
 	monitor := bot.NewMonitor(deps.bots, watched...)
 	go monitor.LogHealth(ctx, botHealthLogInterval)
-	return webhooks, httpapi.NewBotHandlers(linker, senders, deps.tokens, listed, linkRate, sendRate), monitor, nil
+	return webhooks, httpapi.NewBotHandlers(linker, senders, deps.tokens, listed, linkRate, sendRate).
+		WithChannels(linker, deps.bots), monitor, nil
 }
 
 // registerWebhook points the provider at rhythmo, retrying while it is unreachable.

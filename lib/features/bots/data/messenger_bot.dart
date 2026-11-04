@@ -51,3 +51,25 @@ class BotLinkCode {
   final DateTime expiresAt;
   final List<MessengerBot> bots;
 }
+
+/// A Telegram or Bale channel whose audio posts are synced into a rhythmo
+/// channel.
+class SyncedChannel {
+  const SyncedChannel({
+    required this.provider,
+    required this.chatId,
+    required this.title,
+  });
+
+  factory SyncedChannel.fromJson(Map<String, dynamic> json) => SyncedChannel(
+        provider: json['provider'] as String,
+        chatId: json['chatId'] as String,
+        title: json['title'] as String? ?? '',
+      );
+
+  final String provider;
+  final String chatId;
+
+  /// The channel's name in the messenger.
+  final String title;
+}

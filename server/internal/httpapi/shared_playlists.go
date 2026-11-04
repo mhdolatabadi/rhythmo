@@ -207,17 +207,19 @@ func (h *PlaylistHandlers) handleUnshare(w http.ResponseWriter, r *http.Request)
 }
 
 type sharedPlaylistResponse struct {
-	Name       string `json:"name"`
-	Owner      string `json:"owner"`
-	IsOwner    bool   `json:"isOwner"`
-	Public     bool   `json:"public"`
-	TrackCount int    `json:"trackCount"`
-	LikeCount  int    `json:"likeCount"`
-	Liked      bool   `json:"liked"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Owner       string `json:"owner"`
+	IsOwner     bool   `json:"isOwner"`
+	Public      bool   `json:"public"`
+	TrackCount  int    `json:"trackCount"`
+	LikeCount   int    `json:"likeCount"`
+	Liked       bool   `json:"liked"`
 	// Subscribed and SubscriberCount are left out while subscriptions are
 	// off.
 	Subscribed      *bool           `json:"subscribed,omitempty"`
 	SubscriberCount *int            `json:"subscriberCount,omitempty"`
+	Muted           *bool           `json:"muted,omitempty"`
 	Tracks          []trackResponse `json:"tracks"`
 	UpdatedAt       time.Time       `json:"updatedAt"`
 }
@@ -262,7 +264,7 @@ func (h *PlaylistHandlers) handleShared(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	response := sharedPlaylistResponse{
-		Name: shared.Name, Owner: bot.MaskEmail(shared.OwnerEmail), IsOwner: shared.OwnerID == userID,
+		Name: shared.Name, Description: shared.Description, Owner: bot.MaskEmail(shared.OwnerEmail), IsOwner: shared.OwnerID == userID,
 		Public: shared.IsPublic, TrackCount: len(shared.Tracks), LikeCount: likes.Count, Liked: likes.Liked,
 		Tracks: make([]trackResponse, 0, len(shared.Tracks)), UpdatedAt: shared.UpdatedAt.UTC(),
 	}
@@ -275,7 +277,7 @@ func (h *PlaylistHandlers) handleShared(w http.ResponseWriter, r *http.Request) 
 			internalError(w, "load playlist subscription", err)
 			return
 		}
-		response.Subscribed, response.SubscriberCount = &s.Subscribed, &s.Count
+		response.Subscribed, response.Muted, response.SubscriberCount = &s.Subscribed, &s.Muted, &s.Count
 		// Opening the playlist reads its notice, as opening a channel does.
 		if userID != "" && s.Subscribed {
 			if err := h.notifications.MarkRead(r.Context(), userID, nil, *shared.ShareToken); err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/mhdolatabadi/rhythmo/server/internal/auth"
+	"github.com/mhdolatabadi/rhythmo/server/internal/balearchive"
 	"github.com/mhdolatabadi/rhythmo/server/internal/bot"
 	"github.com/mhdolatabadi/rhythmo/server/internal/catalog"
 	"github.com/mhdolatabadi/rhythmo/server/internal/fingerprint"
@@ -268,6 +269,7 @@ func run() error {
 		objects:       objects,
 		notifications: notifications,
 		webOrigin:     os.Getenv("WEB_ORIGIN"),
+		playlists:     playlists,
 		policy: bot.UploadPolicy{
 			Enabled: uploadsEnabled, MaxFileBytes: maxUploadBytes,
 			MaxOwnerBytes: ownerQuotaBytes, MaxPending: maxPending,
@@ -296,6 +298,10 @@ func run() error {
 		linkImports.WithMedia(media)
 	}
 	go linkImports.Resume(ctx)
+	baleArchive := balearchive.New(linkFetcher, linkimport.NewProvider(linkFetcher, maxUploadBytes), store.NewBaleImports(pool), tracks, objects, bot.UploadPolicy{
+		Enabled: uploadsEnabled, MaxFileBytes: maxUploadBytes, MaxOwnerBytes: ownerQuotaBytes, MaxPending: maxPending,
+	})
+	go baleArchive.Run(ctx)
 
 	lyricsHandlers, err := setupLyrics(pool, tracks, playlists, tokens)
 	if err != nil {
@@ -336,8 +342,14 @@ func run() error {
 		return err
 	}
 	trackLikes := store.NewTrackLikes(pool)
+	// Curated archive browsing must not consume the general link-import
+	// budget. The archive still has its own bounded admin request window.
+	archiveRate, err := rateLimiterEnv("BALE_ARCHIVE_ADMIN_RATE", 120, 10*time.Minute)
+	if err != nil {
+		return err
+	}
 	adminHandlers := httpapi.NewAdminHandlers(authHandlers, users).WithQuota(ownerQuotaBytes).WithPlaylists(playlists).
-		WithPublications(store.NewPublications(pool), objects)
+		WithPublications(store.NewPublications(pool), objects).WithBaleArchive(baleArchive, archiveRate)
 	storeHandlers := httpapi.NewCatalogHandlers(storeCatalog, tokens, objects,
 		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 		WithSave(store.NewFingerprints(pool), httpapi.SavePolicy{
