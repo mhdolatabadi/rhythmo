@@ -1037,6 +1037,8 @@ String _syncVerb(SyncKind kind) => switch (kind) {
     };
 
 enum _TrackAction {
+  playNext,
+  addToQueue,
   addToPlaylist,
   sendToBot,
   uploadToServer,
@@ -1568,6 +1570,11 @@ class _TrackListState extends State<_TrackList> {
           RhythmoIcons.cloudArrowDown,
           sync.downloadsToDevice ? 'دانلود روی دستگاه' : 'دانلود فایل',
         ),
+      // What to do with the song comes first, then where it lives.
+      if (widget.player.track?.id != track.id) ...[
+        item(_TrackAction.playNext, RhythmoIcons.queue, 'پخش بعدی'),
+        item(_TrackAction.addToQueue, RhythmoIcons.listPlus, 'افزودن به صف'),
+      ],
       item(
         _TrackAction.like,
         widget.player.favorites.contains(track.id)
@@ -1576,7 +1583,7 @@ class _TrackListState extends State<_TrackList> {
         widget.player.favorites.contains(track.id) ? 'نپسندیدن' : 'پسندیدن',
       ),
       if (widget.playlists != null)
-        item(_TrackAction.addToPlaylist, RhythmoIcons.listPlus,
+        item(_TrackAction.addToPlaylist, RhythmoIcons.playlist,
             'افزودن به فهرست پخش'),
       if (widget.onEditMetadata != null)
         item(_TrackAction.editMetadata, RhythmoIcons.pencilSimple,
@@ -1620,6 +1627,8 @@ class _TrackListState extends State<_TrackList> {
       tooltip: 'اقدامات آهنگ',
       onSelected: (choice) {
         switch (choice) {
+          case (_TrackAction.playNext || _TrackAction.addToQueue, _):
+            _enqueue(context, track, next: choice.$1 == _TrackAction.playNext);
           case (_TrackAction.addToPlaylist, _):
             _addToPlaylist(context, track);
           case (_TrackAction.sendToBot, final bot?):
@@ -1665,6 +1674,18 @@ class _TrackListState extends State<_TrackList> {
         ..showSnackBar(
             const SnackBar(content: Text('پسندیدن ثبت نشد. دوباره تلاش کن.')));
     }
+  }
+
+  Future<void> _enqueue(BuildContext context, Track track,
+      {required bool next}) async {
+    final playing = widget.player.track != null;
+    await widget.player.enqueue(track, next: next);
+    if (!context.mounted || !playing) return;
+    _message(
+        context,
+        next
+            ? '«${track.title}» بعد از این آهنگ پخش می‌شود.'
+            : '«${track.title}» به آخر صف رفت.');
   }
 
   Future<void> _addToPlaylist(BuildContext context, Track track) async {
@@ -2001,8 +2022,11 @@ class _TrackRow extends StatelessWidget {
       child: GestureDetector(
         onSecondaryTapUp: (details) =>
             _openContextMenu(context, details.globalPosition),
+        // The row is one tap target, so it carries the song's name; the
+        // title text below stays out of the tree so it is read only once.
         child: Semantics(
           selected: selected,
+          label: track.title,
           child: ListTile(
             selected: selecting ? selected : current,
             onTap: onTap,
@@ -2030,15 +2054,17 @@ class _TrackRow extends StatelessWidget {
                   const SizedBox(width: 4),
                 ],
                 Expanded(
-                  child: Text(
-                    track.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    // Regular, as every list title; the playing one is
-                    // medium and ember.
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      fontWeight: current ? FontWeight.w500 : FontWeight.w400,
-                      color: current ? colors.primary : colors.onSurface,
+                  child: ExcludeSemantics(
+                    child: Text(
+                      track.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      // Regular, as every list title; the playing one is
+                      // medium and ember.
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: current ? FontWeight.w500 : FontWeight.w400,
+                        color: current ? colors.primary : colors.onSurface,
+                      ),
                     ),
                   ),
                 ),
@@ -2748,23 +2774,27 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
               children: [
                 Padding(
                   padding: EdgeInsets.fromLTRB(side, 8, side, 8),
-                  child: SearchBar(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    controller: _field,
-                    autoFocus: true,
-                    hintText: 'آهنگ، خواننده، آلبوم یا فهرست پخش',
-                    leading: const Icon(RhythmoIcons.magnifyingGlass),
-                    textInputAction: TextInputAction.search,
-                    trailing: [
-                      if (_query.isNotEmpty)
-                        IconButton(
-                          tooltip: 'پاک کردن جست‌وجو',
-                          onPressed: _clear,
-                          icon: const Icon(RhythmoIcons.x),
-                        ),
-                    ],
-                    onChanged: (value) => setState(() => _query = value),
-                    onSubmitted: (_) => _remember(),
+                  // One node for the whole bar, so a screen reader finds a
+                  // labelled 48 px field rather than a bare tap area.
+                  child: MergeSemantics(
+                    child: SearchBar(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      controller: _field,
+                      autoFocus: true,
+                      hintText: 'آهنگ، خواننده، آلبوم یا فهرست پخش',
+                      leading: const Icon(RhythmoIcons.magnifyingGlass),
+                      textInputAction: TextInputAction.search,
+                      trailing: [
+                        if (_query.isNotEmpty)
+                          IconButton(
+                            tooltip: 'پاک کردن جست‌وجو',
+                            onPressed: _clear,
+                            icon: const Icon(RhythmoIcons.x),
+                          ),
+                      ],
+                      onChanged: (value) => setState(() => _query = value),
+                      onSubmitted: (_) => _remember(),
+                    ),
                   ),
                 ),
                 Expanded(

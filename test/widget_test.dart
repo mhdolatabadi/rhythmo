@@ -1183,6 +1183,9 @@ void main() {
     testWidgets('an album page fits a narrow phone and clears the player',
         (tester) async {
       await pumpPhone(tester);
+      // Five tabs scroll sideways on a narrow phone.
+      await tester.ensureVisible(find.widgetWithText(Tab, 'آلبوم‌ها'));
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(Tab, 'آلبوم‌ها'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Opera'));

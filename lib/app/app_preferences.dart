@@ -5,12 +5,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 enum LibraryTab {
   tracks('آهنگ‌ها'),
 
+  /// Second, and shown by default: the dock has no liked entry of its own.
+  favorites('پسندیده‌ها'),
+
   /// Music added to this device lately, newest first; Android only.
   newOnDevice('تازه‌های دستگاه'),
   playlists('فهرست‌های پخش'),
   albums('آلبوم‌ها'),
-  artists('هنرمندان'),
-  favorites('پسندیده‌ها');
+  artists('هنرمندان');
 
   const LibraryTab(this.label);
   final String label;
@@ -20,7 +22,7 @@ class AppPreferences {
   const AppPreferences(
       {this.themeMode = ThemeMode.dark,
       this.order = LibraryTab.values,
-      this.hidden = const {LibraryTab.favorites}});
+      this.hidden = const {}});
   final ThemeMode themeMode;
   final List<LibraryTab> order;
   final Set<LibraryTab> hidden;
@@ -43,14 +45,18 @@ class AppPreferences {
         order.add(tab);
       }
     }
+    // Before version 2 «پسندیده‌ها» was hidden by default because the dock
+    // had its own entry; that entry is gone, so the tab comes back once.
+    final migrated = value['v'] is int && (value['v'] as int) >= 2;
     final hidden = value['hidden'] is List
         ? {
             for (final tab in LibraryTab.values)
               if ((value['hidden'] as List).contains(tab.name) &&
-                  tab != LibraryTab.tracks)
+                  tab != LibraryTab.tracks &&
+                  (migrated || tab != LibraryTab.favorites))
                 tab
           }
-        : const {LibraryTab.favorites};
+        : const <LibraryTab>{};
     return AppPreferences(
         themeMode: ThemeMode.values.firstWhere(
             (mode) => mode.name == value['theme'],
@@ -59,6 +65,7 @@ class AppPreferences {
         hidden: Set.unmodifiable(hidden));
   }
   Map<String, Object> toJson() => {
+        'v': 2,
         'theme': themeMode.name,
         'tabs': order.map((tab) => tab.name).toList(),
         'hidden': hidden.map((tab) => tab.name).toList()

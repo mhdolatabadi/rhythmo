@@ -115,6 +115,25 @@ class PlayQueue {
     return true;
   }
 
+  /// Puts [track] right after the current one ([next] true) or at the end
+  /// of the queue. A track already waiting moves rather than repeats; the
+  /// current track is never queued again. Returns false when it was the
+  /// current one and nothing changed.
+  bool enqueue(Track track, {required bool next}) {
+    final existing = _tracks.indexWhere((queued) => queued.id == track.id);
+    if (existing >= 0 && _order[_position] == existing) return false;
+    if (existing >= 0) remove(track.id);
+    _tracks = List.unmodifiable([..._tracks, track]);
+    final added = _tracks.length - 1;
+    _order = [..._order];
+    if (next) {
+      _order.insert(_position + 1, added);
+    } else {
+      _order.add(added);
+    }
+    return true;
+  }
+
   /// Swaps in fresh metadata for the track with [track]'s ID, keeping the
   /// position and play order. Returns whether the track was queued.
   bool replace(Track track) {

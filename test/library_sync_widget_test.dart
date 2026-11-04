@@ -65,6 +65,47 @@ Future<void> _openMenu(WidgetTester tester, String title) async {
 
 void main() {
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  testWidgets('a song can be queued to play next or last, not the playing one',
+      (tester) async {
+    // Tall enough that the mini player covers no row.
+    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(
+      tester,
+      tracks: FakeTracksApi([
+        for (final title in ['One', 'Two'])
+          Track(
+              id: title,
+              title: title,
+              contentType: 'audio/mpeg',
+              sizeBytes: 100,
+              fileName: '$title.mp3'),
+      ]),
+      device: FakeLocalAudioLibrary(
+          const LocalAudioResult(LocalAudioStatus.loaded, [])),
+    );
+    await tester.runAsync(() async {
+      await tester.tap(find.text('One'));
+      await Future<void>.delayed(Duration.zero);
+    });
+    await tester.pumpAndSettle();
+
+    await _openMenu(tester, 'One');
+    expect(find.text('پسندیدن'), findsOneWidget);
+    expect(find.text('پخش بعدی'), findsNothing,
+        reason: 'the playing song is already playing');
+    Navigator.of(tester.element(find.text('پسندیدن'))).pop();
+    await tester.pumpAndSettle();
+
+    await _openMenu(tester, 'Two');
+    expect(find.text('پسندیدن'), findsOneWidget);
+    expect(find.text('افزودن به صف'), findsOneWidget);
+    await tester.tap(find.text('پخش بعدی'));
+    await tester.pumpAndSettle();
+    expect(find.text('«Two» بعد از این آهنگ پخش می‌شود.'), findsOneWidget);
+  });
+
   testWidgets('device, server and synced tracks appear once with badges',
       (tester) async {
     await _pump(

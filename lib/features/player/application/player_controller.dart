@@ -434,6 +434,22 @@ class PlayerController extends ChangeNotifier {
     await _start(queue.skipTo(index));
   }
 
+  /// Queues [track] to play right after the current one ([next] true) or
+  /// after everything already queued. With nothing playing it simply plays.
+  /// Returns false when [track] is the one playing now.
+  Future<bool> enqueue(Track track, {required bool next}) async {
+    final queue = _queue;
+    if (queue == null) {
+      await play(track);
+      return true;
+    }
+    if (!queue.enqueue(track, next: next)) return false;
+    notifyListeners();
+    _remember();
+    unawaited(_replanPreload());
+    return true;
+  }
+
   /// Tapping a row respects queue mode; explicit play-all uses [playFrom].
   Future<void> playTapped(List<Track> tracks, int index) =>
       playOnlySelected ? playFrom([tracks[index]], 0) : playFrom(tracks, index);

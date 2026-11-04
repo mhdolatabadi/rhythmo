@@ -117,4 +117,31 @@ void main() {
             id: 'zz', title: 'zz', contentType: 'audio/mpeg', sizeBytes: 1)),
         isFalse);
   });
+
+  test('a song can play next or join the end, and moves rather than repeats',
+      () {
+    final queue = PlayQueue(_tracks.take(3).toList(), start: 0);
+    final x =
+        Track(id: 'x', title: 'x', contentType: 'audio/mpeg', sizeBytes: 1);
+    expect(queue.enqueue(x, next: true), isTrue);
+    expect(_ids(queue.upcoming), ['x', 'b', 'c']);
+    // Already waiting: it moves to the end instead of playing twice.
+    expect(queue.enqueue(x, next: false), isTrue);
+    expect(_ids(queue.upcoming), ['b', 'c', 'x']);
+    // The one playing now is never queued again.
+    expect(queue.enqueue(_tracks.first, next: true), isFalse);
+    expect(queue.current.id, 'a');
+    expect(queue.next()?.id, 'b');
+  });
+
+  test('play next follows the current track while shuffled', () {
+    final queue = PlayQueue(_tracks, random: Random(3))..shuffled = true;
+    final current = queue.current.id;
+    final x =
+        Track(id: 'x', title: 'x', contentType: 'audio/mpeg', sizeBytes: 1);
+    queue.enqueue(x, next: true);
+    expect(queue.upcoming.first.id, 'x');
+    expect(queue.current.id, current);
+    expect(queue.upcoming, hasLength(_tracks.length));
+  });
 }

@@ -68,6 +68,7 @@ abstract final class RhythmoIcons {
   static const IconData playlist = IconData(0xe6aa, fontFamily: 'Phosphor');
   static const IconData plus = IconData(0xe3d4, fontFamily: 'Phosphor');
   static const IconData plusCircle = IconData(0xe3d6, fontFamily: 'Phosphor');
+  static const IconData queue = IconData(0xe6ac, fontFamily: 'Phosphor');
   static const IconData quotes = IconData(0xe660, fontFamily: 'Phosphor');
   static const IconData repeat = IconData(0xe3f6, fontFamily: 'Phosphor');
   static const IconData robot = IconData(0xe762, fontFamily: 'Phosphor');

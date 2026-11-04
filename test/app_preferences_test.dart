@@ -17,6 +17,23 @@ void main() {
     expect(saved.hidden, {LibraryTab.albums});
   });
 
+  test('liked songs are a visible second tab, and come back once if hidden',
+      () {
+    expect(const AppPreferences().order.take(2),
+        [LibraryTab.tracks, LibraryTab.favorites]);
+    expect(const AppPreferences().hidden, isEmpty);
+    // Hidden by the old default, before the dock lost its liked entry.
+    expect(
+        AppPreferences.fromJson({
+          'hidden': ['favorites', 'albums']
+        }).hidden,
+        {LibraryTab.albums});
+    // Hidden by the listener's own choice since then: it stays hidden.
+    final chosen = AppPreferences(hidden: {LibraryTab.favorites});
+    expect(AppPreferences.fromJson(chosen.toJson()).hidden,
+        {LibraryTab.favorites});
+  });
+
   test('appearance and tab choices survive a controller restart', () async {
     final store = MemoryAppPreferencesStore();
     final first = AppPreferencesController(store: store);
