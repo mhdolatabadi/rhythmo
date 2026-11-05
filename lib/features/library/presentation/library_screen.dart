@@ -37,6 +37,7 @@ import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/features/playlists/application/device_playlist_import.dart';
 import 'package:rhythmo/features/playlists/data/device_playlist_source.dart';
 import 'package:rhythmo/features/playlists/presentation/device_playlist_import_dialog.dart';
+import 'package:rhythmo/features/playlists/presentation/add_to_playlist.dart';
 import 'package:rhythmo/features/playlists/presentation/playlists_screen.dart';
 import 'package:rhythmo/features/playlists/presentation/popular_playlists_screen.dart';
 import 'package:rhythmo/features/store/presentation/store_screen.dart';
@@ -1432,8 +1433,6 @@ class _TrackList extends StatefulWidget {
 }
 
 class _TrackListState extends State<_TrackList> {
-  static const _createPlaylistAction = '__create_playlist__';
-
   final Set<String> _selectedIds = {};
 
   @override
@@ -1691,106 +1690,7 @@ class _TrackListState extends State<_TrackList> {
   Future<void> _addToPlaylist(BuildContext context, Track track) async {
     final controller = widget.playlists;
     if (controller == null) return;
-    final loaded = await controller.load();
-    if (!context.mounted) return;
-    if (!loaded) {
-      _message(context, 'دریافت فهرست‌های پخش ناموفق بود.');
-      return;
-    }
-
-    var playlistId = controller.playlists.isEmpty
-        ? await _createPlaylist(context, controller)
-        : await showDialog<String>(
-            context: context,
-            builder: (context) => SimpleDialog(
-              title: const Text('افزودن به فهرست پخش'),
-              children: [
-                SimpleDialogOption(
-                  onPressed: () =>
-                      Navigator.pop(context, _createPlaylistAction),
-                  child: const ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(RhythmoIcons.plus),
-                    title: Text('فهرست پخش جدید'),
-                  ),
-                ),
-                const Divider(height: 1),
-                for (final playlist in controller.playlists)
-                  SimpleDialogOption(
-                    onPressed: () => Navigator.pop(context, playlist.id),
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(RhythmoIcons.playlist),
-                      title: Text(playlist.name),
-                      subtitle: Text(
-                          '${persianDigits(playlist.displayTrackCount)} قطعه موسیقی'),
-                    ),
-                  ),
-              ],
-            ),
-          );
-
-    if (!context.mounted || playlistId == null) return;
-    if (playlistId == _createPlaylistAction) {
-      playlistId = await _createPlaylist(context, controller);
-      if (!context.mounted || playlistId == null) return;
-    }
-
-    final result = await controller.addDeviceTrack(playlistId, track);
-    if (!context.mounted) return;
-    switch (result) {
-      case AddTrackResult.added:
-        _message(context, 'آهنگ به فهرست پخش اضافه شد.');
-      case AddTrackResult.alreadyPresent:
-        _message(context, 'این آهنگ از قبل در فهرست پخش است.');
-      case AddTrackResult.failure:
-        _message(context, 'افزودن آهنگ به فهرست پخش ناموفق بود.');
-    }
-  }
-
-  Future<String?> _createPlaylist(
-    BuildContext context,
-    PlaylistsController controller,
-  ) async {
-    final nameController = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('فهرست پخش جدید'),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-          textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(labelText: 'نام فهرست پخش'),
-          onSubmitted: (value) {
-            final name = value.trim();
-            if (name.isNotEmpty) Navigator.pop(context, name);
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('انصراف'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = nameController.text.trim();
-              if (name.isNotEmpty) Navigator.pop(context, name);
-            },
-            child: const Text('ساخت'),
-          ),
-        ],
-      ),
-    );
-    if (!context.mounted || name == null) return null;
-
-    final playlist = await controller.create(name);
-    if (!context.mounted) return null;
-    if (playlist == null) {
-      _message(context, 'ساخت فهرست پخش ناموفق بود.');
-      return null;
-    }
-    return playlist.id;
+    await addTrackToPlaylist(context, controller, track);
   }
 
   void _message(BuildContext context, String text) {

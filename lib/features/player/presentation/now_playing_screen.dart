@@ -3,6 +3,9 @@ import 'package:rhythmo/core/persian_digits.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:rhythmo/app/app_configuration.dart';
+import 'package:rhythmo/features/playlists/presentation/add_to_playlist.dart';
 import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/format_size.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
@@ -167,6 +170,36 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     );
   }
 
+  /// «گزینه‌های آهنگ»: what to do with the playing song. Liking, the queue,
+  /// lyrics and the sleep timer already have their own buttons here.
+  Future<void> _openActions(Track track) async {
+    final playlists = PlaylistsScope.maybeOf(context);
+    final storeLink = track.fromStore
+        ? AppConfiguration.sitePage('/store/t/${track.id}')
+        : null;
+    final choice = await showModalBottomSheet<_TrackChoice>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) => _TrackActionsSheet(
+        track: track,
+        canAddToPlaylist: playlists?.signedIn ?? false,
+        canCopyLink: storeLink != null,
+      ),
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case _TrackChoice.addToPlaylist:
+        await addTrackToPlaylist(context, playlists!, track);
+      case _TrackChoice.copyLink:
+        await Clipboard.setData(ClipboardData(text: storeLink.toString()));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('لینک آهنگ کپی شد.')));
+      case _TrackChoice.details:
+        _openDetails(track);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -223,7 +256,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final header = _Header(
       player: _player,
       onClose: _close,
-      onMore: () => _openDetails(track),
+      onMore: () => _openActions(track),
     );
     final next = _player.upcoming.firstOrNull;
     final title = _TitleRow(
@@ -341,7 +374,7 @@ class _Header extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: 'جزئیات آهنگ',
+            tooltip: 'گزینه‌های آهنگ',
             onPressed: onMore,
             icon: const Icon(RhythmoIcons.dotsThreeVertical),
           ),
@@ -643,7 +676,7 @@ class _BottomRow extends StatelessWidget {
             child: TextButton.icon(
               style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
               onPressed: onQueue,
-              icon: const Icon(RhythmoIcons.playlist),
+              icon: const Icon(RhythmoIcons.queue),
               label: Text(
                 upcoming == 0
                     ? 'صف پخش'
@@ -845,6 +878,68 @@ class QueueSheet extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+enum _TrackChoice { addToPlaylist, copyLink, details }
+
+/// The ⋮ sheet of the full-screen player: the song on top, then a short
+/// list of what can be done with it.
+class _TrackActionsSheet extends StatelessWidget {
+  const _TrackActionsSheet({
+    required this.track,
+    required this.canAddToPlaylist,
+    required this.canCopyLink,
+  });
+
+  final Track track;
+  final bool canAddToPlaylist;
+  final bool canCopyLink;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    Widget option(_TrackChoice choice, IconData icon, String label) => ListTile(
+          contentPadding: const EdgeInsetsDirectional.symmetric(
+              horizontal: RhythmoSpace.xxl),
+          leading: Icon(icon),
+          title: Text(label),
+          onTap: () => Navigator.pop(context, choice),
+        );
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewPaddingOf(context).bottom + RhythmoSpace.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(
+                RhythmoSpace.xxl, 0, RhythmoSpace.xxl, RhythmoSpace.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(track.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleLarge),
+                Text(trackSubtitle(track),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          if (canAddToPlaylist)
+            option(_TrackChoice.addToPlaylist, RhythmoIcons.playlist,
+                'افزودن به فهرست پخش'),
+          if (canCopyLink)
+            option(_TrackChoice.copyLink, RhythmoIcons.link, 'کپی لینک آهنگ'),
+          option(_TrackChoice.details, RhythmoIcons.musicNotes, 'جزئیات آهنگ'),
+        ],
       ),
     );
   }

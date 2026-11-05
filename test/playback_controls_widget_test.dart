@@ -119,7 +119,7 @@ void main() {
       expectTarget(tester, find.byTooltip('زمان‌سنج خواب: توقف تا ۴۵:۰۰'),
           'sleep timer');
       expectTarget(tester, find.byTooltip('سرعت پخش'), 'speed');
-      expectTarget(tester, find.byTooltip('جزئیات آهنگ'), 'details');
+      expectTarget(tester, find.byTooltip('گزینه‌های آهنگ'), 'details');
       expect(find.text('۱٫۷۵×'), findsOneWidget);
       final queueLabel =
           tester.renderObject<RenderParagraph>(find.text('صف پخش (۲)'));

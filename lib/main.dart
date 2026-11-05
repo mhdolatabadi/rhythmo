@@ -4,6 +4,7 @@ import 'package:rhythmo/features/journey/application/listening_journey.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/app/app_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:rhythmo/features/playlists/presentation/add_to_playlist.dart';
 import 'package:flutter/services.dart';
 import 'package:rhythmo/features/link_import/application/link_import_controller.dart';
 import 'package:rhythmo/features/link_import/data/link_import.dart';
@@ -340,10 +341,19 @@ class _RhythmoAppState extends State<RhythmoApp> {
         listenable: _preferences,
         builder: (context, _) => MaterialApp(
           title: 'rhythmo',
-          builder: (context, child) => TrackArtworkScope(
-            controller: _artwork,
-            child: child ?? const SizedBox.shrink(),
-          ),
+          builder: (context, child) {
+            final page = TrackArtworkScope(
+              controller: _artwork,
+              child: child ?? const SizedBox.shrink(),
+            );
+            // Screens pushed over everything, like the full-screen player,
+            // still reach the listener's playlists.
+            return switch (_playlists) {
+              final playlists? =>
+                PlaylistsScope(controller: playlists, child: page),
+              null => page,
+            };
+          },
           debugShowCheckedModeBanner: false,
           // The UI is Persian only: right-to-left layout and Persian Material
           // strings (tooltips, dialogs), whatever the device language is.
