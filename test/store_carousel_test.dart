@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -75,6 +76,25 @@ void main() {
       expect(find.text(ranking.label), findsNothing);
     }
     expect(find.text('Song 0'), findsOneWidget);
+  });
+
+  testWidgets('the song list keeps its place while the carousels load',
+      (tester) async {
+    setUpStore(tester);
+    api.ranked = ranked();
+    api.rankedGate = Completer<void>();
+    await tester
+        .pumpWidget(_app(StoreScreen(controller: store, player: player)));
+    await tester.pump();
+    await tester.pump();
+    // The list shows before the shelves; a tap here must not land on
+    // another song once they arrive.
+    final before = tester.getTopLeft(find.text('همه‌ی آهنگ‌ها'));
+    expect(find.text(StoreRanking.popular.label), findsOneWidget);
+    api.rankedGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('$long 0'), findsWidgets);
+    expect(tester.getTopLeft(find.text('همه‌ی آهنگ‌ها')), before);
   });
 
   testWidgets('popular and trending carousels fit a narrow phone and play',

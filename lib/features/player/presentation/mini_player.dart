@@ -383,7 +383,7 @@ class _MiniTrackText extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           switch (status) {
-            PlayerStatus.error => 'پخش ناموفق بود. دوباره تلاش کن.',
+            PlayerStatus.error => playbackErrorShort,
             PlayerStatus.loading ||
             PlayerStatus.buffering =>
               'در حال بارگذاری…',

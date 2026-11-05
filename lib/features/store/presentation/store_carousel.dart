@@ -49,7 +49,13 @@ class _StoreCarouselState extends State<StoreCarousel> {
       listenable: Listenable.merge([_listing, widget.player]),
       builder: (context, _) {
         final songs = _listing.items;
-        if (songs.isEmpty) return const SizedBox.shrink();
+        // Hold the row's room while the first page loads, so the list
+        // under it doesn't jump down under a finger that is about to tap.
+        final loading = switch (_listing.status) {
+          StoreStatus.idle || StoreStatus.loading => true,
+          _ => false,
+        };
+        if (songs.isEmpty && !loading) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -66,23 +72,61 @@ class _StoreCarouselState extends State<StoreCarousel> {
             const SizedBox(height: RhythmoSpace.sm),
             SizedBox(
               height: storeCarouselCardWidth + 64,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: widget.padding,
-                itemCount: songs.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(width: RhythmoSpace.md),
-                itemBuilder: (context, index) => _Card(
-                  song: songs[index],
-                  playing: widget.player.track?.id == songs[index].id,
-                  likes: widget.player.favorites.countFor(songs[index]),
-                  onTap: () => widget.player.playFrom(songs, index),
-                ),
-              ),
+              child: songs.isEmpty
+                  ? _Placeholders(padding: widget.padding)
+                  : ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: widget.padding,
+                      itemCount: songs.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(width: RhythmoSpace.md),
+                      itemBuilder: (context, index) => _Card(
+                        song: songs[index],
+                        playing: widget.player.track?.id == songs[index].id,
+                        likes: widget.player.favorites.countFor(songs[index]),
+                        onTap: () => widget.player.playFrom(songs, index),
+                      ),
+                    ),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+/// Empty card shapes shown while a row loads.
+class _Placeholders extends StatelessWidget {
+  const _Placeholders({required this.padding});
+
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.surfaceContainerHighest;
+    const side = storeCarouselCardWidth - RhythmoSpace.xs * 2;
+    return ExcludeSemantics(
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: padding,
+        itemCount: 4,
+        separatorBuilder: (_, __) => const SizedBox(width: RhythmoSpace.md),
+        itemBuilder: (_, __) => Padding(
+          padding: const EdgeInsets.all(RhythmoSpace.xs),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: Container(
+              width: side,
+              height: side,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: RhythmoRadii.surface,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

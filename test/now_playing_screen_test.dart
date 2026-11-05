@@ -228,6 +228,25 @@ void main() {
     expect(find.text('فهرست پخش جدید'), findsOneWidget);
   });
 
+  testWidgets('a failed song says so in words, not only with an icon',
+      (tester) async {
+    final engine = FakeAudioEngine()
+      ..onLoad = (_) async => throw Exception('offline');
+    player = PlayerController(
+      api: FakeTracksApi(),
+      engine: engine,
+      token: () => 'tok',
+      favorites: FavoriteTracks(store: store),
+    );
+    await open(tester);
+
+    expect(player.status, PlayerStatus.error);
+    expect(find.text(playbackErrorMessage), findsOneWidget);
+    expect(find.byTooltip('تلاش دوباره'), findsOneWidget);
+    // The notice takes the «بعدی در صف» row's place, so nothing shifts.
+    expect(find.textContaining('بعدی در صف'), findsNothing);
+  });
+
   testWidgets('the details sheet shows the file and its size', (tester) async {
     await open(tester);
 

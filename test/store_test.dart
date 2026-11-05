@@ -69,10 +69,14 @@ class FakeStoreApi implements StoreApi {
   /// What the carousels rank; empty means nothing has a score yet.
   List<Track> ranked = [];
 
+  /// Holds the carousels' first page back until it completes.
+  Completer<void>? rankedGate;
+
   @override
   Future<StorePage<Track>> storeRanked(String? token, StoreRanking ranking,
       {int offset = 0}) async {
     calls.add('ranked:${ranking.wire}:$offset');
+    await rankedGate?.future;
     if (error != null) throw error!;
     final list =
         ranking == StoreRanking.popular ? ranked : ranked.reversed.toList();

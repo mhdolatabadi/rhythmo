@@ -48,6 +48,13 @@ Future<void> openNowPlaying(BuildContext context, PlayerController player) {
   );
 }
 
+/// The mini player's one-line note when a song fails to play.
+const playbackErrorShort = 'پخش ناموفق بود. دوباره تلاش کن.';
+
+/// The player screen's note when a song fails to play.
+const playbackErrorMessage = 'پخش این آهنگ ناموفق بود. اتصال اینترنت را '
+    'بررسی کن و دکمه‌ی وسط را برای تلاش دوباره بزن.';
+
 /// The artist, or where the track plays from when it has none.
 String trackSubtitle(Track track) {
   final artist = track.artist?.trim();
@@ -265,7 +272,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
       onLike: () => _like(track),
     );
     final details = <Widget>[
-      if (next != null) _UpNext(track: next, onQueue: _openQueue),
+      if (_player.status == PlayerStatus.error)
+        const _PlaybackError()
+      else if (next != null)
+        _UpNext(track: next, onQueue: _openQueue),
       const SizedBox(height: RhythmoSpace.xs),
       _SeekBar(
         player: _player,
@@ -703,6 +713,36 @@ class _BottomRow extends StatelessWidget {
 
 /// «بعدی در صف»: the track that plays next, as one compact row. Tapping it
 /// opens the queue.
+/// Says in words that the song failed, so the retry button in the middle
+/// of the controls isn't mistaken for repeat.
+class _PlaybackError extends StatelessWidget {
+  const _PlaybackError();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.error;
+    return Semantics(
+      liveRegion: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: RhythmoSpace.sm),
+        child: Row(
+          children: [
+            Icon(RhythmoIcons.warningCircle, size: 20, color: color),
+            const SizedBox(width: RhythmoSpace.sm),
+            Expanded(
+              child: Text(
+                playbackErrorMessage,
+                style: theme.textTheme.bodyMedium?.copyWith(color: color),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _UpNext extends StatelessWidget {
   const _UpNext({required this.track, required this.onQueue});
 
