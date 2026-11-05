@@ -75,9 +75,11 @@ abstract final class RhythmoColors {
   /// light surfaces. The light scheme is derived from it.
   static const lightSeed = Color(0xFFAD2638);
 
-  // Ambient light behind the app.
-  static const ambientTop = Color(0xFF17101D);
-  static const ambientMiddle = Color(0xFF090B14);
+  // Ambient light behind the app: navy, only faintly tinted, never red.
+  static const ambientCoralAlpha = 0.06;
+  static const ambientVioletAlpha = 0.08;
+  static const ambientTop = Color(0xFF11142A);
+  static const ambientMiddle = Color(0xFF0A0C18);
 }
 
 /// Spacing scale, in logical pixels. Groups are tight (xs–sm), sections

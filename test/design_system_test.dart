@@ -39,6 +39,18 @@ const _rawDurationFiles = <String>{};
 
 void main() {
   group('tokens', () {
+    test('the backdrop stays navy with only a faint coral tint (#443)', () {
+      for (final c in [
+        RhythmoColors.ambientTop,
+        RhythmoColors.ambientMiddle,
+        RhythmoColors.background,
+      ]) {
+        expect(c.b, greaterThan(c.r), reason: '$c should lean blue');
+      }
+      expect(RhythmoColors.ambientCoralAlpha, lessThanOrEqualTo(0.1));
+      expect(RhythmoColors.ambientVioletAlpha, lessThanOrEqualTo(0.1));
+    });
+
     test('text meets WCAG AA on every surface it is used on', () {
       const surfaces = [
         RhythmoColors.background,

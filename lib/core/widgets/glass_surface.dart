@@ -15,9 +15,9 @@ const rhythmoAmbientGradient = LinearGradient(
   stops: [0, 0.48, 1],
 );
 
-/// The aurora behind primary app surfaces: ember light from the top corner
-/// and violet from the opposite side, settling into night at the bottom.
-/// It is still; nothing in it moves.
+/// The night behind primary app surfaces: navy, with only a faint trace of
+/// coral in the top corner and violet on the opposite side. It is still;
+/// nothing in it moves.
 class RhythmoBackdrop extends StatelessWidget {
   const RhythmoBackdrop({super.key, required this.child});
 
@@ -59,7 +59,8 @@ class _AmbientLight extends StatelessWidget {
             end: -130,
             child: _Glow(
               size: 420,
-              color: RhythmoColors.primary.withValues(alpha: 0.26),
+              color: RhythmoColors.primary
+                  .withValues(alpha: RhythmoColors.ambientCoralAlpha),
             ),
           ),
           PositionedDirectional(
@@ -67,7 +68,8 @@ class _AmbientLight extends StatelessWidget {
             start: -190,
             child: _Glow(
               size: 440,
-              color: RhythmoColors.secondary.withValues(alpha: 0.2),
+              color: RhythmoColors.secondary
+                  .withValues(alpha: RhythmoColors.ambientVioletAlpha),
             ),
           ),
           // Night rises from the bottom so text and the mini player keep
