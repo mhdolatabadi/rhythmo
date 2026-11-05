@@ -695,6 +695,12 @@ class _LibraryScreenState extends State<LibraryScreen>
         if (widget.notifications != null && widget.playlists != null)
           NotificationsButton(
               controller: widget.notifications!, onOpen: _openNotifications),
+        // The account and settings open from here; the dock is for music.
+        IconButton(
+          onPressed: _openSettings,
+          tooltip: 'حساب',
+          icon: AccountAvatar(verified: widget.verified, size: 28),
+        ),
         SizedBox(
             width: MediaQuery.sizeOf(context).width >= 720
                 ? RhythmoSpace.xxl
@@ -764,12 +770,12 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   void _selectDestination(DockDestination destination) {
     switch (destination) {
-      // Search and the account open as their own pages.
+      // Search opens as its own page.
       case DockDestination.search:
         _openSearch();
-      case DockDestination.account:
-        _openSettings();
-      case DockDestination.home || DockDestination.library:
+      case DockDestination.home ||
+            DockDestination.liked ||
+            DockDestination.library:
         setState(() => _destination = destination);
     }
   }
@@ -787,6 +793,10 @@ class _LibraryScreenState extends State<LibraryScreen>
             onIdentify: widget.identify == null
                 ? null
                 : () => openIdentify(context, widget.identify!, widget.player),
+          ),
+        DockDestination.liked => NestedScrollView(
+            headerSliverBuilder: (context, _) => [_appBar(context)],
+            body: _favoritesBody(),
           ),
         _ => NestedScrollView(
             headerSliverBuilder: (context, _) => [_header(context)],

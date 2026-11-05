@@ -298,10 +298,18 @@ void main() {
       expect(find.text('ورود / ثبت‌نام'), findsOneWidget);
 
       // Liking needs an account; the guest is offered sign-in instead.
+      await tester.ensureVisible(find.text('۵'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('۵'));
       await tester.pumpAndSettle();
       expect(find.text('برای پسندیدن وارد حسابت شو.'), findsOneWidget);
+      // The message sits over the bottom row; let it go before moving on.
+      ScaffoldMessenger.of(tester.element(find.text('loved')))
+          .hideCurrentSnackBar();
+      await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('loved'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('loved'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Their song'));
@@ -309,6 +317,8 @@ void main() {
       expect(tracks.calls, contains('shared:$token:s1'));
       expect(find.byTooltip('توقف'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('افزودن به حساب من'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('افزودن به حساب من'));
       await tester.pumpAndSettle();
       expect(
@@ -319,7 +329,11 @@ void main() {
         (tester) async {
       final tokens = MemoryTokenStore();
       await _pumpApp(tester, tokenStore: tokens, playlists: guestPlaylists());
+      await tester.ensureVisible(find.text('loved'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('loved'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('افزودن به حساب من'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('افزودن به حساب من'));
       await tester.pumpAndSettle();
@@ -1514,9 +1528,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('قبلی'), findsOneWidget);
+    expect(find.byTooltip('قبلی'), findsNothing);
     expect(find.byTooltip('توقف'), findsOneWidget);
-    expect(find.byTooltip('بعدی'), findsOneWidget);
+    expect(find.byTooltip('بعدی'), findsNothing);
     expect(find.byTooltip('پخش تصادفی'), findsNothing);
     expect(
       find.text('A very long track title that must remain readable'),
@@ -1525,8 +1539,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the dock moves between home, search, library and account',
-      (tester) async {
+  testWidgets(
+      'the dock moves between home, liked and library; the account '
+      'opens from the header', (tester) async {
     tester.view.physicalSize = const Size(360, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1542,13 +1557,17 @@ void main() {
 
     // The app opens on the library, with every destination a 48 px target.
     expect(find.text('آهنگ‌ها'), findsOneWidget);
-    for (final label in ['خانه', 'جست‌وجو', 'موسیقی من', 'حساب']) {
+    for (final label in [
+      'خانه',
+      'جست‌وجو',
+      'پسندیده‌ها',
+      'موسیقی من',
+      'حساب'
+    ]) {
       final size = tester.getSize(find.byTooltip(label));
       expect(size.width, greaterThanOrEqualTo(48), reason: label);
       expect(size.height, greaterThanOrEqualTo(48), reason: label);
     }
-    expect(find.text('موسیقی من'), findsOneWidget,
-        reason: 'the selected destination shows its name');
 
     await tester.tap(find.byTooltip('خانه'));
     await tester.pumpAndSettle();
@@ -1559,6 +1578,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(MiniPlayer), findsOneWidget);
     expect(find.text('ادامه بده'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('پسندیده‌ها'));
+    await tester.pumpAndSettle();
+    expect(find.text('هنوز آهنگی را پسند نکرده‌ای'), findsOneWidget);
 
     await tester.tap(find.byTooltip('موسیقی من'));
     await tester.pumpAndSettle();
@@ -1636,7 +1659,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    for (final tooltip in ['قبلی', 'توقف', 'بعدی']) {
+    // A phone's mini player has one control; skipping is on now playing.
+    expect(find.byTooltip('قبلی'), findsNothing);
+    expect(find.byTooltip('بعدی'), findsNothing);
+    for (final tooltip in ['توقف']) {
       final size = tester.getSize(find.descendant(
         of: find.byTooltip(tooltip),
         matching: find.byType(InkWell),

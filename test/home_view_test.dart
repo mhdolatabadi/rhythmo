@@ -125,8 +125,9 @@ void main() {
     });
   });
 
-  testWidgets('the dock selects, searches and fits a 360 px phone',
-      (tester) async {
+  testWidgets(
+      'the dock is four named icons across a 360 px phone, with no account '
+      '(#444)', (tester) async {
     tester.view.physicalSize = const Size(360, 740);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -136,19 +137,29 @@ void main() {
     DockDestination? picked;
     await tester.pumpWidget(MaterialApp(
       theme: RhythmoTheme.dark(),
-      home: Scaffold(
-        bottomNavigationBar: RhythmoDock(
-          player: player,
-          selected: DockDestination.home,
-          onSelect: (d) => picked = d,
+      home: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          bottomNavigationBar: RhythmoDock(
+            player: player,
+            selected: DockDestination.home,
+            onSelect: (d) => picked = d,
+          ),
         ),
       ),
     ));
 
-    expect(find.text('خانه'), findsOneWidget);
-    expect(find.text('موسیقی من'), findsNothing);
-    // Liked songs are a tab of «موسیقی من», not a second way in.
-    expect(find.byTooltip('پسندیده‌ها'), findsNothing);
+    // Icons only: the names are for tooltips and screen readers.
+    for (final label in ['خانه', 'جست‌وجو', 'پسندیده‌ها', 'موسیقی من']) {
+      expect(find.text(label), findsNothing);
+      final size = tester.getSize(find.byTooltip(label));
+      expect(size.width, greaterThanOrEqualTo(48), reason: label);
+      expect(size.height, greaterThanOrEqualTo(48), reason: label);
+    }
+    // The account opens from the header avatar, not the dock.
+    expect(find.byTooltip('حساب'), findsNothing);
+    await tester.tap(find.byTooltip('پسندیده‌ها'));
+    expect(picked, DockDestination.liked);
     await tester.tap(find.byTooltip('جست‌وجو'));
     expect(picked, DockDestination.search);
     expect(
@@ -159,10 +170,14 @@ void main() {
             isSelected: true,
             hasSelectedState: true,
             hasTapAction: true));
+    // Spread across the whole width, in reading order.
+    expect(tester.getCenter(find.byTooltip('خانه')).dx, greaterThan(270));
+    expect(tester.getCenter(find.byTooltip('موسیقی من')).dx, lessThan(90));
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the dock is one pill centred on a wide window', (tester) async {
+  testWidgets('the dock stays together in the middle of a wide window',
+      (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -184,10 +199,10 @@ void main() {
     ));
 
     final first = tester.getRect(find.byTooltip('خانه'));
-    final last = tester.getRect(find.byTooltip('حساب'));
-    final middle = (first.right + last.left) / 2;
+    final last = tester.getRect(find.byTooltip('موسیقی من'));
+    final middle = (first.center.dx + last.center.dx) / 2;
     expect((middle - 700).abs(), lessThan(1));
-    // Not stretched to the 520 px cap: the items sit together.
-    expect(first.right - last.left, lessThan(400));
+    // Capped at the 520 px row, not spread to the window's edges.
+    expect(first.center.dx - last.center.dx, lessThanOrEqualTo(dockNavWidth));
   });
 }
