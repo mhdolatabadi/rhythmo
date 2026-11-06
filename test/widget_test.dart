@@ -21,6 +21,7 @@ import 'package:rhythmo/features/playlists/presentation/popular_playlists_screen
 import 'package:rhythmo/features/store/data/store_catalog.dart' show StoreApi;
 import 'package:rhythmo/features/store/presentation/store_screen.dart';
 import 'package:rhythmo/main.dart';
+import 'package:rhythmo/core/offline/response_cache.dart';
 import 'package:rhythmo/core/network/offline_strip.dart';
 import 'package:rhythmo/features/library/presentation/library_screen.dart';
 
@@ -158,6 +159,8 @@ Future<void> _pumpApp(
 }) async {
   await tester.pumpWidget(RhythmoApp(
     healthCheck: healthCheck ?? () async {},
+    // Files on disk never settle inside a widget test's fake clock.
+    offlineCache: MemoryResponseCache(),
     appPreferencesStore: appPreferencesStore ?? MemoryAppPreferencesStore(),
     authApi: api ?? FakeAuthApi(),
     tokenStore: tokenStore,

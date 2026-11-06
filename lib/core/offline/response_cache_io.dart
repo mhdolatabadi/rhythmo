@@ -8,7 +8,8 @@ import 'package:rhythmo/core/offline/response_cache.dart';
 
 /// Keeps each answer in its own file in the app's support directory, which
 /// the OS does not clear on its own like the temporary one. File names are
-/// hashes of the keys. Failing storage only means less works offline.
+/// hashes of the keys. Failing or missing storage only means less works
+/// offline, never a failed action.
 class FileResponseCache implements ResponseCache {
   FileResponseCache([Future<Directory> Function()? directory])
       : _directory = directory ??
@@ -28,7 +29,7 @@ class FileResponseCache implements ResponseCache {
     try {
       final file = await _file(key, 'json');
       return await file.exists() ? await file.readAsString() : null;
-    } on IOException {
+    } catch (_) {
       return null;
     }
   }
@@ -42,7 +43,7 @@ class FileResponseCache implements ResponseCache {
       final partial = File('${file.path}.part');
       await partial.writeAsString(value, flush: true);
       await partial.rename(file.path);
-    } on IOException {/* Optional. */}
+    } catch (_) {/* Optional. */}
   }
 
   @override
@@ -50,7 +51,7 @@ class FileResponseCache implements ResponseCache {
     try {
       final file = await _file(key, 'bin');
       return await file.exists() ? await file.readAsBytes() : null;
-    } on IOException {
+    } catch (_) {
       return null;
     }
   }
@@ -63,7 +64,7 @@ class FileResponseCache implements ResponseCache {
       final partial = File('${file.path}.part');
       await partial.writeAsBytes(value, flush: true);
       await partial.rename(file.path);
-    } on IOException {/* Optional. */}
+    } catch (_) {/* Optional. */}
   }
 
   @override
@@ -71,7 +72,7 @@ class FileResponseCache implements ResponseCache {
     try {
       final directory = await _directory();
       if (await directory.exists()) await directory.delete(recursive: true);
-    } on IOException {/* Optional. */}
+    } catch (_) {/* Optional. */}
   }
 }
 
