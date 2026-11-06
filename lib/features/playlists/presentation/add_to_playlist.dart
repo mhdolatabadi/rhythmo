@@ -29,7 +29,14 @@ void _message(BuildContext context, String text) {
 /// Asks which playlist (or a new one) and adds [track] to it, saying how
 /// that went.
 Future<void> addTrackToPlaylist(
-    BuildContext context, PlaylistsController controller, Track track) async {
+        BuildContext context, PlaylistsController controller, Track track) =>
+    addTracksToPlaylist(context, controller, [track]);
+
+/// Asks which playlist (or a new one) and adds [tracks] to it in order,
+/// saying how that went.
+Future<void> addTracksToPlaylist(BuildContext context,
+    PlaylistsController controller, List<Track> tracks) async {
+  if (tracks.isEmpty) return;
   final loaded = await controller.load();
   if (!context.mounted) return;
   if (!loaded) {
@@ -74,16 +81,39 @@ Future<void> addTrackToPlaylist(
     if (!context.mounted || playlistId == null) return;
   }
 
-  final result = await controller.addDeviceTrack(playlistId, track);
-  if (!context.mounted) return;
-  switch (result) {
-    case AddTrackResult.added:
-      _message(context, 'آهنگ به فهرست پخش اضافه شد.');
-    case AddTrackResult.alreadyPresent:
-      _message(context, 'این آهنگ از قبل در فهرست پخش است.');
-    case AddTrackResult.failure:
-      _message(context, 'افزودن آهنگ به فهرست پخش ناموفق بود.');
+  if (tracks.length == 1) {
+    final result = await controller.addDeviceTrack(playlistId, tracks.single);
+    if (!context.mounted) return;
+    switch (result) {
+      case AddTrackResult.added:
+        _message(context, 'آهنگ به فهرست پخش اضافه شد.');
+      case AddTrackResult.alreadyPresent:
+        _message(context, 'این آهنگ از قبل در فهرست پخش است.');
+      case AddTrackResult.failure:
+        _message(context, 'افزودن آهنگ به فهرست پخش ناموفق بود.');
+    }
+    return;
   }
+
+  var added = 0, present = 0, failed = 0;
+  for (final track in tracks) {
+    switch (await controller.addDeviceTrack(playlistId, track)) {
+      case AddTrackResult.added:
+        added++;
+      case AddTrackResult.alreadyPresent:
+        present++;
+      case AddTrackResult.failure:
+        failed++;
+    }
+  }
+  if (!context.mounted) return;
+  _message(
+      context,
+      [
+        if (added > 0) '${persianDigits(added)} آهنگ به فهرست پخش اضافه شد.',
+        if (present > 0) '${persianDigits(present)} آهنگ از قبل در آن بود.',
+        if (failed > 0) 'افزودن ${persianDigits(failed)} آهنگ ناموفق بود.',
+      ].join(' '));
 }
 
 Future<String?> _createPlaylist(
