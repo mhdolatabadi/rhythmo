@@ -23,6 +23,36 @@ type CatalogStore interface {
 	SetBaleTopicError(context.Context, store.BaleTopicRequest, string) error
 	FinishBaleTopic(context.Context, store.BaleTopicRequest) error
 	BaleTopicFailure(context.Context, store.BaleTopicRequest) (string, error)
+	BaleCatalogPosts(context.Context) ([]store.BaleCatalogPost, error)
+	RetopicBalePost(context.Context, store.BaleCatalogPost) error
+}
+
+// topicKey is the grouping key for a caption's topic; "" needs review.
+func topicKey(topic string) string {
+	key := Normalize(topic)
+	if !ValidTopic(key) {
+		return ""
+	}
+	return key
+}
+
+// retopic re-derives every indexed post's topic from its saved caption, so a
+// change to the topic rules also regroups posts the scan already read.
+func (s *Service) retopic(ctx context.Context, db CatalogStore) {
+	posts, err := db.BaleCatalogPosts(ctx)
+	if err != nil {
+		return
+	}
+	for _, p := range posts {
+		topic, session, title := Topic(p.Caption)
+		if topic == "" {
+			continue // seeded rows without a usable caption keep their topic
+		}
+		next := store.BaleCatalogPost{MessageID: p.MessageID, Caption: p.Caption, Title: title, Topic: topic, TopicKey: topicKey(topic), Session: session}
+		if next != p {
+			db.RetopicBalePost(ctx, next)
+		}
+	}
 }
 
 func (s *Service) Catalog(ctx context.Context, userID string) (store.BaleCatalog, error) {
@@ -76,10 +106,7 @@ func (s *Service) scanStep(ctx context.Context, db CatalogStore) {
 		if _, ok := audio.ContentType(name); !ok {
 			continue
 		}
-		key := Normalize(e.Topic)
-		if !ValidTopic(key) {
-			key = ""
-		}
+		key := topicKey(e.Topic)
 		posts = append(posts, store.BaleLecture{MessageID: e.ID, Date: e.Date, Title: e.Title, Topic: e.Topic, TopicKey: key, Session: e.Session, FileName: audio.SafeFileName(name), SizeBytes: e.SizeBytes, DurationMS: e.DurationMS, Caption: d.Caption.Text, SourceURL: e.SourceURL})
 	}
 	if err := db.SaveBalePage(ctx, claim, posts, page.NextBefore, page.Done, len(page.Messages)); err != nil {
@@ -122,6 +149,7 @@ func (s *Service) topicStep(ctx context.Context, db CatalogStore) {
 	}
 }
 func (s *Service) catalogWorker(ctx context.Context, db CatalogStore) {
+	s.retopic(ctx, db)
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {

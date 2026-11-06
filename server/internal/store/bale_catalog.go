@@ -222,3 +222,27 @@ func (b *BaleImports) BaleTopicFailure(ctx context.Context, r BaleTopicRequest) 
 	}
 	return reason, err
 }
+
+// BaleCatalogPost is an indexed post's caption with the topic derived from it.
+type BaleCatalogPost struct {
+	MessageID, Caption, Title, Topic, TopicKey string
+	Session                                    int
+}
+
+func (b *BaleImports) BaleCatalogPosts(ctx context.Context) ([]BaleCatalogPost, error) {
+	rows, err := b.pool.Query(ctx, `SELECT message_id,caption,title,topic,topic_key,session_number FROM bale_catalog_posts`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (BaleCatalogPost, error) {
+		var p BaleCatalogPost
+		err := r.Scan(&p.MessageID, &p.Caption, &p.Title, &p.Topic, &p.TopicKey, &p.Session)
+		return p, err
+	})
+}
+
+// RetopicBalePost stores a post's topic after the topic rules changed.
+func (b *BaleImports) RetopicBalePost(ctx context.Context, p BaleCatalogPost) error {
+	_, err := b.pool.Exec(ctx, `UPDATE bale_catalog_posts SET title=$2,topic=$3,topic_key=$4,session_number=$5 WHERE message_id=$1`, p.MessageID, p.Title, p.Topic, p.TopicKey, p.Session)
+	return err
+}

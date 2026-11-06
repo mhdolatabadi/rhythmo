@@ -14,7 +14,9 @@ const ProviderName = "bale_archive"
 
 var fullTagRE = regexp.MustCompile(`#سخنرانی_کامل(?:$|[^\pL\pN_‌])`)
 
-var sessionRE = regexp.MustCompile(`(?:[؛;،,:：\-–—]\s*|\s+)جلسه[\s.]+(?:ی\s+)?`)
+// A part marker: «جلسه» or «قسمت» followed by its number. A season such as
+// «فصل چهارم» stays in the topic, so each season is its own topic.
+var sessionRE = regexp.MustCompile(`(?:[؛;،,:：\-–—]\s*|\s+)(?:جلسه|قسمت)[\s.]+(?:ی\s+)?`)
 var sessionTailRE = regexp.MustCompile(`\s*[-–—:؛(（].*$`)
 
 var digitsRE = regexp.MustCompile(`^[0-9]+$`)
@@ -65,7 +67,7 @@ func Topic(caption string) (string, int, string) {
 			topic := strings.TrimSpace(title[:at[0]])
 			sessionText := sessionTailRE.ReplaceAllString(title[at[1]:], "")
 			num := ordinal(strings.Trim(sessionText, "* _؛،.-() "))
-			if num == 0 && strings.TrimSpace(title[at[0]:at[1]]) == "جلسه" {
+			if marker := strings.TrimSpace(title[at[0]:at[1]]); num == 0 && (marker == "جلسه" || marker == "قسمت") {
 				return title, 0, title
 			}
 			return topic, num, title
