@@ -16,6 +16,7 @@ import 'package:rhythmo/app/backend_gate.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/network/network_status.dart';
 import 'package:rhythmo/core/network/offline_strip.dart';
+import 'package:rhythmo/core/offline/offline_outbox.dart';
 import 'package:rhythmo/core/offline/response_cache.dart';
 import 'package:rhythmo/features/auth/application/auth_controller.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
@@ -138,8 +139,14 @@ class _RhythmoAppState extends State<RhythmoApp> {
   late final ApiClient? _apiClient = AppConfiguration.apiBaseUri == null
       ? null
       : ApiClient(AppConfiguration.apiBaseUri!,
-          offlineCache: widget.offlineCache ?? createResponseCache(),
-          network: _network);
+          offlineCache: _offlineStore, network: _network);
+
+  late final ResponseCache _offlineStore =
+      widget.offlineCache ?? createResponseCache();
+
+  /// Likes and playlist changes made offline, sent once back online.
+  late final OfflineOutbox _outbox =
+      OfflineOutbox(store: _offlineStore, account: () => _auth?.user?.id);
   late final AuthApi? _authApi = widget.authApi ?? _apiClient;
   late final AuthController? _auth = _authApi == null
       ? null
@@ -160,6 +167,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
           deviceStore: SecureDevicePlaylistStore(),
           subscriptions: _notificationsApi,
           channels: _apiClient,
+          outbox: _outbox,
           token: () => _auth?.token,
           isAdmin: () => _auth?.user?.isAdmin ?? false);
 
@@ -269,6 +277,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
             // Likes live on the server once signed in (#284).
             api: widget.likesApi ?? _apiClient,
             token: () => _auth?.token,
+            outbox: _outbox,
           )..load(),
           settingsStore:
               widget.playbackSettingsStore ?? SecurePlaybackSettingsStore(),
@@ -313,7 +322,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
   void initState() {
     super.initState();
     _auth?.addListener(_selectJourneyAccount);
-    _auth?.addListener(_forgetOfflineOnSignOut);
+    _auth?.addListener(_onAuthChanged);
     _network.addListener(_onNetworkChanged);
     _selectJourneyAccount();
     _preferences.load();
@@ -333,13 +342,24 @@ class _RhythmoAppState extends State<RhythmoApp> {
   AuthStatus? _authStatus;
 
   /// Nothing of an account stays on the device after it signs out.
-  void _forgetOfflineOnSignOut() {
+  void _onAuthChanged() {
     final status = _auth?.status;
     if (status == AuthStatus.signedOut && _authStatus == AuthStatus.signedIn) {
       _apiClient?.forgetOffline();
     }
+    // Changes left from an earlier offline session go out on sign-in.
+    if (status == AuthStatus.signedIn &&
+        _authStatus != AuthStatus.signedIn &&
+        _network.online) {
+      _sendOfflineChanges();
+    }
     _authStatus = status;
   }
+
+  Future<void> _sendOfflineChanges() => _outbox.flush((action) async {
+        if (await _player?.favorites.sendPending(action) ?? false) return;
+        await _playlists?.sendPending(action);
+      });
 
   bool _wasOnline = true;
 
@@ -348,18 +368,24 @@ class _RhythmoAppState extends State<RhythmoApp> {
   void _onNetworkChanged() {
     final online = _network.online;
     if (online && !_wasOnline) {
-      _auth?.revalidate();
-      _library?.load();
-      _playlists?.load();
-      _player?.favorites.refresh();
+      _catchUp();
     }
     _wasOnline = online;
+  }
+
+  Future<void> _catchUp() async {
+    await _auth?.revalidate();
+    // What was changed offline first, so the reloads include it.
+    await _sendOfflineChanges();
+    _library?.load();
+    _playlists?.load();
+    _player?.favorites.refresh();
   }
 
   @override
   void dispose() {
     _auth?.removeListener(_selectJourneyAccount);
-    _auth?.removeListener(_forgetOfflineOnSignOut);
+    _auth?.removeListener(_onAuthChanged);
     _network.removeListener(_onNetworkChanged);
     _network.dispose();
     _artwork.dispose();
