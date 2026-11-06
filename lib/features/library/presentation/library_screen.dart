@@ -29,6 +29,7 @@ import 'package:rhythmo/features/library/presentation/home_view.dart';
 import 'package:rhythmo/features/library/presentation/rhythmo_dock.dart';
 import 'package:rhythmo/features/library/presentation/track_metadata_editor.dart';
 import 'package:rhythmo/features/player/application/favorite_tracks.dart';
+import 'package:rhythmo/features/player/data/offline_songs.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/presentation/mini_player.dart';
 import 'package:rhythmo/features/playlists/presentation/shared_playlist_screen.dart';
@@ -1074,6 +1075,7 @@ enum _TrackAction {
   playNext,
   addToQueue,
   addToPlaylist,
+  keepOffline,
   sendToBot,
   uploadToServer,
   downloadToDevice,
@@ -1550,6 +1552,8 @@ class _TrackListState extends State<_TrackList> {
     final onServer = location != TrackLocation.device;
     final onDevice = location != TrackLocation.server;
     final operation = sync?.operationFor(track.id);
+    // Browsers keep only the songs the listener chose for offline play.
+    final offline = OfflineSongsScope.maybeOf(context);
     if (widget.isDeleting?.call(track.id) == true) {
       return const SizedBox.square(
         dimension: 48,
@@ -1596,6 +1600,19 @@ class _TrackListState extends State<_TrackList> {
       if (sync != null && operation == null && location == TrackLocation.device)
         item(_TrackAction.uploadToServer, RhythmoIcons.cloudArrowUp,
             'آپلود به سرور'),
+      if (offline != null && onServer && !track.isLocal)
+        item(
+          _TrackAction.keepOffline,
+          offline.isKept(track.id)
+              ? RhythmoIcons.cloudSlash
+              : RhythmoIcons.cloudArrowDown,
+          offline.isKept(track.id)
+              ? 'حذف از آفلاین'
+              : offline.isSaving(track.id)
+                  ? 'در حال ذخیره برای آفلاین…'
+                  : 'ذخیره برای آفلاین',
+          enabled: !offline.isSaving(track.id),
+        ),
       if (sync != null && operation == null && location == TrackLocation.server)
         item(
           _TrackAction.downloadToDevice,
@@ -1671,6 +1688,8 @@ class _TrackListState extends State<_TrackList> {
             widget.onEditMetadata?.call(track);
           case (_TrackAction.like, _):
             _like(context, track);
+          case (_TrackAction.keepOffline, _):
+            _keepOffline(context, offline!, track);
           case (_TrackAction.publish, _):
             final state = track.publishState;
             widget.onSetPublished?.call(
@@ -1695,6 +1714,21 @@ class _TrackListState extends State<_TrackList> {
       },
       itemBuilder: (context) => items,
     );
+  }
+
+  Future<void> _keepOffline(
+      BuildContext context, OfflineSongs offline, Track track) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (offline.isKept(track.id)) {
+      await offline.forget(track);
+      return;
+    }
+    final kept = await offline.keep(track);
+    messenger.showSnackBar(SnackBar(
+      content: Text(kept
+          ? 'برای پخش بدون اینترنت ذخیره شد.'
+          : 'ذخیره برای آفلاین ممکن نشد.'),
+    ));
   }
 
   Future<void> _like(BuildContext context, Track track) async {

@@ -14,6 +14,7 @@ import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/player/application/last_playback.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/core/offline/offline_outbox.dart';
+import 'package:rhythmo/features/player/data/offline_songs.dart';
 import 'package:rhythmo/features/player/application/favorite_tracks.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
@@ -341,6 +342,54 @@ void main() {
       expect(await outbox.pending(), isEmpty);
     });
   });
+
+  group('songs kept for offline in the browser', () {
+    const song =
+        Track(id: 'b', title: 'B', contentType: 'audio/mpeg', sizeBytes: 1);
+
+    test('keeping fetches a fresh link and marks the song kept', () async {
+      final store = _SongStore();
+      final songs = OfflineSongs(
+          store: store,
+          link: (track) async => Uri.parse('https://x/${track.id}'));
+      await songs.load();
+      expect(songs.isKept('b'), isFalse);
+
+      expect(await songs.keep(song), isTrue);
+      expect(store.kept, {'b': 'https://x/b'});
+      expect(songs.isKept('b'), isTrue);
+
+      await songs.forget(song);
+      expect(songs.isKept('b'), isFalse);
+      expect(store.kept, isEmpty);
+    });
+
+    test('a failed fetch leaves the song not kept', () async {
+      final songs = OfflineSongs(
+          store: _SongStore()..fail = true,
+          link: (track) async => Uri.parse('https://x/${track.id}'));
+      expect(await songs.keep(song), isFalse);
+      expect(songs.isKept('b'), isFalse);
+      expect(songs.isSaving('b'), isFalse);
+    });
+  });
+}
+
+class _SongStore implements OfflineSongStore {
+  final kept = <String, String>{};
+  bool fail = false;
+
+  @override
+  Future<Set<String>> keptIds() async => kept.keys.toSet();
+
+  @override
+  Future<void> keep(Track track, Uri url) async {
+    if (fail) throw http.ClientException('offline');
+    kept[track.id] = '$url';
+  }
+
+  @override
+  Future<void> forget(Track track) async => kept.remove(track.id);
 }
 
 class _Playlists implements PlaylistsApi {

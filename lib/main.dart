@@ -39,6 +39,7 @@ import 'package:rhythmo/features/player/application/playback_settings.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/data/audio_cache.dart';
 import 'package:rhythmo/features/player/data/audio_engine.dart';
+import 'package:rhythmo/features/player/data/offline_songs.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/features/settings/application/cache_controller.dart';
@@ -310,6 +311,14 @@ class _RhythmoAppState extends State<RhythmoApp> {
           onDownloaded: _localAudio.load,
         );
 
+  /// «ذخیره برای آفلاین» in the browser; null where the audio cache
+  /// already keeps played songs.
+  late final OfflineSongs? _offlineSongs = switch ((_audioCache, _player)) {
+    (final OfflineSongStore store, final PlayerController player) =>
+      OfflineSongs(store: store, link: player.linkFor)..load(),
+    _ => null,
+  };
+
   late final CacheController _cache = CacheController(
     cache: _audioCache,
     playing: () => _player?.track?.id,
@@ -426,10 +435,14 @@ class _RhythmoAppState extends State<RhythmoApp> {
             );
             // Screens pushed over everything, like the full-screen player,
             // still reach the listener's playlists.
+            final withSongs = switch (_offlineSongs) {
+              final songs? => OfflineSongsScope(songs: songs, child: page),
+              null => page,
+            };
             return switch (_playlists) {
               final playlists? =>
-                PlaylistsScope(controller: playlists, child: page),
-              null => page,
+                PlaylistsScope(controller: playlists, child: withSongs),
+              null => withSongs,
             };
           },
           debugShowCheckedModeBanner: false,

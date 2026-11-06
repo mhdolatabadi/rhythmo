@@ -1,13 +1,10 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:rhythmo/core/network/network_status.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 
-/// What the strip says. Browsers keep no songs for offline play yet, so
-/// there it only says the app is offline.
-const offlineStripText = kIsWeb
-    ? 'آفلاین هستی؛ بعد از وصل شدن به‌روز می‌شود'
-    : 'آفلاین؛ آهنگ‌های ذخیره‌شده پخش می‌شوند';
+/// What the strip says: songs kept on the device (played ones on Android,
+/// ones saved for offline in the browser) still play.
+const offlineStripText = 'آفلاین؛ آهنگ‌های ذخیره‌شده پخش می‌شوند';
 
 /// A slim line above every screen while the server can't be reached, so the
 /// listener knows why some things wait: music kept on the device still

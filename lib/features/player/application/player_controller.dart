@@ -850,6 +850,10 @@ class PlayerController extends ChangeNotifier {
   /// Someone else's track is played through the shared link or the
   /// collaborative playlist it was opened from, a store song through the
   /// store; the user's own directly.
+  /// A fresh link to [track]'s file, for keeping it in the browser.
+  Future<Uri> linkFor(Track track) async =>
+      (await _link(_token(), track, fresh: true)).url;
+
   /// [fresh] always asks the server, for when the kept file failed.
   Future<StreamLink> _link(String? token, Track track,
       {bool fresh = false}) async {

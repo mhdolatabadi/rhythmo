@@ -6,28 +6,12 @@ import 'dart:io';
 import 'package:just_audio/just_audio.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/player/data/audio_cache.dart';
+import 'package:rhythmo/features/player/data/audio_cache_names.dart';
+
+export 'package:rhythmo/features/player/data/audio_cache_names.dart';
 import 'package:path_provider/path_provider.dart';
 
 const defaultCacheBytes = 500 * 1024 * 1024;
-
-const _extensions = {
-  'audio/mpeg': 'mp3',
-  'audio/mp4': 'm4a',
-  'audio/aac': 'aac',
-  'audio/flac': 'flac',
-  'audio/ogg': 'ogg',
-  'audio/wav': 'wav',
-  'audio/webm': 'webm',
-};
-
-/// The cache file name of [track]'s stored file: its ID plus the revision of
-/// the bytes, never the presigned URL, which changes on every request. A
-/// metadata edit rewrites the stored file's tags into a new revision, so the
-/// edited track is fetched again instead of playing stale bytes (#252).
-String cacheFileName(Track track) {
-  final extension = _extensions[track.contentType] ?? 'audio';
-  return '${track.id}.r${track.embeddedTags.version ?? 0}.$extension';
-}
 
 /// Caches played tracks in the app's temporary directory, which the OS may
 /// also clear. Files are named by [cacheFileName]. When the cache would
