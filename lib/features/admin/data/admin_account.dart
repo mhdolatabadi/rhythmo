@@ -1,13 +1,19 @@
 import 'package:rhythmo/features/auth/data/auth_models.dart';
 
 class AdminAccount {
-  const AdminAccount({required this.user, required this.createdAt});
+  const AdminAccount(
+      {required this.user,
+      required this.createdAt,
+      this.storageQuotaBytes = 1 << 30});
 
   factory AdminAccount.fromJson(Map<String, dynamic> json) => AdminAccount(
         user: AuthUser.fromJson(json),
         createdAt: DateTime.parse(json['createdAt'] as String),
+        storageQuotaBytes:
+            (json['storageQuotaBytes'] as num?)?.toInt() ?? (1 << 30),
       );
 
+  final int storageQuotaBytes;
   final AuthUser user;
   final DateTime createdAt;
 }
@@ -70,4 +76,9 @@ abstract interface class AdminApi {
   /// no longer pending (withdrawn, or decided by another admin).
   Future<void> reviewPublication(
       String token, PendingPublication publication, bool approved);
+}
+
+abstract interface class AdminQuotaApi {
+  Future<AdminAccount> increaseStorageQuota(
+      String token, String accountId, int bytes);
 }

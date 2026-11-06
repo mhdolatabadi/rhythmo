@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -31,10 +32,12 @@ const (
 
 // TrackStore reads and writes tracks for one owner; *store.Tracks implements it.
 type TrackStore interface {
+	QuotaForOwner(context.Context, string, int64) (int64, error)
 	ListForOwner(ctx context.Context, ownerID string) ([]store.Track, error)
 	UsageForOwner(ctx context.Context, ownerID string) (int64, error)
 	ForOwner(ctx context.Context, ownerID, trackID string) (store.Track, error)
 	ReservePending(ctx context.Context, ownerID string, track store.NewTrack, maxOwnerBytes int64, maxPending int) (store.Track, error)
+	ImportUploadMetadata(ctx context.Context, ownerID, trackID string, metadata store.TrackMetadata) error
 	MarkReady(ctx context.Context, ownerID, trackID string) (store.Track, error)
 	UpdateMetadata(ctx context.Context, ownerID, trackID string, expectedVersion int64, metadata store.TrackMetadata) (store.Track, error)
 	Delete(ctx context.Context, ownerID, trackID string) error
@@ -45,6 +48,7 @@ type ObjectStore interface {
 	PresignGet(ctx context.Context, key string) (string, time.Time, error)
 	PresignDownload(ctx context.Context, key, disposition, contentType string) (string, time.Time, error)
 	PresignUpload(ctx context.Context, key, contentType string, sizeBytes int64) (storage.Upload, error)
+	Open(ctx context.Context, key string) (io.ReadCloser, error)
 	Size(ctx context.Context, key string) (int64, error)
 	Head(ctx context.Context, key string, n int64) ([]byte, error)
 	Remove(ctx context.Context, key string) error
@@ -270,10 +274,15 @@ func (h *TrackHandlers) handleList(w http.ResponseWriter, r *http.Request) {
 		internalError(w, "read storage usage", err)
 		return
 	}
+	quota, err := h.tracks.QuotaForOwner(r.Context(), userID, h.limits.MaxOwnerBytes)
+	if err != nil {
+		internalError(w, "load account quota", err)
+		return
+	}
 	response := trackListResponse{
 		Tracks: make([]trackResponse, 0, len(tracks)),
 		Storage: storageUsageResponse{
-			UsedBytes: usedBytes, LimitBytes: h.limits.MaxOwnerBytes,
+			UsedBytes: usedBytes, LimitBytes: quota,
 		},
 	}
 	likes := map[string]store.LikeState{}
@@ -671,6 +680,22 @@ func (h *TrackHandlers) handleComplete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_audio")
 		return
 	}
+	if tags.Supported(track.FileName) {
+		object, err := h.storage.Open(r.Context(), track.StorageKey)
+		if err != nil {
+			internalError(w, "open upload metadata", err)
+			return
+		}
+		metadata, inspectErr := tags.ReadMetadata(io.LimitReader(object, size+1), track.FileName)
+		object.Close()
+		if inspectErr == nil {
+			if err := h.tracks.ImportUploadMetadata(r.Context(), track.OwnerID, track.ID, uploadMetadata(track, metadata)); err != nil {
+				internalError(w, "import upload metadata", err)
+				return
+			}
+		}
+		// Missing/malformed/unsupported tags must not reject playable audio.
+	}
 	ready, err := h.tracks.MarkReady(r.Context(), track.OwnerID, track.ID)
 	if err != nil {
 		internalError(w, "mark track ready", err)
@@ -761,4 +786,45 @@ func validComment(value *string) bool {
 	}
 	singleLine := strings.NewReplacer("\r\n", " ", "\n", " ", "\t", " ").Replace(*value)
 	return validText(&singleLine, maxCommentLength)
+}
+
+// uploadMetadata keeps supplied values for absent tags and only imports values
+// accepted by the same validation rules as manual edits.
+func uploadMetadata(track store.Track, embedded tags.Metadata) store.TrackMetadata {
+	m := store.TrackMetadata{FileName: track.FileName, Title: track.Title,
+		Artist: track.Artist, Album: track.Album, AlbumArtist: track.AlbumArtist,
+		Composer: track.Composer, Genre: track.Genre, Year: track.Year,
+		TrackNumber: track.TrackNumber, DiscNumber: track.DiscNumber, Comment: track.Comment}
+	if title := optionalText(&embedded.Title); title != nil && validText(title, maxTextLength) {
+		m.Title = *title
+	}
+	for _, field := range []struct {
+		value string
+		into  **string
+	}{
+		{embedded.Artist, &m.Artist}, {embedded.Album, &m.Album},
+		{embedded.AlbumArtist, &m.AlbumArtist}, {embedded.Composer, &m.Composer},
+		{embedded.Genre, &m.Genre},
+	} {
+		if value := optionalText(&field.value); value != nil && validText(value, maxTextLength) {
+			*field.into = value
+		}
+	}
+	if comment := optionalText(&embedded.Comment); comment != nil && validComment(comment) {
+		m.Comment = comment
+	}
+	for _, field := range []struct {
+		value int
+		high  int
+		into  **int32
+	}{
+		{embedded.Year, 9999, &m.Year}, {embedded.TrackNumber, maxTrackNumber, &m.TrackNumber},
+		{embedded.DiscNumber, maxTrackNumber, &m.DiscNumber},
+	} {
+		if field.value > 0 && field.value <= field.high {
+			value := int32(field.value)
+			*field.into = &value
+		}
+	}
+	return m
 }

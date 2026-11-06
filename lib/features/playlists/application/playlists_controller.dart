@@ -1,7 +1,13 @@
 import 'package:flutter/foundation.dart';
+import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/core/api/api_client.dart';
+import 'package:rhythmo/core/offline/offline_outbox.dart';
+import 'package:rhythmo/features/player/application/last_playback.dart';
+import 'package:rhythmo/features/bots/data/messenger_bot.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
+import 'package:rhythmo/features/notifications/data/notifications.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum PlaylistsStatus { loading, loaded, error }
 
@@ -23,17 +29,88 @@ class SharedPlaylistUnavailable implements Exception {
   const SharedPlaylistUnavailable();
 }
 
-class PlaylistsController extends ChangeNotifier {
+class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
   PlaylistsController(
       {required PlaylistsApi api,
       required String? Function() token,
-      bool Function()? isAdmin})
+      bool Function()? isAdmin,
+      DevicePlaylistStore? deviceStore,
+      NotificationsApi? subscriptions,
+      BotChannelsApi? channels,
+      OfflineOutbox? outbox,
+      String? Function()? accountId})
       : _api = api,
+        _outbox = outbox,
+        _subscriptions = subscriptions,
+        _channels = channels,
         _token = token,
-        _isAdmin = isAdmin;
+        _isAdmin = isAdmin,
+        _deviceStore = deviceStore ?? MemoryDevicePlaylistStore(),
+        _accountId = accountId ?? (() => null);
+
+  final DevicePlaylistStore _deviceStore;
+  final String? Function() _accountId;
+
+  /// The signed-in account that device-only records belong to.
+  String get deviceScope => _accountId() ?? 'default';
+  String _deviceKey(String id) => '$deviceScope:$id';
+
+  Future<Playlist> _withDeviceTracks(Playlist playlist) async {
+    final local = await _deviceStore.read(_deviceKey(playlist.id));
+    if (local.isEmpty) return playlist;
+    final ids = playlist.tracks.map((t) => t.id).toSet();
+    return playlist.withTracks([
+      ...playlist.tracks,
+      ...local.where((t) => !ids.contains(t.id)),
+    ],
+        trackCount: playlist.trackCount +
+            local.where((t) => !ids.contains(t.id)).length);
+  }
 
   final PlaylistsApi _api;
+
+  /// Keeps songs added or arranged offline until the server can take them.
+  final OfflineOutbox? _outbox;
+  final NotificationsApi? _subscriptions;
+  final BotChannelsApi? _channels;
   final String? Function() _token;
+
+  /// Whether Telegram and Bale channels can be synced into playlists.
+  bool get canSyncChannels => _channels != null;
+
+  /// A code to post in a messenger channel so it syncs into the playlist,
+  /// or null when that failed.
+  Future<BotLinkCode?> createChannelCode(String id) async {
+    final token = _token();
+    final api = _channels;
+    if (token == null || api == null) return null;
+    try {
+      return await api.createChannelCode(token, id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The messenger channels synced into the playlist, or null when they
+  /// couldn't be loaded.
+  Future<List<SyncedChannel>?> syncedChannels(String id) async {
+    final token = _token();
+    final api = _channels;
+    if (token == null || api == null) return null;
+    try {
+      return await api.listSyncedChannels(token, id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Stops syncing a messenger channel into the playlist.
+  Future<bool> removeSyncedChannel(String id, SyncedChannel channel) {
+    final api = _channels;
+    if (api == null) return Future.value(false);
+    return _attempt((token) => api.removeSyncedChannel(token, id, channel));
+  }
+
   final bool Function()? _isAdmin;
 
   /// Whether the signed-in account may take playlists out of the popular
@@ -46,6 +123,10 @@ class PlaylistsController extends ChangeNotifier {
   /// Public playlists, most liked first, once [loadPopular] has run.
   PlaylistsStatus popularStatus = PlaylistsStatus.loading;
   List<PublicPlaylist> popular = const [];
+
+  /// Share tokens whose subscription is on its way to the server.
+  final Set<String> _subscribing = {};
+  bool isSubscribing(String shareToken) => _subscribing.contains(shareToken);
 
   /// Share tokens whose like is on its way to the server.
   final Set<String> _liking = {};
@@ -151,17 +232,84 @@ class PlaylistsController extends ChangeNotifier {
     }
   }
 
+  /// Subscribes to a public playlist, like joining a channel, or
+  /// unsubscribes. [onChange] shows the change at once and goes back if
+  /// the server refuses it. One already on its way is not sent twice.
+  Future<LikeResult> setSubscription(
+      String shareToken, PlaylistSubscription current,
+      {required void Function(PlaylistSubscription subscription)
+          onChange}) async {
+    final token = _token();
+    final api = _subscriptions;
+    if (token == null || api == null || _subscribing.contains(shareToken)) {
+      return LikeResult.failed;
+    }
+    final wanted = current.toggled();
+    _subscribing.add(shareToken);
+    onChange(wanted);
+    notifyListeners();
+    try {
+      onChange(await api.setPlaylistSubscription(
+          token, shareToken, wanted.subscribed));
+      return LikeResult.done;
+    } on ApiException catch (e) {
+      onChange(current);
+      return e.statusCode == 404 ? LikeResult.gone : LikeResult.failed;
+    } catch (_) {
+      onChange(current);
+      return LikeResult.failed;
+    } finally {
+      _subscribing.remove(shareToken);
+      notifyListeners();
+    }
+  }
+
+  /// Mutes or unmutes a subscribed channel, the same way as [setSubscription].
+  Future<LikeResult> setMuted(String shareToken, PlaylistSubscription current,
+      {required void Function(PlaylistSubscription subscription)
+          onChange}) async {
+    final token = _token();
+    final api = _subscriptions;
+    if (token == null || api == null || _subscribing.contains(shareToken)) {
+      return LikeResult.failed;
+    }
+    _subscribing.add(shareToken);
+    onChange(current.withMuted(!current.muted));
+    notifyListeners();
+    try {
+      onChange(await api.setPlaylistMuted(token, shareToken, !current.muted));
+      return LikeResult.done;
+    } on ApiException catch (e) {
+      onChange(current);
+      return e.statusCode == 404 ? LikeResult.gone : LikeResult.failed;
+    } catch (_) {
+      onChange(current);
+      return LikeResult.failed;
+    } finally {
+      _subscribing.remove(shareToken);
+      notifyListeners();
+    }
+  }
+
   Future<bool> load() async {
     final token = _token();
     if (token == null) return false;
-    status = PlaylistsStatus.loading;
-    notifyListeners();
+    // A refresh keeps the playlists on screen; only a first load waits.
+    if (status != PlaylistsStatus.loaded) {
+      status = PlaylistsStatus.loading;
+      notifyListeners();
+    }
     try {
-      playlists = await _api.listPlaylists(token);
+      playlists = await Future.wait(
+          (await _api.listPlaylists(token)).map(_withDeviceTracks));
       status = PlaylistsStatus.loaded;
       notifyListeners();
       return true;
     } catch (_) {
+      if (status == PlaylistsStatus.loaded) {
+        notifyListeners();
+        return false;
+      }
       status = PlaylistsStatus.error;
       notifyListeners();
       return false;
@@ -263,29 +411,138 @@ class PlaylistsController extends ChangeNotifier {
     final token = _token();
     if (token == null) return null;
     try {
-      return await _api.getPlaylist(token, id);
+      return await _withDeviceTracks(
+          await _withPending(await _api.getPlaylist(token, id)));
     } catch (_) {
       return null;
     }
   }
 
-  Future<Playlist?> replaceTracks(String id, List<String> trackIds) async {
+  static const _addKind = 'playlistAdd';
+  static const _arrangeKind = 'playlistTracks';
+
+  /// [playlist] with the changes made to it offline that the server has
+  /// not taken yet.
+  Future<Playlist> _withPending(Playlist playlist) async {
+    var tracks = playlist.tracks;
+    for (final action in await _outbox?.pending() ?? const []) {
+      if (action['playlistId'] != playlist.id) continue;
+      if (action['kind'] == _addKind) {
+        final track = trackFromJson(action['track']);
+        if (track != null && !tracks.any((t) => t.id == track.id)) {
+          tracks = [...tracks, track];
+        }
+      } else if (action['kind'] == _arrangeKind && action['trackIds'] is List) {
+        final byId = {for (final track in tracks) track.id: track};
+        tracks = [
+          for (final id in action['trackIds'] as List)
+            if (byId[id] case final track?) track,
+        ];
+      }
+    }
+    return identical(tracks, playlist.tracks)
+        ? playlist
+        : playlist.withTracks(tracks);
+  }
+
+  /// Sends a playlist change kept while offline; throws when it can't be
+  /// sent now. Returns false for a change that isn't a playlist's.
+  Future<bool> sendPending(Map<String, Object?> action) async {
+    final kind = action['kind'];
+    if (kind != _addKind && kind != _arrangeKind) return false;
+    final token = _token(), id = action['playlistId'];
+    if (token == null || id is! String) return true;
+    if (kind == _addKind) {
+      final track = trackFromJson(action['track']);
+      if (track == null) return true;
+      final ids =
+          (await _api.getPlaylist(token, id)).tracks.map((t) => t.id).toList();
+      if (!ids.contains(track.id)) {
+        await _api.replacePlaylistTracks(token, id, [...ids, track.id]);
+      }
+    } else if (action['trackIds'] is List) {
+      await _api.replacePlaylistTracks(
+          token, id, (action['trackIds'] as List).whereType<String>().toList());
+    }
+    return true;
+  }
+
+  Future<Playlist?> replaceTracks(String id, List<String> trackIds,
+      {List<Track> deviceTracks = const []}) async {
     final token = _token();
     if (token == null) return null;
     try {
-      final playlist = await _api.replacePlaylistTracks(token, id, trackIds);
-      await load();
-      return playlist;
+      final available = {
+        for (final track in await _deviceStore.read(_deviceKey(id)))
+          track.id: track,
+        for (final track in deviceTracks)
+          if (track.id.startsWith('device:') && track.isLocal) track.id: track,
+      };
+      final ids = trackIds.toSet().toList();
+      final local = <Track>[];
+      final cloud = <String>[];
+      for (final trackId in ids) {
+        if (trackId.startsWith('device:')) {
+          final track = available[trackId];
+          if (track == null) return null;
+          local.add(track);
+        } else {
+          cloud.add(trackId);
+        }
+      }
+      Playlist? remote;
+      try {
+        remote = await _api.getPlaylist(token, id);
+        final before = remote.tracks.map((t) => t.id).toList();
+        final playlist = listEquals(before, cloud)
+            ? remote
+            : await _api.replacePlaylistTracks(token, id, cloud);
+        await _deviceStore.write(_deviceKey(id), local);
+        await load();
+        return await _withDeviceTracks(playlist);
+      } catch (error) {
+        final outbox = _outbox;
+        if (outbox == null || remote == null || !isUnreachable(error)) {
+          rethrow;
+        }
+        // Offline: the new order shows now and is sent once back online.
+        await outbox.add({
+          'kind': _arrangeKind,
+          'key': '$_arrangeKind:$id',
+          'playlistId': id,
+          'trackIds': cloud,
+        });
+        await _deviceStore.write(_deviceKey(id), local);
+        return await _withDeviceTracks(await _withPending(remote));
+      }
     } catch (_) {
       return null;
     }
   }
 
-  Future<AddTrackResult> addTrack(String id, String trackId) async {
+  Future<AddTrackResult> addDeviceTrack(String id, Track track) async {
+    if (!track.id.startsWith('device:') || !track.isLocal) {
+      return addTrack(id, track.id, track: track);
+    }
+    final playlist = await loadPlaylist(id);
+    if (playlist == null) return AddTrackResult.failure;
+    if (playlist.tracks.any((t) => t.id == track.id)) {
+      return AddTrackResult.alreadyPresent;
+    }
+    final updated = await replaceTracks(
+        id, [...playlist.tracks.map((t) => t.id), track.id],
+        deviceTracks: [track]);
+    return updated == null ? AddTrackResult.failure : AddTrackResult.added;
+  }
+
+  /// Adds [trackId] to the playlist. Offline, with the [track] itself, the
+  /// song is added on this device at once and sent once back online.
+  Future<AddTrackResult> addTrack(String id, String trackId,
+      {Track? track}) async {
     final token = _token();
     if (token == null) return AddTrackResult.failure;
     try {
-      final playlist = await _api.getPlaylist(token, id);
+      final playlist = await _withPending(await _api.getPlaylist(token, id));
       final trackIds = playlist.tracks.map((track) => track.id).toList();
       if (trackIds.contains(trackId)) return AddTrackResult.alreadyPresent;
       final updated = await _api.replacePlaylistTracks(
@@ -293,21 +550,41 @@ class PlaylistsController extends ChangeNotifier {
         id,
         [...trackIds, trackId],
       );
+      final combined = await _withDeviceTracks(updated);
       playlists = playlists
-          .map((item) => item.id == id ? updated : item)
+          .map((item) => item.id == id ? combined : item)
           .toList(growable: false);
       notifyListeners();
       return AddTrackResult.added;
-    } catch (_) {
-      return AddTrackResult.failure;
+    } catch (error) {
+      final outbox = _outbox;
+      if (outbox == null || track == null || !isUnreachable(error)) {
+        return AddTrackResult.failure;
+      }
+      await outbox.add({
+        'kind': _addKind,
+        'key': '$_addKind:$id:${track.id}',
+        'playlistId': id,
+        'track': trackToJson(track),
+      });
+      playlists = [
+        for (final item in playlists)
+          item.id == id
+              ? item.withTracks([...item.tracks, track],
+                  trackCount: item.displayTrackCount + 1)
+              : item,
+      ];
+      notifyListeners();
+      return AddTrackResult.added;
     }
   }
 
-  Future<bool> rename(String id, String name) async {
+  /// Renames the playlist, and sets its description unless that is null.
+  Future<bool> rename(String id, String name, {String? description}) async {
     final token = _token();
     if (token == null) return false;
     try {
-      await _api.renamePlaylist(token, id, name);
+      await _api.renamePlaylist(token, id, name, description: description);
       await load();
       return true;
     } catch (_) {
@@ -360,7 +637,12 @@ class PlaylistsController extends ChangeNotifier {
     }
   }
 
-  /// The owner takes a member out, with the tracks they added.
+  /// The owner makes a member an admin of the channel, or takes it back.
+  Future<bool> setMemberAdmin(String id, String memberId, bool admin) =>
+      _attempt(
+          (token) => _api.setPlaylistMemberAdmin(token, id, memberId, admin));
+
+  /// The owner or an admin takes a member out, with the tracks they added.
   Future<bool> removeMember(String id, String memberId) =>
       _attempt((token) => _api.removePlaylistMember(token, id, memberId));
 

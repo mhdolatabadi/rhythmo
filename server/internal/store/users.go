@@ -18,9 +18,10 @@ var (
 const uniqueViolation = "23505"
 
 type User struct {
-	ID        string
-	Email     string
-	CreatedAt time.Time
+	StorageQuotaBytes *int64
+	ID                string
+	Email             string
+	CreatedAt         time.Time
 	// Verified is the admin's manual verification badge (#172).
 	Verified   bool
 	VerifiedAt *time.Time
@@ -32,13 +33,13 @@ type User struct {
 }
 
 // userColumns are the columns scanUser reads, in order.
-const userColumns = `id::text, email, created_at, verified, verified_at, email_verified_at, session_epoch`
+const userColumns = `id::text, email, created_at, verified, verified_at, email_verified_at, session_epoch, storage_quota_bytes`
 
 // scanUser reads userColumns, then any extra columns into extra.
 func scanUser(row pgx.Row, user *User, extra ...any) error {
 	return row.Scan(append([]any{
 		&user.ID, &user.Email, &user.CreatedAt, &user.Verified, &user.VerifiedAt, &user.EmailVerifiedAt,
-		&user.SessionEpoch,
+		&user.SessionEpoch, &user.StorageQuotaBytes,
 	}, extra...)...)
 }
 

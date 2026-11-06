@@ -15,6 +15,25 @@ if ! grep -qE '^NAFIR_DOMAIN=' .env; then
   exit 1
 fi
 
+# Turning transcription on: it runs unless deploy/.env sets
+# TRANSCRIPTION_DISABLED=true. A missing or short token is generated once and
+# kept in .env. The value is never printed.
+transcription_disabled="$(grep -E '^[[:space:]]*TRANSCRIPTION_DISABLED[[:space:]]*=' .env | tail -n 1 | cut -d= -f2- | tr -d " \t\r\"'" | tr '[:upper:]' '[:lower:]' || true)"
+case "$transcription_disabled" in
+  true | 1 | yes | on) transcription_enabled=false ;;
+  *) transcription_enabled=true ;;
+esac
+unset transcription_disabled
+if [[ $transcription_enabled == true ]]; then
+  transcription_token="$(grep -E '^TRANSCRIPTION_TOKEN=' .env | tail -n 1 | cut -d= -f2- | tr -d '\r' || true)"
+  if (( ${#transcription_token} < 32 )); then
+    sed -i '/^TRANSCRIPTION_TOKEN=/d' .env
+    printf 'TRANSCRIPTION_TOKEN=%s\n' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
+    echo "Generated TRANSCRIPTION_TOKEN in deploy/.env."
+  fi
+  unset transcription_token
+fi
+
 git fetch --prune origin main
 git checkout --detach "$revision"
 
@@ -22,7 +41,7 @@ git checkout --detach "$revision"
 # changing running containers, so a missing image leaves production untouched.
 export NAFIR_IMAGE_TAG="$(git rev-parse HEAD)"
 compose_args=()
-if grep -qE '^TRANSCRIPTION_ENABLED=true$' .env; then
+if [[ $transcription_enabled == true ]]; then
   compose_args=(--profile transcription)
   export TRANSCRIPTION_URL=http://transcriber:8090
 fi

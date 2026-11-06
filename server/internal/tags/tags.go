@@ -9,6 +9,7 @@
 package tags
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -86,6 +87,34 @@ type Info struct {
 	Metadata      Metadata
 	PayloadSHA256 [sha256.Size]byte
 	PayloadBytes  int64
+}
+
+// ReadMetadata reads only the leading tag headers, without scanning or
+// fingerprinting the audio payload. Upload completion must stay inexpensive.
+func ReadMetadata(r io.Reader, fileName string) (Metadata, error) {
+	br := bufio.NewReader(r)
+	switch strings.ToLower(path.Ext(fileName)) {
+	case ".mp3":
+		tag, err := readID3(br)
+		if err != nil {
+			return Metadata{}, err
+		}
+		return tag.metadata(), nil
+	case ".flac":
+		blocks, err := readFLACMetadata(br)
+		if err != nil {
+			return Metadata{}, err
+		}
+		return flacComment(blocks).metadata(), nil
+	case ".ogg", ".opus":
+		headers, err := readOggHeaders(br)
+		if err != nil {
+			return Metadata{}, err
+		}
+		return headers.comment.metadata(), nil
+	default:
+		return Metadata{}, ErrUnsupported
+	}
 }
 
 // Inspect reads the embedded metadata and fingerprints the audio of a file

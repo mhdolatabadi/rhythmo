@@ -166,6 +166,7 @@ The public pages (`/`, `/p/{token}`, `/store/…`, `/privacy`, `/delete-account`
 - **Google Search Console:** add the domain as a URL-prefix property and choose the *HTML tag* method. Put only the `content` value in `GOOGLE_SITE_VERIFICATION`.
 - **Bing Webmaster Tools:** do the same with `BING_SITE_VERIFICATION`.
 - After `docker compose up -d`, verify the site in each console, then submit `https://<domain>/sitemap.xml`. It is a sitemap index: `/sitemaps/pages.xml`, `/sitemaps/playlists.xml`, and paged `/sitemaps/songs-N.xml`, `artists-N.xml` and `albums-N.xml` files of up to 5,000 URLs each.
+- **Android App Links:** set `ANDROID_CERT_SHA256` to the SHA-256 fingerprint of the Android release signing certificate (comma-separate several). The Android release workflow prints it in its run summary. The API then serves `/.well-known/assetlinks.json`, and Android opens `https://${NAFIR_DOMAIN}/app…`, `/p/…` and `/store/t/…` links in the installed app instead of asking which app to use. Without it the file returns 404 and the links still open, but Android offers the browser too. After setting it, `adb shell pm verify-app-links --re-verify ir.mhdolatabadi.nafir` re-checks on a device.
 - **IndexNow (optional):** set `INDEXNOW_KEY` to a random string such as `openssl rand -hex 16`. The API serves it at `/<key>.txt` and, every 15 minutes, announces public pages that appeared or went away since the last check. The first check after a restart only records the pages. It needs `WEB_ORIGIN`; with either unset, nothing is sent.
 - Unknown paths answer with a 404 page that is never indexed.
 
@@ -465,18 +466,20 @@ and plain text in PostgreSQL. Machine transcripts may contain mistakes, especial
 with chanting, backing music and crowds. Original audio is never rewritten.
 Generated text is currently available to the owner, not shared playlist visitors.
 
-Provision and measure resources before enabling: the default CPU/int8 `small` model
+The default CPU/int8 `large-v3-turbo` model
 container is limited to 2 CPUs and 4 GiB RAM. Quality and processing time must be
 verified against real Persian recitations; these limits are not performance guarantees.
 For mostly Arabic recordings set `TRANSCRIPTION_LANGUAGE=auto` or `ar`. A larger
 model may need increased memory in `compose.yaml`.
 
-Set a random `TRANSCRIPTION_TOKEN` of at least 32 characters in `deploy/.env`, then
-`TRANSCRIPTION_ENABLED=true`. The normal deployment script enables the optional
-Compose profile, pulls the immutable transcriber image and starts it. No port is
-published; the API streams original audio directly over the internal container
-network using the token. The initial model download needs outbound access; subsequent
-loads reuse `transcription-models`. Recordings are never sent to a third party.
+It is on by default: every deployment enables the `transcription` Compose profile,
+pulls the immutable transcriber image and starts it. (`TRANSCRIPTION_ENABLED` is no
+longer read.) When `TRANSCRIPTION_TOKEN` is missing or shorter than 32 characters, the
+deployment script generates one into `.env` without printing it. No port is published; the API streams original audio directly over the
+internal container network using the token. The default `large-v3-turbo` model,
+much more accurate in Persian than `small`, is built into the image, so the server
+needs no access to Hugging Face. Another `TRANSCRIPTION_MODEL` is downloaded on
+first start and reused from `transcription-models`. Recordings are never sent to a third party.
 
 One job runs at a time, with at most two active jobs per owner. Limits are 200 MiB
 and 2 hours of decoded audio. Status persists through app closure. Temporary audio
@@ -484,5 +487,5 @@ is deleted after each inference; transcripts are deleted with their track/accoun
 Failed jobs can be retried. After a worker crash its lease is recovered after
 2 hours; stale workers cannot overwrite a newer result. Jobs time out after
 110 minutes. Disabling the feature leaves stored results in the database, and
-reenabling recovers the queue. To roll back, set `TRANSCRIPTION_ENABLED=false` and
+reenabling recovers the queue. To turn it off, set `TRANSCRIPTION_DISABLED=true` and
 run the normal deployment workflow; do not delete the model volume or user data.

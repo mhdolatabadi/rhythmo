@@ -64,7 +64,7 @@ void main() {
     expect(item.artUri, _artwork);
     expect(item.displayTitle, 'First');
     expect(item.displaySubtitle, 'Artist');
-    expect(item.displayDescription, 'پخش از کتابخانهٔ ریتمو');
+    expect(item.displayDescription, 'پخش از ریتمو');
     expect(item.extras?['location'], 'server');
   });
 

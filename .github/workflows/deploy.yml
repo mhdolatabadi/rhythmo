@@ -12,7 +12,7 @@ on:
         default: main
 
 permissions:
-  actions: read
+  actions: write
   contents: read
 
 concurrency:
@@ -26,7 +26,7 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -92,3 +92,16 @@ jobs:
           DEPLOY_SHA: ${{ steps.revision.outputs.sha }}
         run: |
           ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes             -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST"             "bash '$DEPLOY_PATH/deploy/deploy.sh' '$DEPLOY_SHA'"
+
+      - name: Load release automation from the workflow revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-automation
+
+      - name: Publish the deployed revision to Cafe Bazaar
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ steps.revision.outputs.sha }}
+        run: release-automation/scripts/release-deployed-android.sh

@@ -50,7 +50,7 @@ class _BotLinkSectionState extends State<BotLinkSection> {
               title: const Text('اتصال به بات'),
               subtitle: Text(
                 'آهنگ‌ها را در $names برای بات ریتمو بفرستید تا مستقیم به '
-                'کتابخانه‌تان اضافه شوند. برای اتصال، کد بگیرید و برای بات بفرستید.',
+                '«موسیقی من» اضافه شوند. برای اتصال، کد بگیرید و برای بات بفرستید.',
               ),
             ),
             Padding(

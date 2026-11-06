@@ -153,6 +153,12 @@ func (t *Tracks) CompleteTagRewrite(
 			return err
 		}
 		if newSize > size {
+			quota, quotaErr := effectiveQuota(ctx, tx, track.OwnerID, maxOwnerBytes)
+			if quotaErr != nil {
+				return quotaErr
+			}
+			maxOwnerBytes = quota
+
 			var used int64
 			if err := tx.QueryRow(ctx,
 				`SELECT COALESCE(SUM(size_bytes), 0)::bigint FROM tracks WHERE owner_id = $1::uuid`,

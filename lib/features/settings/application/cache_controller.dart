@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/features/player/data/audio_cache.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 /// The audio cache as the Settings screen sees it: its size, and clearing it.
-class CacheController extends ChangeNotifier {
+class CacheController extends ChangeNotifier with QuietAfterDispose {
   CacheController(
       {required AudioCache cache, required String? Function() playing})
       : _cache = cache,

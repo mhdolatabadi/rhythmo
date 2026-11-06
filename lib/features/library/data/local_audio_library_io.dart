@@ -36,6 +36,11 @@ class AndroidLocalAudioLibrary implements LocalAudioLibrary {
           sizeBytes: (map['sizeBytes'] as num?)?.toInt() ?? 0,
           fileName: text('fileName'),
           sourceUri: Uri.parse(map['uri']! as String),
+          addedAt: switch (map['addedAtMs']) {
+            final num ms when ms > 0 =>
+              DateTime.fromMillisecondsSinceEpoch(ms.toInt()),
+            _ => null,
+          },
         );
       }).toList(growable: false);
       return LocalAudioResult(LocalAudioStatus.loaded, tracks);

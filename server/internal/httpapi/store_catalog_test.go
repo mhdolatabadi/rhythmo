@@ -134,6 +134,17 @@ func (c *fakeCatalog) SetHidden(_ context.Context, entryID, adminID string, hidd
 	return nil
 }
 
+func (c *fakeCatalog) ModerateEntry(_ context.Context, entryID, actorID string, remove bool) error {
+	if entryID != c.entry.ID {
+		return store.ErrNotFound
+	}
+	if remove {
+		c.hidden, c.hiddenBy = true, actorID
+	}
+	c.reports = nil
+	return nil
+}
+
 type fakeCopier struct {
 	copied []string
 	quota  bool
@@ -306,7 +317,7 @@ func TestReportingAndHidingAStoreSong(t *testing.T) {
 	expectError(t, api.call("POST", "/api/v1/store/tracks/unknown/report", `{"reason":"other"}`, api.admin, "203.0.113.1"), http.StatusNotFound, "not_found")
 
 	reports, hide := "/api/v1/admin/store/reports", "/api/v1/admin/store/tracks/"+storeEntryID+"/hidden"
-	for _, c := range []struct{ method, path string }{{"GET", reports}, {"PUT", hide}, {"DELETE", hide}} {
+	for _, c := range []struct{ method, path string }{{"GET", reports}, {"PUT", hide}, {"DELETE", hide}, {"DELETE", "/api/v1/admin/store/tracks/" + storeEntryID}, {"POST", "/api/v1/admin/store/tracks/" + storeEntryID + "/dismiss-reports"}} {
 		expectError(t, api.call(c.method, c.path, "", "", "203.0.113.1"), http.StatusUnauthorized, "unauthorized")
 		expectError(t, api.call(c.method, c.path, "", api.member, "203.0.113.1"), http.StatusForbidden, "admin_required")
 	}
@@ -364,5 +375,13 @@ func TestPopularAndTrendingAreOpenToEveryone(t *testing.T) {
 			t.Fatalf("%s = %d %s", path, response.Code, response.Body)
 		}
 		expectError(t, api.call("GET", path+"?limit=0", "", "", "203.0.113.1"), http.StatusBadRequest, "invalid_limit")
+	}
+}
+
+func TestAdminCanRemoveReportedSong(t *testing.T) {
+	api := newStoreTestAPI(t, AnonymousLimits{})
+	response := api.call("DELETE", "/api/v1/admin/store/tracks/"+storeEntryID, "", api.admin, "203.0.113.1")
+	if response.Code != http.StatusNoContent || !api.catalog.hidden {
+		t.Fatalf("remove = %d %s", response.Code, response.Body)
 	}
 }

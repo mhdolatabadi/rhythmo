@@ -4,6 +4,7 @@ import 'package:rhythmo/features/journey/application/listening_journey.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/app/app_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:rhythmo/features/playlists/presentation/add_to_playlist.dart';
 import 'package:flutter/services.dart';
 import 'package:rhythmo/features/link_import/application/link_import_controller.dart';
 import 'package:rhythmo/features/link_import/data/link_import.dart';
@@ -13,6 +14,10 @@ import 'package:rhythmo/app/app_configuration.dart';
 import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/app/backend_gate.dart';
 import 'package:rhythmo/core/api/api_client.dart';
+import 'package:rhythmo/core/network/network_status.dart';
+import 'package:rhythmo/core/network/offline_strip.dart';
+import 'package:rhythmo/core/offline/offline_outbox.dart';
+import 'package:rhythmo/core/offline/response_cache.dart';
 import 'package:rhythmo/features/auth/application/auth_controller.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
 import 'package:rhythmo/features/auth/presentation/auth_gate.dart';
@@ -28,12 +33,15 @@ import 'package:rhythmo/features/library/data/local_audio_upload.dart';
 import 'package:rhythmo/features/library/data/track_download.dart';
 import 'package:rhythmo/features/lyrics/application/lyrics_controller.dart';
 import 'package:rhythmo/features/player/application/favorite_tracks.dart';
+import 'package:rhythmo/features/player/application/last_playback.dart';
 import 'package:rhythmo/features/player/application/media_session.dart';
 import 'package:rhythmo/features/player/application/playback_settings.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/data/audio_cache.dart';
 import 'package:rhythmo/features/player/data/audio_engine.dart';
+import 'package:rhythmo/features/player/data/offline_songs.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
+import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/features/settings/application/cache_controller.dart';
 import 'package:rhythmo/features/upload/application/upload_controller.dart';
 import 'package:rhythmo/features/upload/data/audio_picker.dart';
@@ -41,11 +49,13 @@ import 'package:rhythmo/features/upload/data/storage_uploader.dart';
 import 'package:rhythmo/features/store/application/store_controller.dart';
 import 'package:rhythmo/features/store/data/store_catalog.dart';
 import 'package:rhythmo/features/likes/data/likes.dart';
+import 'package:rhythmo/features/notifications/application/notifications_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) await BrowserContextMenu.disableContextMenu();
   final mediaSession = await startMediaSession();
+  await AppConfiguration.loadLaunchLink();
   runApp(ProviderScope(child: RhythmoApp(mediaSession: mediaSession)));
 }
 
@@ -62,6 +72,7 @@ class RhythmoApp extends StatefulWidget {
     this.linkImportsApi,
     this.identifyApi,
     this.storeApi,
+    this.notificationsApi,
     this.likesApi,
     this.snippetRecorder,
     this.historyApi,
@@ -75,9 +86,14 @@ class RhythmoApp extends StatefulWidget {
     this.trackDownloader,
     this.favoritesStore,
     this.playbackSettingsStore,
+    this.lastPlaybackStore,
     this.mediaSession,
     this.appPreferencesStore,
+    this.offlineCache,
   });
+
+  /// Where server answers are kept for offline use; the device by default.
+  final ResponseCache? offlineCache;
 
   /// Test overrides; by default these talk to [AppConfiguration.apiBaseUri]
   /// and the real device.
@@ -90,6 +106,7 @@ class RhythmoApp extends StatefulWidget {
   final LinkImportsApi? linkImportsApi;
   final IdentifyApi? identifyApi;
   final StoreApi? storeApi;
+  final NotificationsApi? notificationsApi;
   final LikesApi? likesApi;
   final SnippetRecorder? snippetRecorder;
   final HistoryApi? historyApi;
@@ -103,6 +120,7 @@ class RhythmoApp extends StatefulWidget {
   final TrackDownloader? trackDownloader;
   final FavoritesStore? favoritesStore;
   final PlaybackSettingsStore? playbackSettingsStore;
+  final LastPlaybackStore? lastPlaybackStore;
 
   /// System media controls; null in tests and where they are unavailable.
   final RhythmoAudioHandler? mediaSession;
@@ -112,9 +130,24 @@ class RhythmoApp extends StatefulWidget {
 }
 
 class _RhythmoAppState extends State<RhythmoApp> {
+  /// Whether the server answers; the app keeps working offline.
+  late final NetworkStatus _network = NetworkStatus(
+      // A closure: the API client is built with this status itself.
+      probe: () async {
+    await (widget.healthCheck ?? _apiClient?.checkHealth)?.call();
+  });
+
   late final ApiClient? _apiClient = AppConfiguration.apiBaseUri == null
       ? null
-      : ApiClient(AppConfiguration.apiBaseUri!);
+      : ApiClient(AppConfiguration.apiBaseUri!,
+          offlineCache: _offlineStore, network: _network);
+
+  late final ResponseCache _offlineStore =
+      widget.offlineCache ?? createResponseCache();
+
+  /// Likes and playlist changes made offline, sent once back online.
+  late final OfflineOutbox _outbox =
+      OfflineOutbox(store: _offlineStore, account: () => _auth?.user?.id);
   late final AuthApi? _authApi = widget.authApi ?? _apiClient;
   late final AuthController? _auth = _authApi == null
       ? null
@@ -131,8 +164,23 @@ class _RhythmoAppState extends State<RhythmoApp> {
       ? null
       : PlaylistsController(
           api: _playlistsApi,
+          accountId: () => _auth?.user?.id,
+          deviceStore: SecureDevicePlaylistStore(),
+          subscriptions: _notificationsApi,
+          channels: _apiClient,
+          outbox: _outbox,
           token: () => _auth?.token,
           isAdmin: () => _auth?.user?.isAdmin ?? false);
+
+  late final NotificationsApi? _notificationsApi = widget.notificationsApi ??
+      _apiClient ??
+      (_playlistsApi is NotificationsApi
+          ? _playlistsApi as NotificationsApi
+          : null);
+  late final NotificationsController? _notifications = _notificationsApi == null
+      ? null
+      : NotificationsController(
+          api: _notificationsApi, token: () => _auth?.token);
 
   late final BotsApi? _botsApi = widget.botsApi ?? _apiClient;
   late final BotLinkController? _botLinks = _botsApi == null
@@ -222,15 +270,21 @@ class _RhythmoAppState extends State<RhythmoApp> {
       : (PlayerController(
           api: _tracksApi,
           engine: widget.audioEngine ?? JustAudioEngine(cache: _audioCache),
+          // Songs kept whole on the device play without a link, offline too.
+          isCached: _audioCache.hasComplete,
           token: () => _auth?.token,
           favorites: FavoriteTracks(
             store: widget.favoritesStore ?? SecureFavoritesStore(),
             // Likes live on the server once signed in (#284).
             api: widget.likesApi ?? _apiClient,
             token: () => _auth?.token,
+            outbox: _outbox,
           )..load(),
           settingsStore:
               widget.playbackSettingsStore ?? SecurePlaybackSettingsStore(),
+          // The mini player shows what was playing when the app was closed.
+          lastPlaybackStore:
+              widget.lastPlaybackStore ?? SecureLastPlaybackStore(),
           // A real listen goes into the recently played history.
           journey: _journey,
           onListened: (track) => _recent?.record(track),
@@ -257,6 +311,14 @@ class _RhythmoAppState extends State<RhythmoApp> {
           onDownloaded: _localAudio.load,
         );
 
+  /// «ذخیره برای آفلاین» in the browser; null where the audio cache
+  /// already keeps played songs.
+  late final OfflineSongs? _offlineSongs = switch ((_audioCache, _player)) {
+    (final OfflineSongStore store, final PlayerController player) =>
+      OfflineSongs(store: store, link: player.linkFor)..load(),
+    _ => null,
+  };
+
   late final CacheController _cache = CacheController(
     cache: _audioCache,
     playing: () => _player?.track?.id,
@@ -269,10 +331,13 @@ class _RhythmoAppState extends State<RhythmoApp> {
   void initState() {
     super.initState();
     _auth?.addListener(_selectJourneyAccount);
+    _auth?.addListener(_onAuthChanged);
+    _network.addListener(_onNetworkChanged);
     _selectJourneyAccount();
     _preferences.load();
     final player = _player;
     if (player != null) {
+      player.restoreLastPlayback();
       widget.mediaSession?.attach(
         player,
         artworkFor: (track) async {
@@ -283,9 +348,55 @@ class _RhythmoAppState extends State<RhythmoApp> {
     }
   }
 
+  AuthStatus? _authStatus;
+
+  /// Nothing of an account stays on the device after it signs out.
+  void _onAuthChanged() {
+    final status = _auth?.status;
+    if (status == AuthStatus.signedOut && _authStatus == AuthStatus.signedIn) {
+      _apiClient?.forgetOffline();
+    }
+    // Changes left from an earlier offline session go out on sign-in.
+    if (status == AuthStatus.signedIn &&
+        _authStatus != AuthStatus.signedIn &&
+        _network.online) {
+      _sendOfflineChanges();
+    }
+    _authStatus = status;
+  }
+
+  Future<void> _sendOfflineChanges() => _outbox.flush((action) async {
+        if (await _player?.favorites.sendPending(action) ?? false) return;
+        await _playlists?.sendPending(action);
+      });
+
+  bool _wasOnline = true;
+
+  /// Back online: check the session and bring what was shown from the
+  /// device up to date.
+  void _onNetworkChanged() {
+    final online = _network.online;
+    if (online && !_wasOnline) {
+      _catchUp();
+    }
+    _wasOnline = online;
+  }
+
+  Future<void> _catchUp() async {
+    await _auth?.revalidate();
+    // What was changed offline first, so the reloads include it.
+    await _sendOfflineChanges();
+    _library?.load();
+    _playlists?.load();
+    _player?.favorites.refresh();
+  }
+
   @override
   void dispose() {
     _auth?.removeListener(_selectJourneyAccount);
+    _auth?.removeListener(_onAuthChanged);
+    _network.removeListener(_onNetworkChanged);
+    _network.dispose();
     _artwork.dispose();
     _journey.dispose();
     _preferences.dispose();
@@ -314,10 +425,26 @@ class _RhythmoAppState extends State<RhythmoApp> {
         listenable: _preferences,
         builder: (context, _) => MaterialApp(
           title: 'rhythmo',
-          builder: (context, child) => TrackArtworkScope(
-            controller: _artwork,
-            child: child ?? const SizedBox.shrink(),
-          ),
+          builder: (context, child) {
+            final page = TrackArtworkScope(
+              controller: _artwork,
+              child: OfflineStrip(
+                network: _network,
+                child: child ?? const SizedBox.shrink(),
+              ),
+            );
+            // Screens pushed over everything, like the full-screen player,
+            // still reach the listener's playlists.
+            final withSongs = switch (_offlineSongs) {
+              final songs? => OfflineSongsScope(songs: songs, child: page),
+              null => page,
+            };
+            return switch (_playlists) {
+              final playlists? =>
+                PlaylistsScope(controller: playlists, child: withSongs),
+              null => withSongs,
+            };
+          },
           debugShowCheckedModeBanner: false,
           // The UI is Persian only: right-to-left layout and Persian Material
           // strings (tooltips, dialogs), whatever the device language is.
@@ -329,6 +456,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
           themeMode: _preferences.value.themeMode,
           home: _WebEdgeInsets(
             child: BackendGate(
+              network: _network,
               healthCheck: widget.healthCheck ?? _apiClient?.checkHealth,
               child: _auth == null ||
                       _uploads == null ||
@@ -351,6 +479,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
                       linkImports: _linkImports,
                       identify: _identify,
                       store: _store,
+                      notifications: _notifications,
                       picker: widget.picker ?? FilePickerAudioPicker(),
                     ),
             ),

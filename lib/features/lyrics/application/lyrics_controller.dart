@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/lyrics/data/lyrics.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 /// Why lyrics can't be shown for a track at all.
 enum LyricsUnavailable {
@@ -17,7 +18,7 @@ enum LyricsUnavailable {
 
 /// Loads lyrics from the server and keeps them for the session, so going
 /// back to a track doesn't ask again.
-class LyricsController extends ChangeNotifier {
+class LyricsController extends ChangeNotifier with QuietAfterDispose {
   LyricsController({required LyricsApi api, required String? Function() token})
       : _api = api,
         _token = token;

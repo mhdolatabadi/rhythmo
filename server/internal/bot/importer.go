@@ -93,13 +93,14 @@ func (im *Importer) Check(p Provider, f File) string {
 }
 
 // Queue records the import; ErrDuplicateImport means the message was already
-// queued by an earlier delivery.
-func (im *Importer) Queue(ctx context.Context, p Provider, u Update, userID string) (store.BotImport, error) {
+// queued by an earlier delivery. A post in a synced channel names the
+// playlist the track then joins.
+func (im *Importer) Queue(ctx context.Context, p Provider, u Update, userID string, playlistID *string) (store.BotImport, error) {
 	f := u.File
 	return im.imports.AddImport(ctx, store.BotImport{
 		Provider: p.Name(), ChatID: u.ChatID, MessageID: u.MessageID, UserID: userID,
 		FileID: f.ID, FileName: FileName(*f), Title: nonEmpty(f.Title), Artist: nonEmpty(f.Performer),
-		SizeBytes: f.SizeBytes,
+		SizeBytes: f.SizeBytes, PlaylistID: playlistID,
 	})
 }
 

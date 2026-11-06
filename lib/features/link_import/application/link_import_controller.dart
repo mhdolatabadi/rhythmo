@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/link_import/data/link_import.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 /// The outcome of submitting a link: queued, or refused with a message.
 typedef LinkSubmitResult = ({bool queued, String message});
@@ -8,7 +9,7 @@ typedef LinkSubmitResult = ({bool queued, String message});
 /// Adds music from links and remembers which of this session's imports
 /// failed, so the library can say why. Progress itself shows with the
 /// library's imports in progress.
-class LinkImportController extends ChangeNotifier {
+class LinkImportController extends ChangeNotifier with QuietAfterDispose {
   LinkImportController({
     required LinkImportsApi api,
     required String? Function() token,
@@ -76,7 +77,7 @@ class LinkImportController extends ChangeNotifier {
       return (
         queued: true,
         message:
-            'در حال اضافه کردن «${job.fileName}»؛ وقتی آماده شد در کتابخانه می‌آید.',
+            'در حال اضافه کردن «${job.fileName}»؛ وقتی آماده شد در «موسیقی من» می‌آید.',
       );
     } on ApiException catch (e) {
       return (queued: false, message: linkImportMessage(e.code));
@@ -108,8 +109,8 @@ class LinkImportController extends ChangeNotifier {
       return (
         queued: true,
         message: jobs.length == 1
-            ? 'در حال اضافه کردن «${jobs.single.fileName}»؛ وقتی آماده شد در کتابخانه می‌آید.'
-            : '${jobs.length} فایل در حال اضافه شدن است؛ وقتی آماده شوند در کتابخانه می‌آیند.',
+            ? 'در حال اضافه کردن «${jobs.single.fileName}»؛ وقتی آماده شد در «موسیقی من» می‌آید.'
+            : '${jobs.length} فایل در حال اضافه شدن است؛ وقتی آماده شوند در «موسیقی من» می‌آیند.',
       );
     } on ApiException catch (e) {
       return (queued: false, message: linkImportMessage(e.code));

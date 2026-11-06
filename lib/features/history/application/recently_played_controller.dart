@@ -2,12 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/library/application/library_entries.dart';
 import 'package:rhythmo/features/library/data/track.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum RecentlyPlayedStatus { loading, loaded, error }
 
 /// The account's recently played tracks, kept by the server so Web and
 /// Android show the same list.
-class RecentlyPlayedController extends ChangeNotifier {
+class RecentlyPlayedController extends ChangeNotifier with QuietAfterDispose {
   RecentlyPlayedController({
     required HistoryApi api,
     required String? Function() token,

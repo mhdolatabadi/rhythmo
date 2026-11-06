@@ -1,6 +1,6 @@
 module github.com/mhdolatabadi/rhythmo/server
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/go-text/typesetting v0.3.5

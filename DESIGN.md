@@ -14,7 +14,7 @@ colors:
   violet-container: "#2A2454"
   on-violet-container: "#E5DFFF"
   text: "#F5F1F7"
-  text-muted: "#D0C8D4"
+  text-muted: "#A9A1AE"
   outline: "#8B8290"
   outline-quiet: "#3C3743"
   glass-border: "#FFFFFF33"
@@ -22,28 +22,28 @@ colors:
 typography:
   display:
     fontFamily: "Vazirmatn"
-    fontSize: "34px"
-    fontWeight: 800
-    lineHeight: 1.25
+    fontSize: "24px"
+    fontWeight: 500
+    lineHeight: 1.35
   headline:
     fontFamily: "Vazirmatn"
-    fontSize: "24px"
-    fontWeight: 800
-    lineHeight: 1.35
+    fontSize: "20px"
+    fontWeight: 500
+    lineHeight: 1.4
   title:
     fontFamily: "Vazirmatn"
-    fontSize: "20px"
-    fontWeight: 800
-    lineHeight: 1.4
+    fontSize: "15px"
+    fontWeight: 500
+    lineHeight: 1.45
   body:
     fontFamily: "Vazirmatn"
-    fontSize: "16px"
+    fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.6
   label:
     fontFamily: "Vazirmatn"
-    fontSize: "14px"
-    fontWeight: 600
+    fontSize: "13px"
+    fontWeight: 500
     lineHeight: 1.4
 rounded:
   xs: "8px"
@@ -67,7 +67,7 @@ components:
     backgroundColor: "{colors.ember}"
     textColor: "{colors.on-ember}"
     rounded: "{rounded.md}"
-    padding: "12px 20px"
+    padding: "10px 16px"
     height: "48px"
   button-tonal:
     backgroundColor: "{colors.violet-container}"
@@ -84,7 +84,7 @@ components:
     backgroundColor: "{colors.surface-strong}"
     rounded: "{rounded.sheet}"
   track-row:
-    height: "64px"
+    height: "56px"
     rounded: "{rounded.md}"
 ---
 
@@ -101,13 +101,18 @@ honest (see *Do's and Don'ts*).
 the owner)*
 
 rhythmo is a dark room with music playing. The canvas is near-black
-night, lit by two slow lights: ember red (the music, and anything you can
-press to make it play) and a cool violet (secondary, the library's quiet
-companion). Surfaces are frosted glass: translucent, softly bordered, and
-blurred only where a layer truly floats over content. The interface is an
+night, lit by a still aurora of two lights: ember red from the top corner
+(the music, and anything you can press to make it play) and a cool violet
+from the opposite side (secondary, the library's quiet companion). These
+are the only two brand colours; a screen is never tinted by the playing
+track (a cover without art still gets its own quiet tile colour). Surfaces
+are frosted glass: translucent, softly bordered, and blurred only where a
+layer truly floats over content. The interface is an
 *Operate* surface: scanning a library, finding a song and controlling
-playback outrank decoration. Its personality lives in precise details: the
-breathing artwork, each track's own tint, the ambient light.
+playback outrank decoration, and the layout is compact: small covers, tight
+rows, bold but modest titles. Its personality lives in precise details: the
+still aurora and the small equalizer beside the playing track, the only
+thing that moves on its own.
 
 **Key Characteristics:**
 - Dark first. The dark glass theme is the brand and the default. A light
@@ -126,9 +131,15 @@ breathing artwork, each track's own tint, the ambient light.
 A near-black night with one warm and one cool light.
 
 ### Primary
-- **Ember** (#FF626A): primary buttons, the play control, the playing line
-  in lyrics, sliders, focus rings and the active tab. Text on it is
+- **Ember** (#FF626A): the primary button, the add button, the playing
+  line in lyrics, focus rings and the active tab. Text on it is
   **On-ember** (#250005).
+- **White** (Text on night) marks what is on or playing: every play
+  button (`rhythmoPlayStyle`), the dock's selected item, switches that
+  are on and slider tracks. Text buttons are plain text colour, not
+  ember.
+- **Artwork tints** (`artworkTint`): tiles standing in for missing cover
+  art take dark hues between violet and ember only, never green or blue.
 - **Ember Container** (#462026) with **On-ember Container** (#FFDADB): the
   playing track's artwork tile and other "now" highlights.
 
@@ -139,42 +150,59 @@ A near-black night with one warm and one cool light.
 
 ### Neutral
 - **Night** (#070810): the canvas, from which the ambient gradient
-  (#17101D → #090B14 → night) rises.
+  (#17101D → #090B14 → night) rises. On it sit two blurred glows, ember
+  (26%) at the top end corner and violet (20%) on the start side, fading
+  into night at the bottom (`RhythmoBackdrop`). The aurora never moves.
 - **Surface / Surface Strong / Surface Raised** (#121522, #191D2D,
   #23283A): glass bases, sheets and the highest container.
-- **Text** (#F5F1F7) and **Text Muted** (#D0C8D4): both meet 4.5:1 on every
-  surface, including every artwork tint.
+- **Text** (#F5F1F7) and **Text Muted** (#A9A1AE): both meet 4.5:1 on every
+  surface (muted is 8:1 on night, 5.9:1 on Surface Raised). Muted carries
+  every secondary line, so the main line reads first.
 - **Outline** (#8B8290) for control borders (3:1). **Outline Quiet**
   (#3C3743) for dividers.
 - **Glass Border** (white at 20%) and **Glass Border Soft** (white at 12%).
 
 ### Named Rules
-**The One Light Rule.** A screen has one ember-filled control at a time:
-the action that matters most. Everything else is tonal, outlined or text.
+**The One Light Rule.** A screen has one bright filled control at a time:
+the action that matters most. Where music plays that is the white play
+button; elsewhere it is ember. Everything else is white-on-state, tonal,
+outlined or text.
 
 **The No-Grey-On-Colour Rule.** Text on a tint or container uses that
 container's own "on" colour, never a generic grey.
 
 ## Typography
 
-**Font:** Vazirmatn (bundled, weights 400, 500 and 700; 800 renders as the 700 cut), with Latin and
+**Font:** Vazirmatn (bundled, weights 400, 500 and 700), with Latin and
 digits in the same family. Persian digits come from `persianDigits()`.
 
-**Character:** One family carries everything. Hierarchy comes from weight
-(800 for headings, 400 for reading) and size steps, never from a second
-typeface.
+**Character:** Calm. Six sizes and three weights. Hierarchy comes first from
+colour (text vs. muted), then from size, and only last from weight. Nothing
+on a screen is heavier than it needs to be.
 
 ### Hierarchy
-- **Display** (800, 34px, 1.25): rare. The library's large collapsing title.
-- **Headline** (800, 24px, 1.35): the now-playing title, dialog titles.
-- **Title** (800, 20px, 1.4; titleMedium 700, 16px): section and sheet
-  headings, list titles.
-- **Body** (400, 16/14px, 1.6): descriptions and lyrics. Lines stay within
-  65–75 characters (`RhythmoSpace.readingWidth`).
-- **Label** (600, 14px; 500, 12px): buttons, chips, times. Times use
-  tabular figures.
+- **Display** (500, 24px, 1.35): rare. The library's large collapsing title.
+- **Headline** (500, 20px; headlineSmall 18px): the now-playing title and
+  dialog titles. Big enough, never bold.
+- **Title** (500, 15px; titleSmall 13px): sheet titles. Section labels use
+  titleSmall in Text Muted: quiet signposts, not headings.
+- **Body** (400, 15/13/12px, 1.5–1.6): list rows use bodyLarge for the main
+  line and bodyMedium in Text Muted for the second. Lines stay within 65–75
+  characters (`RhythmoSpace.readingWidth`).
+- **Label** (500, 13/12/11px): buttons, chips, times. Times use tabular
+  figures.
 
 ### Named Rules
+**The Quiet Weight Rule.** Bold (700) is for buttons, the playing line in
+lyrics and nothing else. A row that is playing goes to 500, not bold.
+
+**The Two Tones Rule.** A row has at most two lines: the name in Text, the
+detail in Text Muted at a smaller size. Never a third colour, never two
+bold lines.
+
+**The No Divider Rule.** Rows in a list are separated by space and artwork,
+not by lines.
+
 **The Diacritic Room Rule.** Persian body text never goes below a 1.5 line
 height; Arabic-script marks must not collide.
 
@@ -188,11 +216,44 @@ height; Arabic-script marks must not collide.
   (`RhythmoSpace.pageWidth`). Lists of settings rows are capped at 720px
   (`listWidth`), and reading columns such as now playing and identify at
   520px. Nothing touches the window edges.
-- **Spacing rhythm:** 4/8/12/16/20/24/32/48. Use tight steps (4–8) inside a
-  group and generous ones (16–24) between groups, with more space above a
-  heading than below it.
+- **Spacing rhythm:** 4/8/12/16/20/24/32/48. The app is compact: use tight
+  steps (4–8) inside a group and 12–16 between groups, with more space
+  above a heading than below it. 24 and up are rare.
+- **Density:** list covers are 40px and track rows 56px tall; controls
+  stay compact visually but every touch target is still at least 48px.
 - **Direction:** RTL by default. Time and transport stay left to right, as
   on every player. Each lyric line takes the direction of its own text.
+- **One shell, signed in or not.** Every screen, sign-in and error
+  screens included, sits on the aurora under the same brand header
+  (`RhythmoBrand`), with forms and welcomes in flat glass cards. The
+  listener's own collection is called «موسیقی من», never «کتابخانه».
+- **Quiet lists.** Every list (songs, گنجینه, playlists, settings) reads
+  the same: the count at the start of one toolbar and the tools at its far
+  end; rows sit straight on the page with no panel, no lines and no
+  chevrons. A row carries a badge only when it needs attention (only on
+  the device, uploading, failed, or from a bot); the usual places are
+  named on hover and to screen readers.
+- **Settings in groups.** «حساب و تنظیمات» runs: the account, storage,
+  playback, queue, journey, appearance, «این دستگاه», bots, «پشتیبانی»,
+  and the ways out last. Each group is one quiet card under a small muted
+  label (`SettingsGroup`).
+- **One way in.** Each place has a single entry point.
+  - **Header:** the brand and the notifications bell, nothing else.
+  - **Dock** (`RhythmoDock`, built on `RhythmoDockBar`): the main
+    navigation. The mini player sits above one pill of خانه، جست‌وجو،
+    موسیقی من and حساب. The pill is as wide as its items, centred, with an
+    equal gap between items. The selected item is a white pill with its
+    name; the others show only their icon, each a 48px target. The pill is
+    flat and opaque, not blurred. Guests get the same dock with خانه،
+    گنجینه and ورود.
+  - **خانه:** greets, then three small chips right under the greeting for
+    محبوب‌ها، گنجینه and «این آهنگ چیه؟», then «ادامه بده». It also shows the newest tracks
+    and what was played lately. It is capped at 880px like the library.
+  - **موسیقی من:** its tabs hold پسندیده‌ها, and the «+» add button lives
+    only here.
+  - **حساب:** opens the account (address, admin, sign-out) above the
+    settings.
+- The app opens on «موسیقی من».
 
 ## Elevation & Depth
 
@@ -207,7 +268,9 @@ Depth is a hybrid of tonal glass and a few soft shadows. Three glass levels
 
 ### Shadow Vocabulary
 - **Lift** (`0 12px 32px #00000073`): chrome and panels only.
-- **Artwork** (`0 18px 42px #00000073`): the now-playing artwork.
+- **Artwork** (`0 16px 32px -12px #00000073`): the now-playing artwork,
+  about 80% of the column wide, with an 18px radius. It holds still while
+  playing and paused alike.
 
 ### Named Rules
 **The Blur Budget Rule.** At most two blurred layers are on screen at once,

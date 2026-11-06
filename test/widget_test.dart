@@ -4,6 +4,8 @@ import 'package:rhythmo/features/settings/presentation/settings_screen.dart';
 import 'package:flutter/gestures.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rhythmo/features/library/presentation/rhythmo_dock.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
@@ -15,11 +17,13 @@ import 'package:rhythmo/features/upload/data/upload_models.dart';
 import 'package:rhythmo/features/library/application/library_controller.dart'
     show importPollDelays;
 import 'package:rhythmo/features/player/presentation/mini_player.dart';
-import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/features/playlists/presentation/popular_playlists_screen.dart';
 import 'package:rhythmo/features/store/data/store_catalog.dart' show StoreApi;
 import 'package:rhythmo/features/store/presentation/store_screen.dart';
 import 'package:rhythmo/main.dart';
+import 'package:rhythmo/core/offline/response_cache.dart';
+import 'package:rhythmo/core/network/offline_strip.dart';
+import 'package:rhythmo/features/library/presentation/library_screen.dart';
 
 import 'bot_link_controller_test.dart' show FakeBotsApi, linkedBale;
 import 'cache_controller_test.dart' show FakeAudioCache;
@@ -128,6 +132,15 @@ Future<void> _revealSetting(WidgetTester tester, Finder target) async {
   await tester.pumpAndSettle();
 }
 
+/// Signs out from «حساب», the one place the action lives.
+Future<void> _signOut(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('حساب'));
+  await tester.pumpAndSettle();
+  await _revealSetting(tester, find.text('خروج از حساب'));
+  await tester.tap(find.text('خروج از حساب'));
+  await tester.pumpAndSettle();
+}
+
 Future<void> _pumpApp(
   WidgetTester tester, {
   required TokenStore tokenStore,
@@ -142,9 +155,12 @@ Future<void> _pumpApp(
   StoreApi? store,
   bool settle = true,
   AppPreferencesStore? appPreferencesStore,
+  Future<void> Function()? healthCheck,
 }) async {
   await tester.pumpWidget(RhythmoApp(
-    healthCheck: () async {},
+    healthCheck: healthCheck ?? () async {},
+    // Files on disk never settle inside a widget test's fake clock.
+    offlineCache: MemoryResponseCache(),
     appPreferencesStore: appPreferencesStore ?? MemoryAppPreferencesStore(),
     authApi: api ?? FakeAuthApi(),
     tokenStore: tokenStore,
@@ -243,6 +259,7 @@ class FakeLinkImportsApi implements LinkImportsApi {
 }
 
 void main() {
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   testWidgets('shows setup instructions without API configuration', (
     tester,
   ) async {
@@ -251,14 +268,17 @@ void main() {
     expect(find.textContaining('API_BASE_URL'), findsOneWidget);
   });
 
-  testWidgets('shows retry when the API is unavailable', (tester) async {
-    await tester.pumpWidget(
-      RhythmoApp(healthCheck: () async => throw Exception('offline')),
+  testWidgets('offline, the app still opens and says it is offline',
+      (tester) async {
+    await _pumpApp(
+      tester,
+      tokenStore: MemoryTokenStore('valid-token'),
+      healthCheck: () async => throw Exception('offline'),
     );
-    await tester.pumpAndSettle();
 
-    expect(find.text('اتصال به سرور برقرار نشد'), findsOneWidget);
-    expect(find.text('تلاش دوباره'), findsOneWidget);
+    expect(find.text('اتصال به سرور برقرار نشد'), findsNothing);
+    expect(find.text(offlineStripText), findsOneWidget);
+    expect(find.byType(LibraryScreen), findsOneWidget);
   });
 
   testWidgets('without a saved token the sign-in screen is shown', (
@@ -287,10 +307,18 @@ void main() {
       expect(find.text('ورود / ثبت‌نام'), findsOneWidget);
 
       // Liking needs an account; the guest is offered sign-in instead.
+      await tester.ensureVisible(find.text('۵'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('۵'));
       await tester.pumpAndSettle();
       expect(find.text('برای پسندیدن وارد حسابت شو.'), findsOneWidget);
+      // The message sits over the bottom row; let it go before moving on.
+      ScaffoldMessenger.of(tester.element(find.text('loved')))
+          .hideCurrentSnackBar();
+      await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('loved'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('loved'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Their song'));
@@ -298,17 +326,23 @@ void main() {
       expect(tracks.calls, contains('shared:$token:s1'));
       expect(find.byTooltip('توقف'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('افزودن به حساب من'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('افزودن به حساب من'));
       await tester.pumpAndSettle();
       expect(
-          find.text('برای افزودن به کتابخانه وارد حسابت شو.'), findsOneWidget);
+          find.text('برای افزودن به موسیقی من وارد حسابت شو.'), findsOneWidget);
     });
 
     testWidgets('signing in from the guest home lands in the library',
         (tester) async {
       final tokens = MemoryTokenStore();
       await _pumpApp(tester, tokenStore: tokens, playlists: guestPlaylists());
+      await tester.ensureVisible(find.text('loved'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('loved'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('افزودن به حساب من'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('افزودن به حساب من'));
       await tester.pumpAndSettle();
@@ -350,12 +384,13 @@ void main() {
 
     await _submit(tester, 'listener@example.com', 'correct horse');
 
-    expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
     expect(await tokens.read(), 'valid-token');
-    // The header shows the account by its icon; the address is only the
-    // tooltip.
+    // The address lives on «حساب», not in the header.
     expect(find.text('listener@example.com'), findsNothing);
-    expect(find.byTooltip('listener@example.com'), findsOneWidget);
+    await tester.tap(find.byTooltip('حساب'));
+    await tester.pumpAndSettle();
+    expect(find.text('listener@example.com'), findsOneWidget);
     expect(find.byKey(const ValueKey('verified-badge')), findsNothing);
   });
 
@@ -383,7 +418,7 @@ void main() {
     expect(find.text('با این ایمیل قبلاً حساب ساخته شده است.'), findsOneWidget);
 
     await _submit(tester, 'new@example.com', 'long enough');
-    expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
   });
 
   testWidgets('a common password and too many attempts are explained', (
@@ -426,7 +461,7 @@ void main() {
   testWidgets('a saved valid token restores the session', (tester) async {
     await _pumpApp(tester, tokenStore: MemoryTokenStore('valid-token'));
 
-    expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
   });
 
   testWidgets('a rejected saved token is cleared and sign-in is shown', (
@@ -459,8 +494,7 @@ void main() {
     final tokens = MemoryTokenStore('valid-token');
     await _pumpApp(tester, tokenStore: tokens);
 
-    await tester.tap(find.byIcon(RhythmoIcons.signOut));
-    await tester.pumpAndSettle();
+    await _signOut(tester);
 
     expect(find.text('ورود به ریتمو'), findsOneWidget);
     expect(await tokens.read(), isNull);
@@ -480,9 +514,7 @@ void main() {
         api: api,
         playlists: FakePlaylistsApi()..public = [listed('loved', likes: 5)]);
 
-    await tester.tap(find.byTooltip('حساب و تنظیمات'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('تنظیمات').last);
+    await tester.tap(find.byTooltip('حساب'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('حذف حساب کاربری'), 200,
         scrollable: find.byType(Scrollable).first);
@@ -544,10 +576,10 @@ void main() {
     await tester.tap(find.text('افزودن از فایل'));
     await tester.pumpAndSettle();
 
-    expect(find.text('«Song» به کتابخانه اضافه شد.'), findsOneWidget);
+    expect(find.text('«Song» به «موسیقی من» اضافه شد.'), findsOneWidget);
     await tester.tap(find.byTooltip('بستن'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('به کتابخانه اضافه شد'), findsNothing);
+    expect(find.textContaining('به «موسیقی من» اضافه شد'), findsNothing);
   });
 
   testWidgets('an unsupported file shows an error', (tester) async {
@@ -618,32 +650,28 @@ void main() {
     expect(find.textContaining('مگابایت'), findsNothing);
     // Storage use lives in the account screen, not above the tracks.
     expect(find.textContaining('از ۵.۰ گیگابایت'), findsNothing);
-    expect(find.text('کتابخانهٔ شما خالی است'), findsNothing);
+    expect(find.text('«موسیقی من» خالی است'), findsNothing);
   });
 
   testWidgets('settings opens playlists even when their tab is hidden',
       (tester) async {
     final store = MemoryAppPreferencesStore()
-      ..value = const AppPreferences(
-          hidden: {LibraryTab.playlists, LibraryTab.favorites});
+      ..value = const AppPreferences(hidden: {LibraryTab.playlists});
     await _pumpApp(tester,
         tokenStore: MemoryTokenStore('valid-token'),
         appPreferencesStore: store,
         playlists: FakePlaylistsApi());
-    expect(find.widgetWithText(Tab, 'فهرست‌های پخش'), findsNothing);
-    await tester.tap(find.byTooltip('تنظیمات'));
+    expect(find.widgetWithText(Tab, 'فهرست‌ها'), findsNothing);
+    await tester.tap(find.byTooltip('حساب'));
     await tester.pumpAndSettle();
     await _revealSetting(tester, find.text('مدیریت فهرست‌های پخش'));
     await tester.tap(find.text('مدیریت فهرست‌های پخش'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'فهرست‌های پخش'), findsOneWidget);
-    await tester.tap(find.byTooltip('فهرست‌های پخش محبوب'));
-    await tester.pumpAndSettle();
-    expect(find.byType(PopularPlaylistsScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('popular playlists and the store open from the top bar',
+  testWidgets('popular playlists, the store and identify open from خانه only',
       (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
@@ -654,25 +682,25 @@ void main() {
         playlists: FakePlaylistsApi()..public = [listed('loved', likes: 5)],
         store: FakeStoreApi());
     expect(tester.takeException(), isNull);
-
-    final popular = find.byTooltip('فهرست‌های پخش محبوب');
-    final store = find.byTooltip('استور');
-    for (final button in [popular, store]) {
-      expect(find.descendant(of: find.byType(AppBar), matching: button),
-          findsOneWidget);
-      final size = tester.getSize(button);
-      expect(size.width, greaterThanOrEqualTo(48));
-      expect(size.height, greaterThanOrEqualTo(48));
+    // The header keeps only the brand and the bell.
+    for (final tooltip in ['فهرست‌های پخش محبوب', 'گنجینه', 'خروج']) {
+      expect(
+          find.descendant(
+              of: find.byType(AppBar), matching: find.byTooltip(tooltip)),
+          findsNothing,
+          reason: tooltip);
     }
-    final flame = tester.widget<Icon>(
-        find.descendant(of: popular, matching: find.byType(Icon)));
-    expect(flame.icon, RhythmoIcons.fire);
-    expect(flame.color, RhythmoColors.fire);
-    // The brand still fits beside the actions on a narrow phone.
     final brand = tester.getRect(find.text('ریتمو').first);
     expect(brand.left, greaterThanOrEqualTo(0));
     expect(brand.right, lessThanOrEqualTo(320));
 
+    await tester.tap(find.byTooltip('خانه'));
+    await tester.pumpAndSettle();
+    final popular = find.text('محبوب‌ها');
+    final store = find.text('گنجینه');
+    for (final card in [popular, store]) {
+      expect(tester.getSize(card).width, greaterThan(0));
+    }
     await tester.tap(popular);
     await tester.pumpAndSettle();
     expect(find.byType(PopularPlaylistsScreen), findsOneWidget);
@@ -704,7 +732,7 @@ void main() {
         greaterThan(tester.getCenter(find.widgetWithText(Tab, 'آهنگ‌ها')).dx));
     await preferences.update(hidden: {});
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(Tab, 'پسندیده‌ها'), findsOneWidget);
+    expect(find.widgetWithText(Tab, 'آلبوم‌ها'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -728,9 +756,7 @@ void main() {
     );
 
     // On a phone, settings is in the account menu.
-    await tester.tap(find.byTooltip('حساب و تنظیمات'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('تنظیمات').last);
+    await tester.tap(find.byTooltip('حساب'));
     await tester.pumpAndSettle();
     await _revealSetting(tester, find.text('فضای ابری'));
     expect(find.text('فضای ابری'), findsOneWidget);
@@ -765,7 +791,7 @@ void main() {
     expect(find.text('۲ آهنگ'), findsOneWidget);
     // The library list has no search field of its own.
     expect(find.byType(SearchBar), findsNothing);
-    await tester.tap(find.byTooltip('جست‌وجو در کتابخانه'));
+    await tester.tap(find.byTooltip('جست‌وجو'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(SearchBar), 'missing');
     await tester.pumpAndSettle();
@@ -774,7 +800,7 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, 'پاک کردن جست‌وجو'));
     await tester.pumpAndSettle();
 
-    expect(find.text('در همهٔ کتابخانه بگرد'), findsOneWidget);
+    expect(find.text('در همهٔ موسیقی‌ات بگرد'), findsOneWidget);
   });
 
   testWidgets(
@@ -812,12 +838,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('۲ آهنگ انتخاب‌شده'), findsOneWidget);
     expect(find.byTooltip('توقف'), findsNothing);
-    await tester.tap(find.text('لغو انتخاب همه'));
+    await tester.tap(find.byTooltip('لغو انتخاب همه'));
     await tester.pumpAndSettle();
     expect(find.byType(Checkbox), findsNothing);
     await tester.longPress(find.text('First'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('انتخاب همه'));
+    await tester.tap(find.byTooltip('انتخاب همه'));
     await tester.pumpAndSettle();
     expect(find.text('۲ آهنگ انتخاب‌شده'), findsOneWidget);
     await tester.tap(find.byTooltip('لغو انتخاب'));
@@ -825,6 +851,57 @@ void main() {
     await tester.tap(find.text('Second'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('توقف'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('several selected tracks get bulk actions and back clears them',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pumpApp(tester,
+        tokenStore: MemoryTokenStore('valid-token'),
+        tracks: FakeTracksApi(const [
+          Track(
+              id: 's1',
+              title: 'First',
+              contentType: 'audio/mpeg',
+              sizeBytes: 1),
+          Track(
+              id: 's2',
+              title: 'Second',
+              contentType: 'audio/mpeg',
+              sizeBytes: 1),
+        ]));
+    await tester.longPress(find.text('First'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Second'));
+    await tester.pumpAndSettle();
+    expect(find.text('۲ آهنگ انتخاب‌شده'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('اقدامات انتخاب‌شده‌ها'));
+    await tester.pumpAndSettle();
+    expect(find.text('پخش بعدی'), findsOneWidget);
+    expect(find.text('افزودن به صف'), findsOneWidget);
+    expect(find.text('حذف آهنگ‌ها'), findsOneWidget);
+    await tester.tap(find.text('پسندیدن همه'));
+    await tester.pumpAndSettle();
+    expect(find.text('۲ آهنگ انتخاب‌شده'), findsNothing);
+
+    await tester.longPress(find.text('First'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Second'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('اقدامات انتخاب‌شده‌ها'));
+    await tester.pumpAndSettle();
+    expect(find.text('نپسندیدن همه'), findsOneWidget);
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('۲ آهنگ انتخاب‌شده'), findsNothing);
+    expect(find.text('First'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -1059,7 +1136,7 @@ void main() {
       expect(api.submitted, isEmpty);
       expect(find.text('فهرست پخش «Road Trip» با ۱ آهنگ ساخته شد.'),
           findsOneWidget);
-      expect(find.text('۲ آهنگ در کتابخانه‌ات پیدا نشد:'), findsOneWidget);
+      expect(find.text('۲ آهنگ در «موسیقی من» پیدا نشد:'), findsOneWidget);
       expect(find.text('Somebody، Somebody Else'), findsOneWidget);
       expect(find.text('آهنگ پیدا نشده'), findsOneWidget);
       final dialog = tester.getRect(find.byType(AlertDialog));
@@ -1137,20 +1214,24 @@ void main() {
         tokenStore: MemoryTokenStore('valid-token'),
         tracks: FakeTracksApi(manyTracks()),
         playlists: FakePlaylistsApi(),
+        // Albums and artists are off by default; this listener turned them on.
+        appPreferencesStore: MemoryAppPreferencesStore()
+          ..value = const AppPreferences(hidden: {}),
       );
     }
 
     testWidgets('switch between tracks, playlists, albums and artists',
         (tester) async {
       await pumpPhone(tester);
-      for (final tab in ['آهنگ‌ها', 'فهرست‌های پخش', 'آلبوم‌ها', 'هنرمندان']) {
+      for (final tab in ['آهنگ‌ها', 'فهرست‌ها', 'آلبوم‌ها', 'هنرمندان']) {
         expect(find.widgetWithText(Tab, tab), findsOneWidget);
       }
       expect(find.byTooltip('افزودن موسیقی'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(Tab, 'فهرست‌های پخش'));
+      await tester.tap(find.widgetWithText(Tab, 'فهرست‌ها'));
       await tester.pumpAndSettle();
-      expect(find.text('فهرست پخش جدید'), findsOneWidget);
+      expect(find.byTooltip('فهرست پخش جدید'), findsOneWidget);
+      expect(find.text('فهرست پخش جدید'), findsNothing);
       expect(find.text('mix'), findsWidgets);
       // Adding music belongs to the tracks tab only.
       expect(find.byTooltip('افزودن موسیقی'), findsNothing);
@@ -1178,6 +1259,9 @@ void main() {
     testWidgets('an album page fits a narrow phone and clears the player',
         (tester) async {
       await pumpPhone(tester);
+      // Five tabs scroll sideways on a narrow phone.
+      await tester.ensureVisible(find.widgetWithText(Tab, 'آلبوم‌ها'));
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(Tab, 'آلبوم‌ها'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Opera'));
@@ -1218,18 +1302,29 @@ void main() {
         return box.localToGlobal(Offset.zero).dy + box.size.height;
       }).where((bottom) => bottom > tabsBottom);
       expect(firstVisibleRow, isNotEmpty);
-      expect(find.text('Track number 0'), findsNothing);
+      final tracksScroll = find
+          .descendant(
+              of: find.byType(TabBarView), matching: find.byType(Scrollable))
+          .last;
+      final offset =
+          tester.state<ScrollableState>(tracksScroll).position.pixels;
+      expect(offset, greaterThan(0));
 
       await tester.tap(find.widgetWithText(Tab, 'آلبوم‌ها'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(Tab, 'آهنگ‌ها'));
       await tester.pumpAndSettle();
       // Coming back, the tracks list is where it was left.
-      expect(find.text('Track number 0'), findsNothing);
+      final restoredScroll = find
+          .descendant(
+              of: find.byType(TabBarView), matching: find.byType(Scrollable))
+          .last;
+      expect(tester.state<ScrollableState>(restoredScroll).position.pixels,
+          closeTo(offset, 1));
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the last track can scroll clear of the mini player',
+    testWidgets('the last track menu clears the mini player and add button',
         (tester) async {
       await pumpPhone(tester);
       await tester.tap(find.text('Track number 0'));
@@ -1244,6 +1339,16 @@ void main() {
           of: find.text('Track number 29'), matching: find.byType(ListTile)));
       final miniPlayerTop = tester.getTopLeft(find.byTooltip('توقف')).dy - 16;
       expect(lastRow.bottom, lessThan(miniPlayerTop));
+      final add = tester.getRect(find.byTooltip('افزودن موسیقی'));
+      expect(lastRow.bottom, lessThan(add.top));
+      final row = find.ancestor(
+          of: find.text('Track number 29'), matching: find.byType(ListTile));
+      final menu =
+          find.descendant(of: row, matching: find.byTooltip('اقدامات آهنگ'));
+      expect(menu, findsOneWidget);
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+      expect(find.text('ویرایش اطلاعات آهنگ'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });
@@ -1258,7 +1363,7 @@ void main() {
         openRead: () => Stream.value([1, 2, 3, 4]),
       )),
     );
-    expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
 
     await tester.tap(find.byTooltip('افزودن موسیقی'));
     await tester.pumpAndSettle();
@@ -1266,7 +1371,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(ListTile, 'Song'), findsOneWidget);
-    expect(find.text('کتابخانهٔ شما خالی است'), findsNothing);
+    expect(find.text('«موسیقی من» خالی است'), findsNothing);
   });
 
   testWidgets('deleting a cloud track requires confirmation and removes it', (
@@ -1346,7 +1451,7 @@ void main() {
       tokenStore: MemoryTokenStore('valid-token'),
       tracks: tracks,
     );
-    expect(find.text('کتابخانه دریافت نشد'), findsOneWidget);
+    expect(find.text('«موسیقی من» دریافت نشد'), findsOneWidget);
 
     tracks.listError = null;
     await tester.tap(find.text('تلاش دوباره'));
@@ -1369,28 +1474,27 @@ void main() {
     );
     expect(find.text('Private'), findsOneWidget);
 
-    await tester.tap(find.byIcon(RhythmoIcons.signOut));
-    await tester.pumpAndSettle();
+    await _signOut(tester);
     tracks.tracks.clear();
     await _submit(tester, 'listener@example.com', 'correct horse');
 
     expect(find.text('Private'), findsNothing);
-    expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
   });
 
   testWidgets('the interface is right-to-left Persian', (tester) async {
     await _pumpApp(tester, tokenStore: MemoryTokenStore('valid-token'));
 
-    final context = tester.element(find.text('کتابخانهٔ شما خالی است'));
+    final context = tester.element(find.text('«موسیقی من» خالی است'));
     expect(Directionality.of(context), TextDirection.rtl);
     expect(Localizations.localeOf(context), const Locale('fa'));
-    // In RTL the floating button sits on the left and the logout action on
-    // the left end of the app bar.
+    // In RTL the floating button sits on the left and the brand on the
+    // right end of the app bar.
     final width = tester.getSize(find.byType(Scaffold).first).width;
     expect(tester.getCenter(find.byType(FloatingActionButton)).dx,
         lessThan(width / 2));
-    expect(tester.getCenter(find.byIcon(RhythmoIcons.signOut)).dx,
-        lessThan(width / 2));
+    expect(
+        tester.getCenter(find.text('ریتمو').first).dx, greaterThan(width / 2));
   });
 
   testWidgets('tapping a track plays it in the mini player', (tester) async {
@@ -1449,7 +1553,7 @@ void main() {
       ]),
     );
     expect(find.text('پخش تصادفی'), findsOneWidget);
-    await tester.tap(find.byTooltip('جست‌وجو در کتابخانه'));
+    await tester.tap(find.byTooltip('جست‌وجو'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(SearchBar), 'Beta');
     await tester.pump();
@@ -1486,14 +1590,68 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('قبلی'), findsOneWidget);
+    expect(find.byTooltip('قبلی'), findsNothing);
     expect(find.byTooltip('توقف'), findsOneWidget);
-    expect(find.byTooltip('بعدی'), findsOneWidget);
+    expect(find.byTooltip('بعدی'), findsNothing);
     expect(find.byTooltip('پخش تصادفی'), findsNothing);
     expect(
       find.text('A very long track title that must remain readable'),
       findsWidgets,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'the dock moves between home, liked and library; the account '
+      'opens from the header', (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pumpApp(
+      tester,
+      tokenStore: MemoryTokenStore('valid-token'),
+      tracks: FakeTracksApi(const [
+        Track(
+            id: 's1', title: 'First', contentType: 'audio/mpeg', sizeBytes: 1),
+      ]),
+    );
+
+    // The app opens on the library, with every destination a 48 px target.
+    expect(find.text('آهنگ‌ها'), findsOneWidget);
+    for (final label in [
+      'خانه',
+      'جست‌وجو',
+      'پسندیده‌ها',
+      'موسیقی من',
+      'حساب'
+    ]) {
+      final size = tester.getSize(find.byTooltip(label));
+      expect(size.width, greaterThanOrEqualTo(48), reason: label);
+      expect(size.height, greaterThanOrEqualTo(48), reason: label);
+    }
+
+    await tester.tap(find.byTooltip('خانه'));
+    await tester.pumpAndSettle();
+    expect(find.text('تازه اضافه‌شده'), findsOneWidget);
+    expect(find.text('First'), findsOneWidget);
+    expect(find.text('آهنگ‌ها'), findsNothing);
+    await tester.tap(find.text('First'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MiniPlayer), findsOneWidget);
+    expect(find.text('ادامه بده'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('پسندیده‌ها'));
+    await tester.pumpAndSettle();
+    expect(find.text('هنوز آهنگی را پسند نکرده‌ای'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('موسیقی من'));
+    await tester.pumpAndSettle();
+    expect(find.text('آهنگ‌ها'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('حساب'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -1525,7 +1683,11 @@ void main() {
 
       final bar = tester.getRect(find.byType(MiniPlayer));
       expect(bar.height, lessThan(160), reason: '$size');
-      expect(bar.bottom, size.height, reason: '$size');
+      // The player sits on the dock, which ends at the bottom edge.
+      final dock = tester.getRect(find.byType(RhythmoDock));
+      expect(dock.bottom, size.height, reason: '$size');
+      expect(bar.bottom, lessThan(dock.bottom), reason: '$size');
+      expect(dock.height - bar.height, lessThan(80), reason: '$size');
       // The rest of the library can still be tapped.
       await tester.tap(find.text('Second'));
       await tester.pumpAndSettle();
@@ -1559,7 +1721,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    for (final tooltip in ['قبلی', 'توقف', 'بعدی']) {
+    // A phone's mini player has one control; skipping is on now playing.
+    expect(find.byTooltip('قبلی'), findsNothing);
+    expect(find.byTooltip('بعدی'), findsNothing);
+    for (final tooltip in ['توقف']) {
       final size = tester.getSize(find.descendant(
         of: find.byTooltip(tooltip),
         matching: find.byType(InkWell),
@@ -1638,7 +1803,7 @@ void main() {
     await _pumpApp(tester,
         tokenStore: MemoryTokenStore('valid-token'), cache: cache);
 
-    await tester.tap(find.byTooltip('تنظیمات'));
+    await tester.tap(find.byTooltip('حساب'));
     await tester.pumpAndSettle();
     await _revealSetting(tester, find.text('پاک کردن کش'));
     expect(find.text('حجم کش: ۳.۰ مگابایت'), findsOneWidget);
@@ -1680,7 +1845,7 @@ void main() {
     await tester.tap(find.text('Song'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('تنظیمات'));
+    await tester.tap(find.byTooltip('حساب'));
     await tester.pumpAndSettle();
     await _revealSetting(tester, find.text('پاک کردن کش'));
     await tester.tap(find.text('پاک کردن کش'));
@@ -1700,7 +1865,7 @@ void main() {
         tokenStore: MemoryTokenStore('valid-token'),
         cache: FakeAudioCache(isManaged: false));
 
-    await tester.tap(find.byTooltip('تنظیمات'));
+    await tester.tap(find.byTooltip('حساب'));
     await tester.pumpAndSettle();
 
     await _revealSetting(
@@ -1718,7 +1883,7 @@ void main() {
     await _pumpApp(tester,
         tokenStore: MemoryTokenStore('valid-token'), bots: bots);
 
-    await tester.tap(find.byTooltip('تنظیمات'));
+    await tester.tap(find.byTooltip('حساب'));
     await tester.pumpAndSettle();
     await _revealSetting(tester, find.text('دریافت کد اتصال'));
     expect(find.text('اتصال به بات'), findsOneWidget);
@@ -1747,7 +1912,7 @@ void main() {
         tokenStore: MemoryTokenStore('valid-token'),
         bots: FakeBotsApi(bots: const []));
 
-    await tester.tap(find.byTooltip('تنظیمات'));
+    await tester.tap(find.byTooltip('حساب'));
     await tester.pumpAndSettle();
 
     expect(find.text('اتصال به بات'), findsNothing);
@@ -1836,9 +2001,11 @@ void main() {
     addTearDown(tester.view.reset);
     await _pumpApp(tester,
         tokenStore: MemoryTokenStore('valid-token'),
-        playlists: FakePlaylistsApi());
+        playlists: FakePlaylistsApi(),
+        appPreferencesStore: MemoryAppPreferencesStore()
+          ..value = const AppPreferences(hidden: {}));
 
-    for (final label in ['آهنگ‌ها', 'فهرست‌های پخش', 'آلبوم‌ها', 'هنرمندان']) {
+    for (final label in ['آهنگ‌ها', 'فهرست‌ها', 'آلبوم‌ها', 'هنرمندان']) {
       final text =
           find.descendant(of: find.byType(TabBar), matching: find.text(label));
       expect(text, findsOneWidget, reason: label);

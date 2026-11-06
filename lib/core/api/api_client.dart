@@ -1,9 +1,15 @@
+import 'package:rhythmo/features/bale_archive/bale_archive.dart';
+import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
+import 'package:rhythmo/features/admin/data/admin_song_reports.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:rhythmo/core/network/network_status.dart';
+import 'package:rhythmo/core/offline/response_cache.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
 import 'package:rhythmo/features/bots/data/messenger_bot.dart';
 import 'package:rhythmo/features/library/data/track.dart';
@@ -13,6 +19,7 @@ import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/features/upload/data/upload_models.dart';
 import 'package:rhythmo/features/store/data/store_catalog.dart';
 import 'package:rhythmo/features/likes/data/likes.dart';
+import 'package:rhythmo/features/notifications/data/notifications.dart';
 
 class ApiException implements Exception {
   const ApiException(this.message,
@@ -165,7 +172,11 @@ abstract interface class PlaylistsApi {
   Future<List<Playlist>> listPlaylists(String token);
   Future<Playlist> getPlaylist(String token, String playlistId);
   Future<Playlist> createPlaylist(String token, String name);
-  Future<Playlist> renamePlaylist(String token, String playlistId, String name);
+
+  /// Renames the playlist, and sets its channel description unless
+  /// [description] is null. Its owner and admins may.
+  Future<Playlist> renamePlaylist(String token, String playlistId, String name,
+      {String? description});
   Future<Playlist> replacePlaylistTracks(
       String token, String playlistId, List<String> trackIds);
   Future<void> deletePlaylist(String token, String playlistId);
@@ -216,11 +227,41 @@ abstract interface class PlaylistsApi {
 
   /// Leaves a collaborative playlist, taking one's tracks out of it.
   Future<void> leavePlaylist(String token, String playlistId);
+
+  /// The owner makes a member an admin, or a plain member again.
+  Future<void> setPlaylistMemberAdmin(
+      String token, String playlistId, String memberId, bool admin);
 }
 
 /// A playlist's share link as its owner set it. [pending] is true while a
 /// request to list it publicly waits for an admin (#322).
 typedef PlaylistShare = ({String shareToken, bool isPublic, bool pending});
+
+/// Public playlists as channels: subscribing, and the notices of audio
+/// added to them.
+abstract interface class NotificationsApi {
+  /// Subscribes to a public playlist or unsubscribes; doing it twice is the
+  /// same as once.
+  Future<PlaylistSubscription> setPlaylistSubscription(
+      String token, String shareToken, bool subscribed);
+
+  /// Mutes or unmutes a channel this account subscribed to.
+  Future<PlaylistSubscription> setPlaylistMuted(
+      String token, String shareToken, bool muted);
+
+  /// The public playlists this account subscribed to, unread ones first.
+  Future<List<SubscribedPlaylist>> listSubscriptions(String token);
+
+  /// The newest notices and how many are unread.
+  Future<({List<PlaylistNotification> notifications, int unread})>
+      listNotifications(String token);
+
+  Future<int> unreadNotificationCount(String token);
+
+  /// Marks the notices with [ids] read, or all of them when it is empty.
+  Future<void> markNotificationsRead(String token,
+      {List<String> ids = const []});
+}
 
 abstract interface class BotsApi {
   Future<List<MessengerBot>> listBots(String token);
@@ -228,6 +269,17 @@ abstract interface class BotsApi {
 
   /// Has the bot post a track into the account's linked chats.
   Future<void> sendTrackToBot(String token, String provider, String trackId);
+}
+
+/// Syncing a Telegram or Bale channel into a playlist (#430): its owner or an
+/// admin gets a code, makes the bot an admin of the channel and posts the
+/// code there.
+abstract interface class BotChannelsApi {
+  Future<BotLinkCode> createChannelCode(String token, String playlistId);
+  Future<List<SyncedChannel>> listSyncedChannels(
+      String token, String playlistId);
+  Future<void> removeSyncedChannel(
+      String token, String playlistId, SyncedChannel channel);
 }
 
 /// Song lyrics, which the server looks up on LRCLIB; the app never calls
@@ -333,15 +385,166 @@ class ApiClient
         HistoryApi,
         PlaylistsApi,
         BotsApi,
+        BotChannelsApi,
         LinkImportsApi,
         LyricsApi,
         TranscriptionApi,
         IdentifyApi,
         StoreApi,
         LikesApi,
-        AdminApi {
-  ApiClient(this.baseUri, {http.Client? httpClient})
+        NotificationsApi,
+        AdminApi,
+        AdminSongReportsApi,
+        FeedbackApi,
+        AdminQuotaApi,
+        BaleArchiveApi,
+        BaleTopicCatalogApi {
+  ApiClient(this.baseUri,
+      {http.Client? httpClient, this.offlineCache, this.network})
       : _httpClient = httpClient ?? http.Client();
+
+  /// Where the answers the app needs offline are kept; null keeps none.
+  final ResponseCache? offlineCache;
+
+  /// Told whether each request reached the server.
+  final NetworkStatus? network;
+
+  /// The reads worth keeping for offline use: the account, its music,
+  /// playlists, likes, history, notifications and lyrics, and the public
+  /// playlists a guest browses. Never links, which expire, nor admin pages.
+  static final _offlinePaths = RegExp(r'^/api/v1/('
+      r'me|tracks|playlists(/[^/?]+)?|subscriptions|'
+      r'notifications(/unread-count)?|public-playlists|'
+      r'shared-playlists/[^/?]+|likes\?.*|history(\?.*)?|'
+      r'(tracks|playlists/[^/?]+/tracks)/[^/?]+/lyrics(\?.*)?'
+      r')$');
+
+  /// The account a request is for, without the token itself.
+  static String _scope(String? token) => token == null
+      ? 'guest'
+      : sha256.convert(utf8.encode(token)).toString().substring(0, 24);
+
+  String? _offlineKey(String method, String path, String? token) =>
+      offlineCache != null && method == 'GET' && _offlinePaths.hasMatch(path)
+          ? '${_scope(token)}|$path'
+          : null;
+
+  Future<Map<String, dynamic>?> _offlineAnswer(String? key) async {
+    if (key == null) return null;
+    final raw = await offlineCache!.read(key);
+    return raw == null ? null : _decode(raw);
+  }
+
+  /// Forgets every answer kept for offline use, for example on sign-out.
+  Future<void> forgetOffline() async => offlineCache?.clear();
+
+  @override
+  Future<BaleTopicCatalog> baleTopics(String token) async {
+    final body =
+        await _send('GET', '/api/v1/admin/bale-archive/topics', token: token);
+    return BaleTopicCatalog.fromJson(body);
+  }
+
+  @override
+  Future<void> refreshBaleTopics(String token) async {
+    await _send('POST', '/api/v1/admin/bale-archive/scan', token: token);
+  }
+
+  @override
+  Future<void> importBaleTopic(String token, String key) async {
+    await _send('POST', '/api/v1/admin/bale-archive/topics/import',
+        token: token, body: {'key': key});
+  }
+
+  @override
+  Future<BaleArchivePage> previewBaleArchive(
+    String token, {
+    int? before,
+  }) async {
+    final body = await _send(
+      'GET',
+      '/api/v1/admin/bale-archive/preview${before == null ? '' : '?before=$before'}',
+      token: token,
+      requestTimeout: const Duration(seconds: 80),
+    );
+    return BaleArchivePage.fromJson(body);
+  }
+
+  @override
+  Future<BaleArchiveJob> importBaleLecture(
+    String token,
+    BaleLecture lecture,
+  ) async {
+    final body = await _send(
+      'POST',
+      '/api/v1/admin/bale-archive/import',
+      token: token,
+      body: {
+        'id': lecture.id,
+        'date': lecture.date,
+        'topic': lecture.topic,
+        'session': lecture.session,
+      },
+      requestTimeout: const Duration(seconds: 80),
+    );
+    return BaleArchiveJob.fromJson(body);
+  }
+
+  @override
+  Future<List<BaleArchiveJob>> baleArchiveJobs(String token) async {
+    final body = await _send(
+      'GET',
+      '/api/v1/admin/bale-archive/imports',
+      token: token,
+    );
+    return [
+      for (final job in body['imports'] as List<dynamic>)
+        BaleArchiveJob.fromJson(job as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<void> submitFeedback(
+          String token, String kind, String subject, String body) =>
+      _send('POST', '/api/v1/feedback',
+          token: token,
+          body: {'kind': kind, 'subject': subject, 'body': body},
+          expectBody: false);
+  @override
+  Future<List<Map<String, dynamic>>> feedbackInbox(String token) async {
+    final body = await _send('GET', '/api/v1/admin/feedback', token: token);
+    return (body['feedback'] as List).cast<Map<String, dynamic>>();
+  }
+
+  @override
+  Future<void> resolveFeedback(String token, String id) =>
+      _send('POST', '/api/v1/admin/feedback/${Uri.encodeComponent(id)}/resolve',
+          token: token, expectBody: false);
+  @override
+  Future<List<AdminSongReport>> songReports(String token) async {
+    final body = await _send('GET', '/api/v1/admin/store/reports?limit=100',
+        token: token);
+    return [
+      for (final item in body['reports'] as List<dynamic>)
+        AdminSongReport.fromJson(item as Map<String, dynamic>)
+    ];
+  }
+
+  @override
+  Future<void> moderateSong(String token, String entryId,
+          {required bool remove}) =>
+      _send(remove ? 'DELETE' : 'POST',
+          '/api/v1/admin/store/tracks/${Uri.encodeComponent(entryId)}${remove ? '' : '/dismiss-reports'}',
+          token: token, expectBody: false);
+
+  @override
+  Future<AdminAccount> increaseStorageQuota(
+      String token, String accountId, int bytes) async {
+    final body = await _send('PATCH',
+        '/api/v1/admin/accounts/${Uri.encodeComponent(accountId)}/storage-quota',
+        token: token, body: {'bytes': bytes});
+    return AdminAccount.fromJson(body);
+  }
 
   static const _timeout = Duration(seconds: 15);
 
@@ -403,14 +606,28 @@ class ApiClient
                 ? '/api/v1/playlists/${Uri.encodeComponent(track.viaPlaylist!)}/tracks/$id/artwork'
                 : '/api/v1/tracks/$id/artwork';
     if (!track.playsWithoutAccount && token == null) return null;
-    final response = await _httpClient.get(
-      baseUri.resolve(path),
-      headers: {if (token != null) 'Authorization': 'Bearer $token'},
-    ).timeout(_timeout);
+    final key = offlineCache == null
+        ? null
+        : '${_scope(token)}|$path|${track.embeddedTags.version ?? 0}';
+    final http.Response response;
+    try {
+      response = await _httpClient.get(
+        baseUri.resolve(path),
+        headers: {if (token != null) 'Authorization': 'Bearer $token'},
+      ).timeout(_timeout);
+    } catch (_) {
+      network?.reportFailure();
+      // Offline, the cover seen last time.
+      if (key != null) return offlineCache!.readBytes(key);
+      rethrow;
+    }
     if (response.statusCode != 200 ||
         response.bodyBytes.length > 512 * 1024 ||
         response.headers['content-type'] != 'image/jpeg') {
       return null;
+    }
+    if (key != null) {
+      unawaited(offlineCache!.writeBytes(key, response.bodyBytes));
     }
     return response.bodyBytes;
   }
@@ -603,6 +820,64 @@ class ApiClient
         '/api/v1/shared-playlists/${Uri.encodeComponent(shareToken)}/like',
         token: token);
     return PlaylistLikes.fromJson(body);
+  }
+
+  @override
+  Future<PlaylistSubscription> setPlaylistSubscription(
+      String token, String shareToken, bool subscribed) async {
+    final body = await _send(
+        subscribed ? 'PUT' : 'DELETE',
+        '/api/v1/shared-playlists/${Uri.encodeComponent(shareToken)}'
+        '/subscription',
+        token: token);
+    return PlaylistSubscription.fromJson(body);
+  }
+
+  @override
+  Future<PlaylistSubscription> setPlaylistMuted(
+      String token, String shareToken, bool muted) async {
+    final body = await _send(
+        muted ? 'PUT' : 'DELETE',
+        '/api/v1/shared-playlists/${Uri.encodeComponent(shareToken)}'
+        '/subscription/mute',
+        token: token);
+    return PlaylistSubscription.fromJson(body);
+  }
+
+  @override
+  Future<List<SubscribedPlaylist>> listSubscriptions(String token) async {
+    final body = await _send('GET', '/api/v1/subscriptions', token: token);
+    return [
+      for (final json in body['playlists'] as List<dynamic>)
+        SubscribedPlaylist.fromJson(json as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<({List<PlaylistNotification> notifications, int unread})>
+      listNotifications(String token) async {
+    final body = await _send('GET', '/api/v1/notifications', token: token);
+    return (
+      notifications: [
+        for (final json in body['notifications'] as List<dynamic>)
+          PlaylistNotification.fromJson(json as Map<String, dynamic>),
+      ],
+      unread: body['unreadCount'] as int? ?? 0,
+    );
+  }
+
+  @override
+  Future<int> unreadNotificationCount(String token) async {
+    final body =
+        await _send('GET', '/api/v1/notifications/unread-count', token: token);
+    return body['unreadCount'] as int? ?? 0;
+  }
+
+  @override
+  Future<void> markNotificationsRead(String token,
+      {List<String> ids = const []}) async {
+    await _send('POST', '/api/v1/notifications/read',
+        token: token, body: {'ids': ids}, expectBody: false);
   }
 
   @override
@@ -885,6 +1160,18 @@ class ApiClient
   }
 
   @override
+  Future<void> setPlaylistMemberAdmin(
+      String token, String playlistId, String memberId, bool admin) async {
+    await _send(
+        'PUT',
+        '/api/v1/playlists/${Uri.encodeComponent(playlistId)}'
+            '/members/${Uri.encodeComponent(memberId)}/role',
+        token: token,
+        body: {'role': admin ? 'admin' : 'member'},
+        expectBody: false);
+  }
+
+  @override
   Future<void> leavePlaylist(String token, String playlistId) async {
     await _send('DELETE',
         '/api/v1/playlists/${Uri.encodeComponent(playlistId)}/membership',
@@ -906,10 +1193,14 @@ class ApiClient
   }
 
   @override
-  Future<Playlist> renamePlaylist(
-      String token, String playlistId, String name) async {
+  Future<Playlist> renamePlaylist(String token, String playlistId, String name,
+      {String? description}) async {
     final body = await _send('PUT', '/api/v1/playlists/$playlistId',
-        token: token, body: {'name': name});
+        token: token,
+        body: {
+          'name': name,
+          if (description != null) 'description': description,
+        });
     return Playlist.fromJson(body);
   }
 
@@ -940,6 +1231,40 @@ class ApiClient
   Future<BotLinkCode> createBotLinkCode(String token) async {
     final body = await _send('POST', '/api/v1/bots/link-code', token: token);
     return BotLinkCode.fromJson(body);
+  }
+
+  @override
+  Future<BotLinkCode> createChannelCode(String token, String playlistId) async {
+    final body = await _send(
+        'POST',
+        '/api/v1/playlists/${Uri.encodeComponent(playlistId)}'
+            '/bot-channels/code',
+        token: token);
+    return BotLinkCode.fromJson(body);
+  }
+
+  @override
+  Future<List<SyncedChannel>> listSyncedChannels(
+      String token, String playlistId) async {
+    final body = await _send('GET',
+        '/api/v1/playlists/${Uri.encodeComponent(playlistId)}/bot-channels',
+        token: token);
+    return [
+      for (final channel in body['channels'] as List<dynamic>)
+        SyncedChannel.fromJson(channel as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<void> removeSyncedChannel(
+      String token, String playlistId, SyncedChannel channel) async {
+    await _send(
+        'DELETE',
+        '/api/v1/playlists/${Uri.encodeComponent(playlistId)}/bot-channels'
+            '/${Uri.encodeComponent(channel.provider)}'
+            '/${Uri.encodeComponent(channel.chatId)}',
+        token: token,
+        expectBody: false);
   }
 
   @override
@@ -1124,18 +1449,31 @@ class ApiClient
     }
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
 
-    late http.Response response;
+    final offlineKey = _offlineKey(method, path, token);
+    final http.Response response;
     try {
       response = await _httpClient
           .send(request)
           .then(http.Response.fromStream)
           .timeout(requestTimeout ?? _timeout);
-    } on TimeoutException {
-      if (requestTimeout != null) {
+    } catch (error) {
+      network?.reportFailure();
+      // Offline: what the server said last time, if it was kept.
+      final kept = await _offlineAnswer(offlineKey);
+      if (kept != null) return kept;
+      if (error is TimeoutException && requestTimeout != null) {
         throw const ApiException('Link import request timed out.',
             code: 'import_timeout');
       }
       rethrow;
+    }
+    // The proxy answers for a server that is down or restarting.
+    if (const {502, 503, 504}.contains(response.statusCode)) {
+      network?.reportFailure();
+      final kept = await _offlineAnswer(offlineKey);
+      if (kept != null) return kept;
+    } else {
+      network?.reportSuccess();
     }
     final decoded = _decode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -1150,6 +1488,9 @@ class ApiClient
     if (!expectBody) return const {};
     if (decoded == null) {
       throw const ApiException('Server returned an invalid response.');
+    }
+    if (offlineKey != null) {
+      unawaited(offlineCache!.write(offlineKey, response.body));
     }
     return decoded;
   }

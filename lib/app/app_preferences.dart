@@ -4,10 +4,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum LibraryTab {
   tracks('آهنگ‌ها'),
-  playlists('فهرست‌های پخش'),
+  playlists('فهرست‌ها'),
+
+  /// Music added to this device lately, newest first; Android only.
+  newOnDevice('تازه‌های دستگاه'),
   albums('آلبوم‌ها'),
-  artists('هنرمندان'),
-  favorites('پسندیده‌ها');
+  artists('هنرمندان');
 
   const LibraryTab(this.label);
   final String label;
@@ -17,7 +19,16 @@ class AppPreferences {
   const AppPreferences(
       {this.themeMode = ThemeMode.dark,
       this.order = LibraryTab.values,
-      this.hidden = const {LibraryTab.favorites}});
+      this.hidden = defaultHiddenTabs});
+
+  /// «موسیقی من» opens with two tabs, songs and playlists (#445); the
+  /// others can be turned on in settings. Liked songs have their own place
+  /// in the dock, so they are not a tab.
+  static const defaultHiddenTabs = {
+    LibraryTab.newOnDevice,
+    LibraryTab.albums,
+    LibraryTab.artists,
+  };
   final ThemeMode themeMode;
   final List<LibraryTab> order;
   final Set<LibraryTab> hidden;
@@ -47,7 +58,7 @@ class AppPreferences {
                   tab != LibraryTab.tracks)
                 tab
           }
-        : const {LibraryTab.favorites};
+        : defaultHiddenTabs;
     return AppPreferences(
         themeMode: ThemeMode.values.firstWhere(
             (mode) => mode.name == value['theme'],
@@ -56,6 +67,7 @@ class AppPreferences {
         hidden: Set.unmodifiable(hidden));
   }
   Map<String, Object> toJson() => {
+        'v': 3,
         'theme': themeMode.name,
         'tabs': order.map((tab) => tab.name).toList(),
         'hidden': hidden.map((tab) => tab.name).toList()

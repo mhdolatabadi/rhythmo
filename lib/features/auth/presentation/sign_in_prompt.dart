@@ -9,6 +9,8 @@ void askToSignIn(
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
+      persist: false,
+      duration: const Duration(seconds: 4),
       content: Text('برای $action وارد حسابت شو.'),
       action: onSignIn == null
           ? null

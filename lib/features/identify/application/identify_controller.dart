@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/identify/data/snippet_recorder.dart';
 import 'package:rhythmo/features/library/data/track.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum IdentifyPhase {
   /// Explains what happens before the microphone is asked for.
@@ -23,7 +24,7 @@ enum IdentifyPhase {
 
 /// «این آهنگ چیه؟»: records a snippet, sends it to the server, and holds
 /// the answer. The snippet is never kept: once sent, it is dropped.
-class IdentifyController extends ChangeNotifier {
+class IdentifyController extends ChangeNotifier with QuietAfterDispose {
   IdentifyController({
     required IdentifyApi api,
     required SnippetRecorder recorder,
@@ -162,11 +163,11 @@ class IdentifyController extends ChangeNotifier {
       _error = switch (error.code) {
         'quota_exceeded' => 'فضای کافی در حساب شما نیست.',
         'uploads_disabled' => 'افزودن آهنگ الان ممکن نیست.',
-        _ => 'آهنگ به کتابخانه اضافه نشد. دوباره امتحان کنید.',
+        _ => 'آهنگ به «موسیقی من» اضافه نشد. دوباره امتحان کنید.',
       };
       return null;
     } catch (_) {
-      _error = 'آهنگ به کتابخانه اضافه نشد. دوباره امتحان کنید.';
+      _error = 'آهنگ به «موسیقی من» اضافه نشد. دوباره امتحان کنید.';
       return null;
     } finally {
       _saving = false;

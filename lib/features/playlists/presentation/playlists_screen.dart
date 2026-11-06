@@ -4,15 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/features/library/data/track.dart';
+import 'package:rhythmo/features/library/data/track_artwork.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
+import 'package:rhythmo/features/playlists/presentation/channel_sync_sheet.dart';
 import 'package:rhythmo/features/playlists/presentation/collab_sheet.dart';
 import 'package:rhythmo/features/playlists/presentation/shared_playlist_screen.dart';
-import 'package:rhythmo/features/likes/presentation/liked_songs_screen.dart';
-import 'package:rhythmo/features/store/application/store_controller.dart';
-import 'package:rhythmo/features/store/data/store_catalog.dart';
-import 'package:rhythmo/features/store/presentation/store_carousel.dart';
 
 /// Joins the collaborative playlist with [collabToken] and opens it, or
 /// says why it couldn't.
@@ -65,11 +63,12 @@ class PlaylistsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('فهرست‌های پخش')),
-      body: PlaylistsView(
+      body: RhythmoBackdrop(
+          child: PlaylistsView(
         controller: controller,
         libraryTracks: libraryTracks,
         player: player,
-      ),
+      )),
     );
   }
 }
@@ -83,19 +82,20 @@ class PlaylistsView extends StatefulWidget {
     required this.libraryTracks,
     required this.player,
     this.onSharedSaved,
+    this.onImportFromDevice,
     this.underHeader = false,
-    this.store,
   });
 
   final PlaylistsController controller;
   final List<Track> libraryTracks;
   final PlayerController player;
 
-  /// The public store; null hides its carousels.
-  final StoreController? store;
-
   /// Called after a shared playlist was saved, bringing its tracks along.
   final VoidCallback? onSharedSaved;
+
+  /// Brings in playlists from Samsung Music and other players on the
+  /// device; null hides the action.
+  final VoidCallback? onImportFromDevice;
 
   /// Whether this is a tab under a pinned NestedScrollView header, whose
   /// overlap the list has to make room for.
@@ -193,57 +193,56 @@ class _PlaylistsViewState extends State<PlaylistsView> {
     ));
   }
 
-  void _openLiked() {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => LikedSongsScreen(
-          player: widget.player, libraryTracks: widget.libraryTracks),
-    ));
-  }
-
   @override
   Widget build(BuildContext context) {
-    final actions = Padding(
-      padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          LikedSongsEntry(
-            favorites: widget.player.favorites,
-            libraryTracks: widget.libraryTracks,
-            onOpen: _openLiked,
-          ),
-          if (widget.store case final store?)
-            for (final ranking in StoreRanking.values.reversed)
-              StoreCarousel(
-                controller: store,
-                ranking: ranking,
-                player: widget.player,
-                padding: EdgeInsets.zero,
-              ),
-          const SizedBox(height: RhythmoSpace.md),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              FilledButton.tonalIcon(
-                onPressed: _create,
-                icon: const Icon(RhythmoIcons.listPlus),
-                label: const Text('فهرست پخش جدید'),
-              ),
-              IconButton(
-                tooltip: 'باز کردن لینک اشتراک',
-                onPressed: _openLink,
-                icon: const Icon(RhythmoIcons.link),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
     return ListenableBuilder(
       listenable: widget.controller,
       builder: (context, _) {
+        final actions = Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          // Like the songs tab: the count first, the tools at the far end.
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 8),
+                  child: Text(
+                    widget.controller.playlists.isEmpty
+                        ? ''
+                        : '${persianDigits(widget.controller.playlists.length)} فهرست پخش',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'فهرست پخش جدید',
+                onPressed: _create,
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                icon: const Icon(RhythmoIcons.plus),
+              ),
+              const SizedBox(width: RhythmoSpace.sm),
+              IconButton(
+                tooltip: 'باز کردن لینک اشتراک',
+                onPressed: _openLink,
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                icon: const Icon(RhythmoIcons.link),
+              ),
+              if (widget.onImportFromDevice case final onImport?) ...[
+                const SizedBox(width: RhythmoSpace.sm),
+                IconButton(
+                  tooltip: 'وارد کردن از گوشی',
+                  onPressed: onImport,
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                  icon: const Icon(RhythmoIcons.deviceMobile),
+                ),
+              ],
+            ],
+          ),
+        );
         final content = switch (widget.controller.status) {
           PlaylistsStatus.loading => const SliverFillRemaining(
               hasScrollBody: false,
@@ -331,7 +330,11 @@ class _PlaylistsOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final featured = playlists.take(3).toList(growable: false);
+    // A shelf of the first few only when there are more below it; with a
+    // handful it would just show the same playlists twice.
+    final featured = playlists.length > 4
+        ? playlists.take(3).toList(growable: false)
+        : const <Playlist>[];
     return SliverPadding(
       // Room at the bottom for the mini player.
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 112),
@@ -356,20 +359,23 @@ class _PlaylistsOverview extends StatelessWidget {
             ),
             const SizedBox(height: 20),
           ],
-          Padding(
-            padding: const EdgeInsetsDirectional.only(start: 4, bottom: 8),
-            child: Text(
-              'همهٔ فهرست‌های پخش',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+          if (featured.isNotEmpty)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(start: 4, bottom: 8),
+              child: Text(
+                'همهٔ فهرست‌های پخش',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
             ),
-          ),
           for (final playlist in playlists)
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 4),
               leading: _PlaylistCover(
-                  trackCount: playlist.displayTrackCount, size: 56),
+                  trackCount: playlist.displayTrackCount,
+                  tracks: playlist.tracks,
+                  size: 52,
+                  showCount: false),
               title: Row(
                 children: [
                   Flexible(
@@ -389,9 +395,7 @@ class _PlaylistsOverview extends StatelessWidget {
                     ),
                 ],
               ),
-              subtitle: Text(
-                  '${persianDigits(playlist.displayTrackCount)} قطعه موسیقی'),
-              trailing: const Icon(RhythmoIcons.caretLeft),
+              subtitle: PlaylistPrivacyLine(playlist: playlist),
               onTap: () => onOpen(playlist),
             ),
         ],
@@ -419,14 +423,17 @@ class _PlaylistFeatureCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _PlaylistCover(trackCount: playlist.displayTrackCount, size: 148),
+            _PlaylistCover(
+                trackCount: playlist.displayTrackCount,
+                tracks: playlist.tracks,
+                size: 148),
             const SizedBox(height: 10),
             Text(
               playlist.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
             ),
             Text(
@@ -468,6 +475,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
 
   /// A change is on its way to the server; the page stays in place.
   bool saving = false;
+  bool editingTracks = false;
 
   @override
   void initState() {
@@ -537,7 +545,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       context,
       title: 'ترک فهرست پخش؟',
       message:
-          'آهنگ‌هایی که به این فهرست پخش اضافه کرده‌ای از آن بیرون می‌روند؛ در کتابخانه‌ات می‌مانند.',
+          'آهنگ‌هایی که به این فهرست پخش اضافه کرده‌ای از آن بیرون می‌روند؛ در «موسیقی من» می‌مانند.',
       confirmLabel: 'ترک',
       destructive: true,
     );
@@ -553,7 +561,8 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
 
   Future<void> _save(List<String> ids) async {
     setState(() => saving = true);
-    final saved = await widget.controller.replaceTracks(widget.playlistId, ids);
+    final saved = await widget.controller.replaceTracks(widget.playlistId, ids,
+        deviceTracks: widget.libraryTracks);
     if (!mounted) return;
     setState(() {
       playlist = saved ?? playlist;
@@ -577,16 +586,13 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   Future<void> _rename() async {
     final current = playlist;
     if (current == null) return;
-    final name = await _askName(
-      context,
-      'تغییر نام فهرست پخش',
-      initialValue: current.name,
-    );
-    if (name == null) return;
-    if (await widget.controller.rename(current.id, name)) {
+    final details = await _askDetails(context, current);
+    if (details == null) return;
+    if (await widget.controller
+        .rename(current.id, details.name, description: details.description)) {
       await _load();
     } else {
-      _message('تغییر نام ناموفق بود.');
+      _message('ذخیره‌ی نام و توضیح ناموفق بود.');
     }
   }
 
@@ -596,7 +602,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     final confirmed = await showRhythmoConfirm(
       context,
       title: 'حذف فهرست پخش؟',
-      message: 'آهنگ‌های کتابخانه حذف نمی‌شوند.',
+      message: 'آهنگ‌های «موسیقی من» حذف نمی‌شوند.',
       confirmLabel: 'حذف',
       destructive: true,
     );
@@ -633,41 +639,51 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               icon: const Icon(RhythmoIcons.dotsThreeVertical),
               onSelected: (action) => switch (action) {
                 _PlaylistAction.rename => _rename(),
+                _PlaylistAction.syncChannel => showChannelSyncSheet(context,
+                    playlist: current, controller: widget.controller),
                 _PlaylistAction.delete => _delete(),
                 _PlaylistAction.leave => _leave(),
               },
               itemBuilder: (context) {
                 final danger = Theme.of(context).colorScheme.error;
-                // A member adds and removes their own tracks; the rest is
-                // the owner's.
-                return current.isOwner
-                    ? [
-                        const PopupMenuItem(
-                          value: _PlaylistAction.rename,
-                          child: _MenuRow(
-                            icon: RhythmoIcons.pencilSimple,
-                            label: 'تغییر نام',
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: _PlaylistAction.delete,
-                          child: _MenuRow(
-                            icon: RhythmoIcons.trash,
-                            label: 'حذف فهرست پخش',
-                            color: danger,
-                          ),
-                        ),
-                      ]
-                    : [
-                        PopupMenuItem(
-                          value: _PlaylistAction.leave,
-                          child: _MenuRow(
-                            icon: RhythmoIcons.signOut,
-                            label: 'ترک فهرست پخش',
-                            color: danger,
-                          ),
-                        ),
-                      ];
+                // A member adds and removes their own tracks; an admin also
+                // edits its name and description; the rest is the owner's.
+                return [
+                  if (current.canManage)
+                    const PopupMenuItem(
+                      value: _PlaylistAction.rename,
+                      child: _MenuRow(
+                        icon: RhythmoIcons.pencilSimple,
+                        label: 'ویرایش نام و توضیح',
+                      ),
+                    ),
+                  if (current.canManage && widget.controller.canSyncChannels)
+                    const PopupMenuItem(
+                      value: _PlaylistAction.syncChannel,
+                      child: _MenuRow(
+                        icon: RhythmoIcons.paperPlaneTilt,
+                        label: 'اتصال کانال تلگرام یا بله',
+                      ),
+                    ),
+                  if (current.isOwner)
+                    PopupMenuItem(
+                      value: _PlaylistAction.delete,
+                      child: _MenuRow(
+                        icon: RhythmoIcons.trash,
+                        label: 'حذف فهرست پخش',
+                        color: danger,
+                      ),
+                    )
+                  else
+                    PopupMenuItem(
+                      value: _PlaylistAction.leave,
+                      child: _MenuRow(
+                        icon: RhythmoIcons.signOut,
+                        label: 'ترک فهرست پخش',
+                        color: danger,
+                      ),
+                    ),
+                ];
               },
             ),
           const SizedBox(width: RhythmoSpace.sm),
@@ -686,10 +702,13 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       playlist: current,
                       playingId: widget.player.track?.id,
                       saving: saving,
+                      editing: editingTracks,
+                      onToggleEditing: () =>
+                          setState(() => editingTracks = !editingTracks),
                       onPlay: () => widget.player.playFrom(current.tracks, 0),
                       onShuffle: () =>
                           widget.player.playShuffled(current.tracks),
-                      onCollab: current.isOwner ? _collab : null,
+                      onCollab: current.canManage ? _collab : null,
                       onShare: current.isOwner ? _share : null,
                       onSelectTracks: _selectTracks,
                       onTapTrack: (index) =>
@@ -712,7 +731,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   }
 }
 
-enum _PlaylistAction { rename, delete, leave }
+enum _PlaylistAction { rename, syncChannel, delete, leave }
 
 class _MenuRow extends StatelessWidget {
   const _MenuRow({required this.icon, required this.label, this.color});
@@ -726,7 +745,11 @@ class _MenuRow extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: color),
           const SizedBox(width: RhythmoSpace.md),
-          Text(label, style: TextStyle(color: color)),
+          Flexible(
+            child: Text(label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: color)),
+          ),
         ],
       );
 }
@@ -740,6 +763,8 @@ class _PlaylistBody extends StatelessWidget {
     required this.playlist,
     required this.playingId,
     required this.saving,
+    required this.editing,
+    required this.onToggleEditing,
     required this.onPlay,
     required this.onShuffle,
     required this.onCollab,
@@ -753,6 +778,8 @@ class _PlaylistBody extends StatelessWidget {
   final Playlist playlist;
   final String? playingId;
   final bool saving;
+  final bool editing;
+  final VoidCallback onToggleEditing;
   final VoidCallback onPlay;
   final VoidCallback onShuffle;
   final VoidCallback? onCollab;
@@ -792,10 +819,27 @@ class _PlaylistBody extends StatelessWidget {
                 title: 'آهنگ‌ها',
                 padding: const EdgeInsetsDirectional.fromSTEB(RhythmoSpace.sm,
                     RhythmoSpace.xxl, RhythmoSpace.xs, RhythmoSpace.sm),
-                trailing: FilledButton.tonalIcon(
-                  onPressed: saving ? null : onSelectTracks,
-                  icon: const Icon(RhythmoIcons.plus, size: 20),
-                  label: const Text('مدیریت آهنگ‌ها'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (editing)
+                      IconButton(
+                        tooltip: 'انتخاب آهنگ‌ها',
+                        onPressed: saving ? null : onSelectTracks,
+                        constraints:
+                            const BoxConstraints(minWidth: 48, minHeight: 48),
+                        icon: const Icon(RhythmoIcons.plus, size: 20),
+                      ),
+                    IconButton(
+                      tooltip: editing ? 'پایان ویرایش' : 'مدیریت آهنگ‌ها',
+                      onPressed: saving ? null : onToggleEditing,
+                      constraints:
+                          const BoxConstraints(minWidth: 48, minHeight: 48),
+                      icon: Icon(
+                          editing ? Icons.check_rounded : Icons.edit_outlined,
+                          size: 20),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -805,7 +849,7 @@ class _PlaylistBody extends StatelessWidget {
               hasScrollBody: false,
               child: _PlaylistEmptyState(
                 message: 'برای این فهرست پخش آهنگ انتخاب کن.',
-                action: 'انتخاب از کتابخانه',
+                action: 'انتخاب از موسیقی من',
                 onPressed: onSelectTracks,
               ),
             )
@@ -834,7 +878,8 @@ class _PlaylistBody extends StatelessWidget {
                     onRemove: playlist.canRemove(track) && !saving
                         ? () => onRemoveTrack(track)
                         : null,
-                    canRemove: playlist.canRemove(track),
+                    canRemove: editing && playlist.canRemove(track),
+                    editing: editing && !saving,
                   );
                 },
               ),
@@ -871,8 +916,11 @@ class _PlaylistDetailHeader extends StatelessWidget {
       final wide = constraints.maxWidth >= 600;
       final align = wide ? CrossAxisAlignment.start : CrossAxisAlignment.center;
       final textAlign = wide ? TextAlign.start : TextAlign.center;
-      final eyebrow =
-          playlist.isCollaborative ? 'فهرست پخش مشترک' : 'فهرست پخش';
+      final eyebrow = playlist.isPublic
+          ? 'کانال موسیقی'
+          : playlist.isCollaborative
+              ? 'فهرست پخش مشترک'
+              : 'فهرست پخش';
       final details = Column(
         crossAxisAlignment: align,
         mainAxisSize: MainAxisSize.min,
@@ -890,12 +938,23 @@ class _PlaylistDetailHeader extends StatelessWidget {
             style: (wide
                     ? theme.textTheme.displaySmall
                     : theme.textTheme.headlineMedium)
-                ?.copyWith(fontWeight: FontWeight.w800, height: 1.3),
+                ?.copyWith(fontWeight: FontWeight.w500, height: 1.3),
           ),
+          if (playlist.description.isNotEmpty) ...[
+            const SizedBox(height: RhythmoSpace.xs),
+            Text(
+              playlist.description,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              textAlign: textAlign,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
           const SizedBox(height: RhythmoSpace.sm),
           Text(
             [
               '${persianDigits(playlist.displayTrackCount)} قطعه موسیقی',
+              if (playlist.isAdmin) 'ادمین هستی',
               if (!playlist.isOwner && playlist.owner != null)
                 'از ${playlist.owner}'
               else if (playlist.members.isNotEmpty)
@@ -916,8 +975,11 @@ class _PlaylistDetailHeader extends StatelessWidget {
             children: [
               FilledButton.icon(
                 onPressed: empty ? null : onPlay,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(112, RhythmoSpace.target),
+                style: rhythmoPlayStyle(
+                  context,
+                  FilledButton.styleFrom(
+                    minimumSize: const Size(112, RhythmoSpace.target),
+                  ),
                 ),
                 icon: const Icon(RhythmoIcons.playFill, size: 20),
                 label: const Text('پخش'),
@@ -929,7 +991,9 @@ class _PlaylistDetailHeader extends StatelessWidget {
               ),
               if (onCollab != null)
                 IconButton.outlined(
-                  tooltip: 'دعوت دوستان و مدیریت اعضا',
+                  tooltip: playlist.isOwner
+                      ? 'دعوت دوستان و مدیریت اعضا'
+                      : 'اعضا و ادمین‌ها',
                   onPressed: onCollab,
                   icon: Icon(playlist.collabToken == null
                       ? RhythmoIcons.userPlus
@@ -949,6 +1013,7 @@ class _PlaylistDetailHeader extends StatelessWidget {
       );
       final cover = _PlaylistCover(
         trackCount: playlist.displayTrackCount,
+        tracks: playlist.tracks,
         size: wide ? 184 : 152,
         showCount: false,
       );
@@ -990,15 +1055,49 @@ class _PlaylistDetailHeader extends StatelessWidget {
   }
 }
 
+/// Under a playlist's name: public (a globe) or private (a lock), then how
+/// many songs it holds.
+class PlaylistPrivacyLine extends StatelessWidget {
+  const PlaylistPrivacyLine({super.key, required this.playlist});
+
+  final Playlist playlist;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final public = playlist.isPublic;
+    final count = '${persianDigits(playlist.displayTrackCount)} آهنگ';
+    return Row(
+      children: [
+        Icon(public ? RhythmoIcons.globe : RhythmoIcons.lockSimple,
+            size: 14, color: colors.secondary),
+        const SizedBox(width: RhythmoSpace.xs),
+        Flexible(
+          child: Text(
+            '${public ? 'عمومی' : 'خصوصی'} · $count',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A playlist's cover from its own songs: four covers in a grid when it has
+/// four or more, the first song's cover otherwise, and a quiet tile with a
+/// note while it is empty. Flat, with no glow.
 class _PlaylistCover extends StatelessWidget {
   const _PlaylistCover({
     required this.trackCount,
     required this.size,
+    this.tracks = const [],
     this.showCount = true,
   });
 
   final int trackCount;
   final double size;
+  final List<Track> tracks;
 
   /// Off where the count is written beside the cover.
   final bool showCount;
@@ -1006,31 +1105,42 @@ class _PlaylistCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size > 100 ? 24 : 18),
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [RhythmoColors.primary, RhythmoColors.secondaryDeep],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: RhythmoColors.primary.withValues(alpha: 0.2),
-            offset: const Offset(0, 10),
-            blurRadius: 24,
-          ),
-        ],
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(
+    final radius = size > 100 ? RhythmoRadii.md : RhythmoRadii.xs;
+    Widget tile(Track? track, double side) {
+      final blank = SizedBox.square(
+        dimension: side,
+        child: ColoredBox(
+          color: RhythmoColors.surfaceStrong,
+          child: Icon(
             trackCount == 0 ? RhythmoIcons.playlist : RhythmoIcons.musicNotes,
-            size: size * 0.36,
-            color: RhythmoColors.onBrand,
+            size: side * 0.36,
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+      );
+      return track == null
+          ? blank
+          : SizedBox.square(
+              dimension: side,
+              child: TrackCover(track: track, radius: 0, child: blank));
+    }
+
+    final half = size / 2;
+    final art = tracks.length >= 4
+        ? Column(
+            children: [
+              Row(children: [tile(tracks[0], half), tile(tracks[1], half)]),
+              Row(children: [tile(tracks[2], half), tile(tracks[3], half)]),
+            ],
+          )
+        : tile(tracks.isEmpty ? null : tracks.first, size);
+    return SizedBox.square(
+      dimension: size,
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(radius),
+            child: art,
           ),
           if (showCount)
             PositionedDirectional(
@@ -1071,6 +1181,7 @@ class _PlaylistTrackRow extends StatelessWidget {
     required this.onTap,
     required this.onRemove,
     required this.canRemove,
+    required this.editing,
   });
 
   final int index;
@@ -1079,6 +1190,7 @@ class _PlaylistTrackRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onRemove;
   final bool canRemove;
+  final bool editing;
 
   @override
   Widget build(BuildContext context) {
@@ -1150,26 +1262,29 @@ class _PlaylistTrackRow extends StatelessWidget {
                     IconButton(
                       tooltip: 'حذف از فهرست پخش',
                       onPressed: onRemove,
-                      color: colors.onSurfaceVariant,
-                      icon: const Icon(RhythmoIcons.x, size: 20),
+                      color: colors.onSurfaceVariant.withValues(alpha: 0.65),
+                      constraints:
+                          const BoxConstraints(minWidth: 48, minHeight: 48),
+                      icon: const Icon(Icons.remove_circle_outline, size: 18),
                     ),
-                  ReorderableDragStartListener(
-                    index: index,
-                    child: Tooltip(
-                      message: 'برای جابه‌جایی بکش',
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.grab,
-                        child: SizedBox.square(
-                          dimension: RhythmoSpace.target,
-                          child: Icon(
-                            RhythmoIcons.dotsSixVertical,
-                            size: 22,
-                            color: colors.onSurfaceVariant,
+                  if (editing)
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: Tooltip(
+                        message: 'برای جابه‌جایی بکش',
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.grab,
+                          child: SizedBox.square(
+                            dimension: RhythmoSpace.target,
+                            child: Icon(
+                              RhythmoIcons.dotsSixVertical,
+                              size: 22,
+                              color: colors.onSurfaceVariant,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -1207,6 +1322,9 @@ class _TrackPickerState extends State<_TrackPicker> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Text(
+                'آهنگ‌های محلی فقط روی این دستگاه در دسترس‌اند و به اشتراک گذاشته نمی‌شوند.'),
+            const SizedBox(height: 8),
             TextField(
               decoration: const InputDecoration(
                 labelText: 'جست‌وجوی عنوان یا هنرمند',
@@ -1222,7 +1340,7 @@ class _TrackPickerState extends State<_TrackPicker> {
             const SizedBox(height: 12),
             Expanded(
               child: widget.tracks.isEmpty
-                  ? const Center(child: Text('کتابخانه خالی است.'))
+                  ? const Center(child: Text('«موسیقی من» خالی است.'))
                   : tracks.isEmpty
                       ? const Center(
                           child: Text('آهنگی با این جست‌وجو پیدا نشد.'))
@@ -1301,6 +1419,62 @@ Future<String?> _askName(
     ),
   );
   controller.dispose();
+  return result;
+}
+
+/// Asks for a playlist's name and its channel description.
+Future<({String name, String description})?> _askDetails(
+    BuildContext context, Playlist playlist) async {
+  final name = TextEditingController(text: playlist.name);
+  final description = TextEditingController(text: playlist.description);
+  final result = await showDialog<({String name, String description})>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('نام و توضیح'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: name,
+              autofocus: true,
+              maxLength: 200,
+              decoration: const InputDecoration(labelText: 'نام'),
+            ),
+            const SizedBox(height: RhythmoSpace.sm),
+            TextField(
+              controller: description,
+              maxLength: 500,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'توضیح',
+                hintText: 'این کانال درباره‌ی چیست؟',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('انصراف'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final value = name.text.trim();
+            if (value.isNotEmpty) {
+              Navigator.pop(
+                  context, (name: value, description: description.text.trim()));
+            }
+          },
+          child: const Text('ذخیره'),
+        ),
+      ],
+    ),
+  );
+  name.dispose();
+  description.dispose();
   return result;
 }
 

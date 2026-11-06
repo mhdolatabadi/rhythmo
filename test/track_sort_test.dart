@@ -19,7 +19,7 @@ void main() {
 
   List<String> ids(List<Track> tracks) => [for (final t in tracks) t.id];
 
-  test('recent keeps the library order', () {
+  test('recent keeps the library order when dates are unknown', () {
     expect(ids(sortTracks(library, TrackSort.recent)), ['1', '2', '3', '4']);
   });
 
@@ -39,5 +39,54 @@ void main() {
   test('sorting does not change the list it was given', () {
     sortTracks(library, TrackSort.title);
     expect(ids(library), ['1', '2', '3', '4']);
+  });
+
+  group('by date', () {
+    Track dated(String id, int day, {bool local = false}) => Track(
+        id: id,
+        title: id,
+        contentType: 'audio/mpeg',
+        sizeBytes: 1,
+        sourceUri: local ? Uri.parse('content://media/$id') : null,
+        addedAt: day < 0 ? null : DateTime(2026, 10, day));
+
+    // As the unified library lists them: server tracks, then device ones.
+    final mixed = [
+      dated('server-new', 20),
+      dated('server-old', 2),
+      dated('undated', -1),
+      dated('device-newest', 24, local: true),
+      dated('device-mid', 10, local: true),
+    ];
+
+    test('recent interleaves server and device tracks by date', () {
+      expect(ids(sortTracks(mixed, TrackSort.recent)), [
+        'device-newest',
+        'server-new',
+        'device-mid',
+        'server-old',
+        'undated'
+      ]);
+    });
+
+    test('oldest interleaves them the other way', () {
+      expect(ids(sortTracks(mixed, TrackSort.oldest)), [
+        'server-old',
+        'device-mid',
+        'server-new',
+        'device-newest',
+        'undated'
+      ]);
+    });
+
+    test('title and artist ignore where a track is kept', () {
+      expect(ids(sortTracks(mixed, TrackSort.title)), [
+        'device-mid',
+        'device-newest',
+        'server-new',
+        'server-old',
+        'undated',
+      ]);
+    });
   });
 }

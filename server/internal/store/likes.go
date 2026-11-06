@@ -56,20 +56,33 @@ func copiesOf(track string) string {
 		JOIN store_entry_tracks et2 ON et2.entry_id = et1.entry_id WHERE et1.track_id = ` + track + `)`
 }
 
-// SetOwnLike likes or unlikes one of userID's own ready tracks. Both are
-// idempotent. ErrNotFound for anyone else's track: those are liked through
-// the store.
+// SetOwnLike likes a ready track owned by the listener or publicly playable.
+// Private and moderated tracks remain inaccessible to other listeners.
 func (l *TrackLikes) SetOwnLike(ctx context.Context, userID, trackID string, liked bool) (LikeState, error) {
 	var exists bool
 	if err := l.pool.QueryRow(ctx, `
-		SELECT EXISTS (SELECT 1 FROM tracks WHERE id::text = $1 AND owner_id::text = $2 AND status = 'ready')
+		SELECT EXISTS (SELECT 1 FROM tracks WHERE id::text = $1 AND status = 'ready'
+        AND (owner_id::text = $2 OR (`+storeEligible("tracks")+`
+        AND NOT EXISTS (SELECT 1 FROM store_entry_tracks et JOIN store_entries se ON se.id = et.entry_id
+        WHERE et.track_id = tracks.id AND se.hidden_at IS NOT NULL))))
 	`, trackID, userID).Scan(&exists); err != nil {
 		return LikeState{}, err
 	}
 	if !exists {
 		return LikeState{}, ErrNotFound
 	}
-	if err := l.set(ctx, userID, []string{trackID}, trackID, liked); err != nil {
+	copies := []string{trackID}
+	if !liked {
+		rows, err := l.pool.Query(ctx, `SELECT id::text FROM tracks WHERE id IN `+copiesOf("$1::text::uuid"), trackID)
+		if err != nil {
+			return LikeState{}, err
+		}
+		copies, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return LikeState{}, err
+		}
+	}
+	if err := l.set(ctx, userID, copies, trackID, liked); err != nil {
 		return LikeState{}, err
 	}
 	return l.trackState(ctx, userID, trackID)
@@ -199,9 +212,10 @@ func (l *TrackLikes) OwnerStates(ctx context.Context, ownerID string) (map[strin
 // LikedSong is one of the listener's «پسندیده‌ها»: their own track, or a
 // store song (Entry set).
 type LikedSong struct {
-	LikedAt time.Time
-	Track   Track
-	Entry   *StoreEntry
+	TrackIDs []string
+	LikedAt  time.Time
+	Track    Track
+	Entry    *StoreEntry
 }
 
 // maxLiked caps how many likes one listing reads.
@@ -237,14 +251,14 @@ func (l *TrackLikes) Liked(ctx context.Context, userID string, limit, offset int
 
 	rows, err = l.pool.Query(ctx, `
 		WITH `+liveEntries+`, liked AS (
-			SELECT et.entry_id::text AS entry_id, max(tl.created_at) AS liked_at
+			SELECT et.entry_id::text AS entry_id, max(tl.created_at) AS liked_at, array_agg(DISTINCT tl.track_id::text) AS track_ids
 			FROM track_likes tl
 			JOIN tracks lt ON lt.id = tl.track_id
 			JOIN store_entry_tracks et ON et.track_id = tl.track_id
 			WHERE tl.user_id::text = $2 AND lt.owner_id::text <> $2
 			GROUP BY et.entry_id
 		)
-		SELECT liked.liked_at, live.entry_id, live.copies, live.hidden_at IS NOT NULL, `+liveTrackColumns+`
+		SELECT liked.liked_at, liked.track_ids, live.entry_id, live.copies, live.hidden_at IS NOT NULL, `+liveTrackColumns+`
 		FROM liked JOIN live ON live.entry_id = liked.entry_id
 		ORDER BY liked.liked_at DESC LIMIT $3
 	`, false, userID, maxLiked)
@@ -254,7 +268,7 @@ func (l *TrackLikes) Liked(ctx context.Context, userID string, limit, offset int
 	for rows.Next() {
 		var song LikedSong
 		entry := StoreEntry{}
-		dest := append([]any{&song.LikedAt, &entry.ID, &entry.Copies, &entry.Hidden}, trackDestinations(&entry.Track)...)
+		dest := append([]any{&song.LikedAt, &song.TrackIDs, &entry.ID, &entry.Copies, &entry.Hidden}, trackDestinations(&entry.Track)...)
 		if err := rows.Scan(dest...); err != nil {
 			rows.Close()
 			return nil, false, err

@@ -294,9 +294,9 @@ func (p *PublicPages) renderStoreList(w http.ResponseWriter, r *http.Request, qu
 		data.JSONLD = list
 	}
 	if len(data.Trail) == 0 {
-		data.setCrumbs(site, crumb{Name: "استور"})
+		data.setCrumbs(site, crumb{Name: "گنجینه"})
 	} else {
-		data.setCrumbs(site, append([]crumb{{Name: "استور", Link: "/store"}}, data.Trail...)...)
+		data.setCrumbs(site, append([]crumb{{Name: "گنجینه", Link: "/store"}}, data.Trail...)...)
 	}
 	if len(entries) == 0 && page > 1 {
 		data.NoIndex = true
@@ -312,18 +312,18 @@ func (p *PublicPages) handleStore(w http.ResponseWriter, r *http.Request) {
 	}
 	search := storeQueryText(r.URL.Query().Get("q"))
 	data := storeListData{
-		Heading: "استور ریتمو",
+		Heading: "گنجینه ریتمو",
 		Intro:   "همه‌ی آهنگ‌های فهرست‌های پخش عمومی ریتمو، هر آهنگ یک بار و با بهترین کیفیت موجود؛ بدون ثبت‌نام بشنو.",
 		Query:   search,
-		Empty:   "هنوز آهنگی در استور نیست.",
+		Empty:   "هنوز آهنگی در گنجینه نیست.",
 	}
-	data.Title = "استور ریتمو | پخش آنلاین آهنگ با کیفیت اصلی"
+	data.Title = "گنجینه ریتمو | پخش آنلاین آهنگ با کیفیت اصلی"
 	data.Description = "آهنگ‌های فهرست‌های پخش عمومی ریتمو را جستجو کن، بر اساس خواننده و آلبوم مرور کن و آنلاین و بدون ثبت‌نام بشنو."
 	keep := url.Values{}
 	if search != "" {
 		keep.Set("q", search)
 		data.Heading = "جستجوی «" + search + "»"
-		data.Title = "«" + search + "» در استور ریتمو"
+		data.Title = "«" + search + "» در گنجینه ریتمو"
 		data.Empty = "آهنگی با این نام پیدا نشد. املای دیگری را امتحان کن."
 		// Search results are not pages of their own.
 		data.NoIndex = true
@@ -341,8 +341,8 @@ func (p *PublicPages) handleStoreArtist(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	data := storeListData{
-		Heading: name, Intro: "آهنگ‌های " + name + " در استور ریتمو.",
-		Empty: "آهنگی از این خواننده در استور نیست.",
+		Heading: name, Intro: "آهنگ‌های " + name + " در گنجینه ریتمو.",
+		Empty: "آهنگی از این خواننده در گنجینه نیست.",
 	}
 	data.Title = "آهنگ‌های " + name + " | پخش آنلاین در ریتمو"
 	data.Description = "آهنگ‌های " + name + " را در ریتمو بدون ثبت‌نام بشنو."
@@ -361,9 +361,9 @@ func (p *PublicPages) handleStoreArtist(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	data.ArtistName = name
-	data.Intro = fmt.Sprintf("%s آهنگ و %s آلبوم از %s در استور ریتمو؛ آنلاین، با کیفیت اصلی و بدون ثبت‌نام بشنو.", display.PersianDigits(tracks), display.PersianDigits(albumCount), name)
+	data.Intro = fmt.Sprintf("%s آهنگ و %s آلبوم از %s در گنجینه ریتمو؛ آنلاین، با کیفیت اصلی و بدون ثبت‌نام بشنو.", display.PersianDigits(tracks), display.PersianDigits(albumCount), name)
 	if tracks == 0 {
-		data.Intro = "آهنگ‌های " + name + " در استور ریتمو؛ آنلاین، با کیفیت اصلی و بدون ثبت‌نام بشنو."
+		data.Intro = "آهنگ‌های " + name + " در گنجینه ریتمو؛ آنلاین، با کیفیت اصلی و بدون ثبت‌نام بشنو."
 	}
 	data.Description = data.Intro
 	data.Trail = []crumb{{Name: "خواننده‌ها", Link: "/store/artists"}, {Name: name}}
@@ -439,13 +439,13 @@ func (p *PublicPages) handleStoreAlbum(w http.ResponseWriter, r *http.Request) {
 		p.renderStoreMissing(w, r)
 		return
 	}
-	data := storeListData{Heading: name, Intro: "آلبوم " + name, Empty: "آهنگی از این آلبوم در استور نیست."}
+	data := storeListData{Heading: name, Intro: "آلبوم " + name, Empty: "آهنگی از این آلبوم در گنجینه نیست."}
 	keep := url.Values{}
 	if artist != "" {
 		data.Intro += " از " + artist
 		keep.Set("artist", artist)
 	}
-	data.Intro += " در استور ریتمو."
+	data.Intro += " در گنجینه ریتمو."
 	data.Trail = []crumb{{Name: "آلبوم‌ها", Link: "/store/albums"}, {Name: name}}
 	data.Title = "آلبوم " + name
 	if artist != "" {
@@ -473,7 +473,7 @@ func (p *PublicPages) renderStoreIndex(w http.ResponseWriter, r *http.Request, d
 		data.Canonical += "?page=" + strconv.Itoa(page)
 	}
 	data.Image, data.OGType = site+"/social.png", "website"
-	data.setCrumbs(site, crumb{Name: "استور", Link: "/store"}, crumb{Name: data.Heading})
+	data.setCrumbs(site, crumb{Name: "گنجینه", Link: "/store"}, crumb{Name: data.Heading})
 	w.Header().Set("Cache-Control", publicPageMaxAge)
 	p.render(w, r, http.StatusOK, "storeIndex", data)
 }
@@ -488,9 +488,9 @@ func (p *PublicPages) handleStoreArtists(w http.ResponseWriter, r *http.Request)
 		internalError(w, "list store artists page", err)
 		return
 	}
-	data := storeIndexData{Heading: "خواننده‌ها", Intro: "خواننده‌های آهنگ‌های استور ریتمو.", Empty: "هنوز خواننده‌ای در استور نیست."}
-	data.Title = "خواننده‌ها | استور ریتمو"
-	data.Description = "آهنگ‌های استور ریتمو را بر اساس خواننده مرور کن و بدون ثبت‌نام بشنو."
+	data := storeIndexData{Heading: "خواننده‌ها", Intro: "خواننده‌های آهنگ‌های گنجینه ریتمو.", Empty: "هنوز خواننده‌ای در گنجینه نیست."}
+	data.Title = "خواننده‌ها | گنجینه ریتمو"
+	data.Description = "آهنگ‌های گنجینه ریتمو را بر اساس خواننده مرور کن و بدون ثبت‌نام بشنو."
 	for _, a := range artists {
 		data.Items = append(data.Items, storeIndexItem{Name: a.Name, Link: artistLink(a.Name), TrackCount: a.TrackCount})
 	}
@@ -507,9 +507,9 @@ func (p *PublicPages) handleStoreAlbums(w http.ResponseWriter, r *http.Request) 
 		internalError(w, "list store albums page", err)
 		return
 	}
-	data := storeIndexData{Heading: "آلبوم‌ها", Intro: "آلبوم‌های آهنگ‌های استور ریتمو.", Empty: "هنوز آلبومی در استور نیست."}
-	data.Title = "آلبوم‌ها | استور ریتمو"
-	data.Description = "آهنگ‌های استور ریتمو را بر اساس آلبوم مرور کن و بدون ثبت‌نام بشنو."
+	data := storeIndexData{Heading: "آلبوم‌ها", Intro: "آلبوم‌های آهنگ‌های گنجینه ریتمو.", Empty: "هنوز آلبومی در گنجینه نیست."}
+	data.Title = "آلبوم‌ها | گنجینه ریتمو"
+	data.Description = "آهنگ‌های گنجینه ریتمو را بر اساس آلبوم مرور کن و بدون ثبت‌نام بشنو."
 	for _, a := range albums {
 		artist := optional(a.Artist)
 		data.Items = append(data.Items, storeIndexItem{Name: a.Name, Sub: artist, Link: albumLink(a.Name, artist), TrackCount: a.TrackCount})
@@ -518,9 +518,9 @@ func (p *PublicPages) handleStoreAlbums(w http.ResponseWriter, r *http.Request) 
 }
 
 func (p *PublicPages) renderStoreMissing(w http.ResponseWriter, r *http.Request) {
-	p.renderMissing(w, r, "این آهنگ در استور نیست",
+	p.renderMissing(w, r, "این آهنگ در گنجینه نیست",
 		"ممکن است از فهرست‌های پخش عمومی برداشته شده باشد.",
-		"این آهنگ در استور ریتمو نیست.")
+		"این آهنگ در گنجینه ریتمو نیست.")
 }
 
 // storeEntry loads the listed entry at {id}, or writes the not-found page.
@@ -594,7 +594,7 @@ func (p *PublicPages) handleStoreTrack(w http.ResponseWriter, r *http.Request) {
 		ImageAlt: title + " در ریتمو",
 		OGType:   "music.song", JSONLD: recording,
 	}
-	trail := []crumb{{Name: "استور", Link: "/store"}}
+	trail := []crumb{{Name: "گنجینه", Link: "/store"}}
 	if track.Artist != "" {
 		trail = append(trail, crumb{Name: track.Artist, Link: track.ArtistLink})
 	}

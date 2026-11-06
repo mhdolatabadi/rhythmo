@@ -63,7 +63,7 @@ class LikedSongsEntry extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w500,
                               color: scheme.onSecondaryContainer,
                             ),
                           ),
@@ -149,6 +149,7 @@ class LikedSongsScreen extends StatelessWidget {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             FilledButton.icon(
+                              style: rhythmoPlayStyle(context),
                               onPressed: () => player.playFrom(songs, 0),
                               icon: const Icon(RhythmoIcons.playFill),
                               label: const Text('پخش همه'),

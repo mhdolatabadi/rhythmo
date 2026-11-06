@@ -101,7 +101,7 @@ class MonthlyListeningCard {
     text('همراه‌های محبوب این ماه', 578,
         size: 34, color: RhythmoColors.primary);
     if (topTracks.isEmpty) {
-      text('نام آهنگ‌ها در کتابخانهٔ فعلی در دسترس نیست.', 660,
+      text('نام آهنگ‌ها در «موسیقی من» در دسترس نیست.', 660,
           size: 30, color: RhythmoColors.onSurfaceVariant);
     }
     for (var i = 0; i < topTracks.length; i++) {

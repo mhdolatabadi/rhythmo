@@ -45,19 +45,17 @@ void main() {
       expect(rect.left, closeTo(gutter, 1));
       expect(rect.width, greaterThanOrEqualTo(48));
       expect(tester.takeException(), isNull);
-      if (size.width >= 960) {
-        expect(find.text('تنظیمات'), findsNothing);
-        expect(find.text('خروج'), findsNothing);
-        expect(find.byTooltip('تنظیمات'), findsOneWidget);
-        expect(find.byTooltip('خروج'), findsOneWidget);
-      }
+      // Settings and sign-out live behind «حساب», not in the header.
+      expect(find.byTooltip('حساب'), findsOneWidget);
+      expect(find.byTooltip('خروج'), findsNothing);
+      expect(find.byTooltip('گنجینه'), findsNothing);
     });
 
     testWidgets('an empty library says what to do at $label', (tester) async {
       await _pump(tester, size, const []);
       expect(tester.takeException(), isNull);
       expect(find.byType(RhythmoStateView), findsWidgets);
-      expect(find.text('کتابخانهٔ شما خالی است'), findsOneWidget);
+      expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
     });
 
     testWidgets('the mini player never covers the last track at $label',
@@ -113,7 +111,7 @@ void main() {
       ]);
       // No search field above the list; a 48 px header button instead.
       expect(find.byType(SearchBar), findsNothing);
-      final button = find.byTooltip('جست‌وجو در کتابخانه');
+      final button = find.byTooltip('جست‌وجو');
       expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
       await tester.tap(button);
       await tester.pumpAndSettle();
@@ -143,11 +141,11 @@ void main() {
       await tester.tap(remove);
       await tester.pumpAndSettle();
       expect(find.text('جست‌وجوهای اخیر'), findsNothing);
-      expect(find.text('در همهٔ کتابخانه بگرد'), findsOneWidget);
+      expect(find.text('در همهٔ موسیقی‌ات بگرد'), findsOneWidget);
     });
 
     testWidgets(
-        'rows are compact: artist only, faint inset hairlines, '
+        'rows are compact: artist only, no lines between them, '
         'and tabs inside the gutter at $label', (tester) async {
       await _pump(tester, size, [
         for (var i = 1; i <= 3; i++)
@@ -164,17 +162,11 @@ void main() {
       expect(find.text('خواننده نامشخص'), findsOneWidget);
       expect(find.textContaining('مگابایت'), findsNothing);
 
-      // A hairline between each pair of rows, none after the last.
-      final hairlines = find.byWidgetPredicate(
-          (w) => w is Divider && w.height == 1 && (w.indent ?? 0) > 48);
-      expect(hairlines, findsNWidgets(2));
-      final row = tester.getRect(find.ancestor(
-          of: find.text('آهنگ 1'), matching: find.byType(ListTile)));
-      final title = tester.getRect(find.text('آهنگ 1'));
-      final line = tester.widget<Divider>(hairlines.first);
-      // RTL: the line starts after the artwork, at the title's edge.
-      expect(line.indent, closeTo(row.right - title.right, 1));
-      expect(tester.getSize(hairlines.first).height, 1);
+      // No lines between rows: artwork and spacing tell them apart.
+      expect(
+          find.byWidgetPredicate(
+              (w) => w is Divider && w.height == 1 && (w.indent ?? 0) > 48),
+          findsNothing);
 
       // Each tab is a 48 px target; its pill stays inside the gutter.
       final gutter = size.width > RhythmoSpace.pageWidth
@@ -195,5 +187,41 @@ void main() {
     expect(libraryTabViewPhysics(isWeb: false), isNull);
     expect(libraryTabViewPhysics(isWeb: true),
         isA<NeverScrollableScrollPhysics>());
+  });
+
+  testWidgets('lectures fold into one section, by topic', (tester) async {
+    Track lecture(int session) => Track(
+          id: 'l$session',
+          title: 'فاطمیه؛ جلسه $session',
+          artist: 'حامد کاشانی',
+          album: 'فاطمیه',
+          trackNumber: session,
+          source: 'bale_archive',
+          contentType: 'audio/mpeg',
+          sizeBytes: 1024,
+        );
+    await _pump(tester, const Size(360, 740), [
+      const Track(
+          id: 's1', title: 'آهنگ', contentType: 'audio/mpeg', sizeBytes: 1024),
+      lecture(2),
+      lecture(1),
+    ]);
+    expect(tester.takeException(), isNull);
+    expect(find.text('آهنگ'), findsOneWidget);
+    expect(find.text('سخنرانی‌ها'), findsOneWidget);
+    expect(find.text('۲ جلسه در ۱ موضوع'), findsOneWidget);
+    expect(find.text('فاطمیه؛ جلسه 1'), findsNothing);
+
+    await tester.tap(find.text('سخنرانی‌ها'));
+    await tester.pumpAndSettle();
+    expect(find.text('فاطمیه'), findsOneWidget);
+    expect(find.text('فاطمیه؛ جلسه 1'), findsNothing);
+
+    await tester.tap(find.text('فاطمیه'));
+    await tester.pumpAndSettle();
+    final first = tester.getRect(find.text('فاطمیه؛ جلسه 1'));
+    final second = tester.getRect(find.text('فاطمیه؛ جلسه 2'));
+    expect(first.top, lessThan(second.top));
+    expect(tester.takeException(), isNull);
   });
 }

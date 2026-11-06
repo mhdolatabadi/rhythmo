@@ -46,7 +46,7 @@ enum StoreRanking {
   popular('popular', 'محبوب‌ترین‌ها'),
 
   /// Likes and plays of the last two weeks, newest weighing most.
-  trending('trending', 'داغ‌ترین‌های این روزها');
+  trending('trending', 'داغ این هفته');
 
   const StoreRanking(this.wire, this.label);
 

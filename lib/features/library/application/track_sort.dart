@@ -2,7 +2,7 @@ import 'package:rhythmo/features/library/data/track.dart';
 
 /// How the track list is ordered.
 enum TrackSort {
-  /// The order the library gives: most recently added first.
+  /// Most recently added first, whether to the account or to the device.
   recent('تاریخ افزودن؛ جدیدترین اول'),
   oldest('تاریخ افزودن؛ قدیمی‌ترین اول'),
   title('نام آهنگ'),
@@ -21,11 +21,27 @@ enum TrackSort {
   final String label;
 }
 
-/// Returns [tracks] in [sort] order. Titles and artists compare without
-/// case; tracks without an artist go last; ties keep their library order.
+/// Returns [tracks] in [sort] order. Server and device tracks sort together
+/// by the same key. Titles and artists compare without case; tracks without
+/// an artist, or without a date when sorting by date, go last; ties keep
+/// their library order, reversed for [TrackSort.oldest].
 List<Track> sortTracks(List<Track> tracks, TrackSort sort) {
-  if (sort == TrackSort.recent) return tracks;
-  if (sort == TrackSort.oldest) return tracks.reversed.toList();
+  if (sort == TrackSort.recent || sort == TrackSort.oldest) {
+    final newestFirst = sort == TrackSort.recent;
+    final indexed = [for (var i = 0; i < tracks.length; i++) (i, tracks[i])];
+    indexed.sort((a, b) {
+      final atA = a.$2.addedAt, atB = b.$2.addedAt;
+      if ((atA == null) != (atB == null)) return atA == null ? 1 : -1;
+      final order = atA == null
+          ? 0
+          : newestFirst
+              ? atB!.compareTo(atA)
+              : atA.compareTo(atB!);
+      if (order != 0) return order;
+      return newestFirst ? a.$1.compareTo(b.$1) : b.$1.compareTo(a.$1);
+    });
+    return [for (final (_, track) in indexed) track];
+  }
   if (sort == TrackSort.mostLiked || sort == TrackSort.published) {
     final kept = [
       for (var i = 0; i < tracks.length; i++)

@@ -17,18 +17,37 @@ void main() {
     expect(saved.hidden, {LibraryTab.albums});
   });
 
+  test('«موسیقی من» opens with songs and playlists only (#445)', () {
+    expect(const AppPreferences().order.take(2),
+        [LibraryTab.tracks, LibraryTab.playlists]);
+    expect(const AppPreferences().hidden,
+        {LibraryTab.newOnDevice, LibraryTab.albums, LibraryTab.artists});
+    // Liked songs have their own dock entry: an old saved «favorites» tab
+    // is dropped rather than failing.
+    final old = AppPreferences.fromJson({
+      'tabs': ['favorites', 'tracks'],
+      'hidden': ['favorites', 'albums']
+    });
+    expect(old.order.first, LibraryTab.tracks);
+    expect(old.hidden, {LibraryTab.albums});
+    // A listener's own choice of tabs survives a save.
+    const chosen = AppPreferences(hidden: {LibraryTab.artists});
+    expect(
+        AppPreferences.fromJson(chosen.toJson()).hidden, {LibraryTab.artists});
+  });
+
   test('appearance and tab choices survive a controller restart', () async {
     final store = MemoryAppPreferencesStore();
     final first = AppPreferencesController(store: store);
     await first.update(
         themeMode: ThemeMode.system,
-        order: [LibraryTab.favorites, LibraryTab.tracks],
+        order: [LibraryTab.albums, LibraryTab.tracks],
         hidden: {LibraryTab.artists});
     first.dispose();
     final next = AppPreferencesController(store: store);
     await next.load();
     expect(next.value.themeMode, ThemeMode.system);
-    expect(next.value.order.first, LibraryTab.favorites);
+    expect(next.value.order.first, LibraryTab.albums);
     expect(next.value.hidden, {LibraryTab.artists});
     next.dispose();
   });

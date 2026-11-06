@@ -52,7 +52,7 @@ abstract final class RhythmoColors {
 
   // Text and lines.
   static const onSurface = Color(0xFFF5F1F7);
-  static const onSurfaceVariant = Color(0xFFD0C8D4);
+  static const onSurfaceVariant = Color(0xFFA9A1AE);
   static const outline = Color(0xFF8B8290);
   static const outlineVariant = Color(0xFF3C3743);
 
@@ -75,13 +75,15 @@ abstract final class RhythmoColors {
   /// light surfaces. The light scheme is derived from it.
   static const lightSeed = Color(0xFFAD2638);
 
-  // Ambient light behind the app.
-  static const ambientTop = Color(0xFF17101D);
-  static const ambientMiddle = Color(0xFF090B14);
+  // Ambient light behind the app: navy, only faintly tinted, never red.
+  static const ambientCoralAlpha = 0.06;
+  static const ambientVioletAlpha = 0.08;
+  static const ambientTop = Color(0xFF11142A);
+  static const ambientMiddle = Color(0xFF0A0C18);
 }
 
 /// Spacing scale, in logical pixels. Groups are tight (xs–sm), sections
-/// generous (lg–xxl). Page gutters are [lg] on phones and [xxl] on desktop.
+/// a step apart (md–lg); the app is compact, so xxl and up are rare. Page gutters are [lg] on phones and [xxl] on desktop.
 abstract final class RhythmoSpace {
   static const double xxs = 2;
   static const double xs = 4;
@@ -142,9 +144,6 @@ abstract final class RhythmoMotion {
   /// Artwork breathing, the playing lyric line scrolling into place.
   static const long = Duration(milliseconds: 420);
 
-  /// The ambient light settling in once, as a screen arrives.
-  static const arrival = Duration(milliseconds: 1400);
-
   /// The now-playing backdrop's slow drift, repeated while music plays.
   static const ambient = Duration(seconds: 6);
 
@@ -180,16 +179,20 @@ abstract final class RhythmoType {
           color: color,
         );
     return base.copyWith(
-      displaySmall: style(base.displaySmall, 34, FontWeight.w800, 1.25),
-      headlineMedium: style(base.headlineMedium, 28, FontWeight.w800, 1.3),
-      headlineSmall: style(base.headlineSmall, 24, FontWeight.w800, 1.35),
-      titleLarge: style(base.titleLarge, 20, FontWeight.w800, 1.4),
-      titleMedium: style(base.titleMedium, 16, FontWeight.w700, 1.45),
-      titleSmall: style(base.titleSmall, 14, FontWeight.w700, 1.45),
-      bodyLarge: style(base.bodyLarge, 16, FontWeight.w400, 1.6),
-      bodyMedium: style(base.bodyMedium, 14, FontWeight.w400, 1.6),
-      bodySmall: style(base.bodySmall, 12, FontWeight.w400, 1.55),
-      labelLarge: style(base.labelLarge, 14, FontWeight.w600, 1.4),
+      // Six sizes and three weights, and no heavy headings: size and the
+      // muted colour carry the hierarchy. Bold is left for buttons and the
+      // playing line; titles are medium, everything that supports a line
+      // is regular and muted.
+      displaySmall: style(base.displaySmall, 24, FontWeight.w500, 1.35),
+      headlineMedium: style(base.headlineMedium, 20, FontWeight.w500, 1.4),
+      headlineSmall: style(base.headlineSmall, 18, FontWeight.w500, 1.4),
+      titleLarge: style(base.titleLarge, 15, FontWeight.w500, 1.45),
+      titleMedium: style(base.titleMedium, 15, FontWeight.w500, 1.6),
+      titleSmall: style(base.titleSmall, 13, FontWeight.w500, 1.45),
+      bodyLarge: style(base.bodyLarge, 15, FontWeight.w400, 1.6),
+      bodyMedium: style(base.bodyMedium, 13, FontWeight.w400, 1.6),
+      bodySmall: style(base.bodySmall, 12, FontWeight.w400, 1.5),
+      labelLarge: style(base.labelLarge, 13, FontWeight.w500, 1.4),
       labelMedium: style(base.labelMedium, 12, FontWeight.w500, 1.4),
       labelSmall: style(base.labelSmall, 11, FontWeight.w500, 1.4),
     );
@@ -307,13 +310,15 @@ class RhythmoTokens extends ThemeExtension<RhythmoTokens> {
   }
 }
 
-/// A dark, saturated colour picked from [seed], standing in for cover art
-/// until tracks have it. Every hue stays dark enough for light text on it.
+/// A dark colour picked from [seed], standing in for cover art until tracks
+/// have it. Hues stay between violet and ember, the brand's two lights, and
+/// dark enough for light text on them.
 Color artworkTint(String seed) {
   // FNV-1a, so a track keeps its colour across launches.
   var hash = 0x811c9dc5;
   for (final unit in seed.codeUnits) {
     hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
   }
-  return HSLColor.fromAHSL(1, (hash % 360).toDouble(), 0.42, 0.2).toColor();
+  final hue = 248 + hash % 110;
+  return HSLColor.fromAHSL(1, hue % 360.0, 0.42, 0.2).toColor();
 }

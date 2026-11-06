@@ -1,6 +1,9 @@
+import 'package:rhythmo/core/design/design.dart';
+import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/presentation/admin_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:rhythmo/features/feedback/feedback_screen.dart';
 import 'package:rhythmo/features/identify/application/identify_controller.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
@@ -23,6 +26,7 @@ import 'package:rhythmo/features/settings/application/cache_controller.dart';
 import 'package:rhythmo/features/upload/application/upload_controller.dart';
 import 'package:rhythmo/features/upload/data/audio_picker.dart';
 import 'package:rhythmo/features/store/application/store_controller.dart';
+import 'package:rhythmo/features/notifications/application/notifications_controller.dart';
 import 'package:rhythmo/features/store/presentation/store_screen.dart';
 
 /// Restores the saved session once, then shows the library, or for a guest
@@ -43,6 +47,7 @@ class AuthGate extends StatefulWidget {
     this.linkImports,
     this.identify,
     this.store,
+    this.notifications,
     required this.picker,
     required this.player,
   });
@@ -67,6 +72,9 @@ class AuthGate extends StatefulWidget {
 
   /// The public store; null hides it.
   final StoreController? store;
+
+  /// Notices from subscribed public playlists; null hides the bell.
+  final NotificationsController? notifications;
   final AudioPicker picker;
 
   @override
@@ -109,14 +117,31 @@ class _AuthGateState extends State<AuthGate> {
   void initState() {
     super.initState();
     widget.controller.addListener(_onAuthChanged);
+    AppConfiguration.linkOpened.addListener(_onLinkOpened);
     widget.controller.restore();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onAuthChanged);
+    AppConfiguration.linkOpened.removeListener(_onLinkOpened);
     super.dispose();
   }
+
+  /// A rhythmo link opened while the app runs: start the home over, so it
+  /// shows the linked playlist or song as on a fresh start.
+  void _onLinkOpened() {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    setState(() {
+      _guestShown = false;
+      _storeSongChecked = false;
+      _linkGeneration++;
+    });
+  }
+
+  /// Bumped per opened link; keys the home so it starts over.
+  int _linkGeneration = 0;
 
   /// Signing in from a guest screen lands in the library, not back on the
   /// sign-in or playlist page it was opened from. Signing out, or deleting
@@ -133,12 +158,20 @@ class _AuthGateState extends State<AuthGate> {
       _forgetAccount();
       Navigator.of(context).popUntil((route) => route.isFirst);
     }
+    // The last session's account track cannot play without that account.
+    final restored = widget.player.track;
+    if (status == AuthStatus.signedOut &&
+        widget.player.restored &&
+        restored != null &&
+        !restored.playsWithoutAccount) {
+      widget.player.stop(forget: true);
+    }
     _status = status;
   }
 
   /// Never show one account's tracks to the next one.
   void _forgetAccount() {
-    widget.player.stop();
+    widget.player.stop(forget: true);
     widget.player.favorites.clearAccount();
     widget.library.clear();
     widget.playlists?.clear();
@@ -168,6 +201,7 @@ class _AuthGateState extends State<AuthGate> {
       }
     }
     return PopularPlaylistsScreen(
+      key: ValueKey(_linkGeneration),
       controller: playlists,
       player: widget.player,
       onSignIn: _openSignIn,
@@ -196,7 +230,14 @@ class _AuthGateState extends State<AuthGate> {
               ? SignInScreen(controller: controller)
               : _guestHome(widget.playlists!),
           AuthStatus.signedIn => LibraryScreen(
+              key: ValueKey(_linkGeneration),
               email: controller.user!.email,
+              onFeedback: widget.adminApi is FeedbackApi
+                  ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => FeedbackScreen(
+                          api: widget.adminApi as FeedbackApi,
+                          token: () => controller.token)))
+                  : null,
               verified: controller.user!.verified,
               onVerifyEmail: controller.user!.emailVerified
                   ? null
@@ -221,7 +262,7 @@ class _AuthGateState extends State<AuthGate> {
                   : null,
               onLogout: () {
                 // Never show one account's tracks to the next one.
-                widget.player.stop();
+                widget.player.stop(forget: true);
                 widget.library.clear();
                 widget.playlists?.clear();
                 widget.recent?.clear();
@@ -245,6 +286,7 @@ class _AuthGateState extends State<AuthGate> {
               linkImports: widget.linkImports,
               identify: widget.identify,
               store: widget.store,
+              notifications: widget.notifications,
               picker: widget.picker,
             ),
         };
@@ -261,7 +303,8 @@ class _RestoreFailedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
+      body: RhythmoBackdrop(
+          child: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -277,7 +320,7 @@ class _RestoreFailedScreen extends StatelessWidget {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 }

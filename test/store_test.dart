@@ -10,6 +10,7 @@ import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/format_size.dart';
+import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/lyrics/application/lyrics_controller.dart';
@@ -68,10 +69,14 @@ class FakeStoreApi implements StoreApi {
   /// What the carousels rank; empty means nothing has a score yet.
   List<Track> ranked = [];
 
+  /// Holds the carousels' first page back until it completes.
+  Completer<void>? rankedGate;
+
   @override
   Future<StorePage<Track>> storeRanked(String? token, StoreRanking ranking,
       {int offset = 0}) async {
     calls.add('ranked:${ranking.wire}:$offset');
+    await rankedGate?.future;
     if (error != null) throw error!;
     final list =
         ranking == StoreRanking.popular ? ranked : ranked.reversed.toList();
@@ -411,7 +416,7 @@ void main() {
           song(i, title: '$long $i', artist: 'خواننده‌ای با نام بسیار بلند $i'),
       ]);
       expect(tester.takeException(), isNull);
-      expect(find.text('استور'), findsOneWidget);
+      expect(find.text('گنجینه'), findsOneWidget);
       for (final tab in ['آهنگ‌ها', 'خواننده‌ها', 'آلبوم‌ها']) {
         expect(tester.getSize(find.text(tab)).height, lessThan(48));
         expect(
@@ -427,6 +432,8 @@ void main() {
       // The artist is the row's only secondary detail; the size is not.
       expect(find.text('خواننده‌ای با نام بسیار بلند 0'), findsOneWidget);
       expect(find.textContaining(formatSize(3 * 1024 * 1024)), findsNothing);
+      // Rows sit on the page like «موسیقی من»'s: no lines between them.
+      expect(find.byType(Divider), findsNothing);
 
       await player.play(song(0, title: '$long 0'));
       await tester.pumpAndSettle();
@@ -539,10 +546,10 @@ void main() {
       await pump(tester, onSignIn: () => signIns++);
       await tester.tap(find.byTooltip('گزینه‌های آهنگ').first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('افزودن به کتابخانه‌ی من'));
+      await tester.tap(find.text('افزودن به موسیقی من'));
       await tester.pumpAndSettle();
       expect(
-          find.text('برای افزودن به کتابخانه وارد حسابت شو.'), findsOneWidget);
+          find.text('برای افزودن به موسیقی من وارد حسابت شو.'), findsOneWidget);
       await tester.tap(find.text('ورود'));
       expect(signIns, 1);
       await tester.tap(find.byTooltip('گزینه‌های آهنگ').first);
@@ -561,10 +568,10 @@ void main() {
       await pump(tester);
       await tester.tap(find.byTooltip('گزینه‌های آهنگ').first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('افزودن به کتابخانه‌ی من'));
+      await tester.tap(find.text('افزودن به موسیقی من'));
       await tester.pumpAndSettle();
       expect(api.calls, contains('save:tok:entry-0'));
-      expect(find.textContaining('به کتابخانه‌ات اضافه شد'), findsOneWidget);
+      expect(find.textContaining('به «موسیقی من» اضافه شد'), findsOneWidget);
 
       await tester.tap(find.byTooltip('گزینه‌های آهنگ').at(1));
       await tester.pumpAndSettle();
@@ -618,7 +625,7 @@ void main() {
 
     testWidgets('says when the linked song left the store', (tester) async {
       await pump(tester, openSongId: 'gone');
-      expect(find.text('این آهنگ دیگر در استور نیست.'), findsOneWidget);
+      expect(find.text('این آهنگ دیگر در گنجینه نیست.'), findsOneWidget);
     });
 
     testWidgets('an unreachable store offers a retry', (tester) async {
@@ -633,7 +640,7 @@ void main() {
         home: StoreScreen(controller: store, player: player),
       ));
       await tester.pumpAndSettle();
-      expect(find.text('استور بارگذاری نشد'), findsOneWidget);
+      expect(find.text('گنجینه بارگذاری نشد'), findsOneWidget);
       api.error = null;
       await tester.tap(find.text('تلاش دوباره'));
       await tester.pumpAndSettle();
@@ -663,7 +670,14 @@ void main() {
         store: store,
       )));
       await tester.pumpAndSettle();
-      final entry = find.byTooltip('استور');
+      final entry = find.byTooltip('گنجینه');
+      expect(
+        find.descendant(
+          of: entry,
+          matching: find.byIcon(RhythmoIcons.vinylRecord),
+        ),
+        findsOneWidget,
+      );
       expect(tester.getSize(entry).height, greaterThanOrEqualTo(48));
       await tester.tap(entry);
       await tester.pumpAndSettle();

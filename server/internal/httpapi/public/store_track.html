@@ -4,7 +4,7 @@
 <p class="meta">{{with .Track.Artist}}<a href="{{$.Track.ArtistLink}}"><bdi>{{.}}</bdi></a>{{end}}{{with .Track.Album}} · آلبوم <a href="{{$.Track.AlbumLink}}"><bdi>{{.}}</bdi></a>{{end}}</p>
 <p class="meta">{{with .Track.Duration}}{{.}} · {{end}}{{.Track.Format}} · {{.Track.Size}}</p>
 <audio class="player" controls preload="none" src="/store/t/{{.Track.ID}}/stream" aria-label="پخش {{.Track.Title}}"></audio>
-<div class="cta"><a class="button primary" href="/app/?store={{.Track.ID}}">افزودن به کتابخانه‌ی من</a><a class="button" href="/store">استور ریتمو</a></div>
+<div class="cta"><a class="button primary" href="/app/?store={{.Track.ID}}">افزودن به کتابخانه‌ی من</a><a class="button" href="/store">گنجینه ریتمو</a></div>
 <p class="meta note">این آهنگ در یکی از فهرست‌های پخش عمومی ریتمو هست و با همان کیفیت فایل اصلی پخش می‌شود. اگر به نظرت محتوای آن مشکلی دارد، در اپ ریتمو «گزارش تخلف» را بزن.</p>
 </section>
 {{end}}

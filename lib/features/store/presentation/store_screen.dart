@@ -17,7 +17,7 @@ import 'package:rhythmo/features/store/presentation/store_carousel.dart';
 /// song's actions stay near its title instead of across the window.
 const storeContentWidth = RhythmoSpace.listWidth;
 
-/// «استور»: every song in rhythmo's public playlists, once, by title,
+/// «گنجینه»: every song in rhythmo's public playlists, once, by title,
 /// artist and album. Anyone can search and play; adding a song to the
 /// library and reporting one need an account. Whose copy a song is is
 /// never shown.
@@ -95,7 +95,7 @@ class _StoreScreenState extends State<StoreScreen>
     }
     if (!mounted) return;
     if (song == null) {
-      _say('این آهنگ دیگر در استور نیست.');
+      _say('این آهنگ دیگر در گنجینه نیست.');
       return;
     }
     final found = song;
@@ -117,6 +117,7 @@ class _StoreScreenState extends State<StoreScreen>
             ),
             const SizedBox(height: RhythmoSpace.xl),
             FilledButton.icon(
+              style: rhythmoPlayStyle(context),
               onPressed: () {
                 Navigator.of(context).pop();
                 widget.player.play(found);
@@ -131,7 +132,7 @@ class _StoreScreenState extends State<StoreScreen>
                 _save(found);
               },
               icon: const Icon(RhythmoIcons.plusCircle),
-              label: const Text('افزودن به کتابخانه‌ی من'),
+              label: const Text('افزودن به موسیقی من'),
             ),
           ],
         ),
@@ -184,7 +185,7 @@ class _StoreScreenState extends State<StoreScreen>
       controller: _tabs,
       isScrollable: wide,
       tabAlignment: wide ? TabAlignment.start : TabAlignment.fill,
-      labelStyle: text.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+      labelStyle: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
       unselectedLabelStyle:
           text.titleSmall?.copyWith(fontWeight: FontWeight.w500),
       labelPadding: EdgeInsets.symmetric(
@@ -207,7 +208,7 @@ class _StoreScreenState extends State<StoreScreen>
     return Scaffold(
       extendBody: true,
       appBar: AppBar(
-        title: const Text('استور'),
+        title: const Text('گنجینه'),
         actions: [
           if (widget.identify != null)
             Padding(
@@ -288,8 +289,8 @@ class _StoreScreenState extends State<StoreScreen>
               player: widget.player,
               empty: () => controller.query.isEmpty
                   ? const _Empty(
-                      icon: RhythmoIcons.storefront,
-                      title: 'استور هنوز خالی است',
+                      icon: RhythmoIcons.vinylRecord,
+                      title: 'گنجینه هنوز خالی است',
                       message: 'وقتی کسی فهرست پخشی را عمومی کند، '
                           'آهنگ‌هایش اینجا می‌آیند.',
                     )
@@ -309,11 +310,30 @@ class _StoreScreenState extends State<StoreScreen>
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          // One muted line on what گنجینه is (#448).
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(RhythmoSpace.lg,
+                                RhythmoSpace.sm, RhythmoSpace.lg, 0),
+                            child: Text(
+                              'آهنگ‌های فهرست‌های عمومی ریتمو، با کیفیت '
+                              'فایل اصلی.',
+                              key: const ValueKey('store-explainer'),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant),
+                            ),
+                          ),
                           for (final ranking in StoreRanking.values.reversed)
                             StoreCarousel(
                               controller: controller,
                               ranking: ranking,
                               player: widget.player,
+                              // The hot ones are ranked, with big numerals.
+                              numbered: ranking == StoreRanking.trending,
                             ),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(
@@ -327,8 +347,11 @@ class _StoreScreenState extends State<StoreScreen>
                                 'همه‌ی آهنگ‌ها',
                                 style: Theme.of(context)
                                     .textTheme
-                                    .titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w800),
+                                    .titleSmall
+                                    ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant),
                               ),
                             ),
                           ),
@@ -441,7 +464,7 @@ class _StoreSongsScreenState extends State<StoreSongsScreen> {
           player: widget.player,
           empty: () => const _Empty(
             icon: RhythmoIcons.musicNotesMinus,
-            title: 'آهنگی در استور نمانده',
+            title: 'آهنگی در گنجینه نمانده',
             message: 'ممکن است از فهرست‌های پخش عمومی برداشته شده باشد.',
           ),
           onSave: (song) => saveStoreSong(context, widget.controller, song,
@@ -461,7 +484,7 @@ Future<void> saveStoreSong(
     BuildContext context, StoreController controller, Track song,
     {VoidCallback? onSignIn}) async {
   if (!controller.signedIn) {
-    askToSignIn(context, action: 'افزودن به کتابخانه', onSignIn: onSignIn);
+    askToSignIn(context, action: 'افزودن به موسیقی من', onSignIn: onSignIn);
     return;
   }
   final messenger = ScaffoldMessenger.of(context);
@@ -471,13 +494,13 @@ Future<void> saveStoreSong(
     ..showSnackBar(SnackBar(
       content: Text(switch (result) {
         StoreSaveResult.saved =>
-          '«${song.title}» به کتابخانه‌ات اضافه شد. این نسخه مال خودت است.',
-        StoreSaveResult.alreadyYours => 'این آهنگ در کتابخانه‌ی خودت هست.',
+          '«${song.title}» به «موسیقی من» اضافه شد. این نسخه مال خودت است.',
+        StoreSaveResult.alreadyYours => 'این آهنگ در «موسیقی من» هست.',
         StoreSaveResult.noSpace =>
           'فضای کافی در حسابت نیست. چند آهنگ را حذف کن و دوباره امتحان کن.',
         StoreSaveResult.uploadsDisabled =>
           'افزودن آهنگ فعلاً غیرفعال است. کمی بعد دوباره امتحان کن.',
-        StoreSaveResult.gone => 'این آهنگ دیگر در استور نیست.',
+        StoreSaveResult.gone => 'این آهنگ دیگر در گنجینه نیست.',
         StoreSaveResult.failed => 'افزودن ناموفق بود. دوباره تلاش کن.',
       }),
     ));
@@ -507,7 +530,7 @@ Future<void> reportStoreSong(
       content: Text(switch (result) {
         StoreReportResult.sent =>
           'گزارشت فرستاده شد. مدیران ریتمو آن را بررسی می‌کنند.',
-        StoreReportResult.gone => 'این آهنگ دیگر در استور نیست.',
+        StoreReportResult.gone => 'این آهنگ دیگر در گنجینه نیست.',
         StoreReportResult.tooMany =>
           'امروز گزارش زیادی فرستاده‌ای. فردا دوباره امتحان کن.',
         StoreReportResult.failed => 'گزارش فرستاده نشد. دوباره تلاش کن.',
@@ -557,7 +580,7 @@ class _ReportSheetState extends State<_ReportSheet> {
                 horizontal: RhythmoSpace.sm, vertical: RhythmoSpace.sm),
             child: Text(
               'چه مشکلی در این آهنگ هست؟ مدیران ریتمو گزارش را می‌بینند و '
-              'ممکن است آهنگ را از استور پنهان کنند. نامت به کسی نشان داده '
+              'ممکن است آهنگ را از گنجینه پنهان کنند. نامت به کسی نشان داده '
               'نمی‌شود.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
@@ -710,7 +733,7 @@ class _SongMenu extends StatelessWidget {
           child: ListTile(
             contentPadding: EdgeInsets.zero,
             leading: Icon(RhythmoIcons.plusCircle),
-            title: Text('افزودن به کتابخانه‌ی من'),
+            title: Text('افزودن به موسیقی من'),
           ),
         ),
         PopupMenuItem(
@@ -844,10 +867,10 @@ class _Listing<T> extends StatelessWidget {
         return switch (listing.status) {
           StoreStatus.idle ||
           StoreStatus.loading when items.isEmpty =>
-            const RhythmoStateView.loading(title: 'در حال بارگذاری استور…'),
+            const RhythmoStateView.loading(title: 'در حال بارگذاری گنجینه…'),
           StoreStatus.error when items.isEmpty => RhythmoStateView.error(
               icon: RhythmoIcons.cloudSlash,
-              title: 'استور بارگذاری نشد',
+              title: 'گنجینه بارگذاری نشد',
               message: 'اتصال اینترنت را بررسی کن و دوباره تلاش کن.',
               action: FilledButton.icon(
                 onPressed: listing.refresh,
@@ -937,9 +960,8 @@ class _Listing<T> extends StatelessWidget {
   }
 }
 
-/// One row of a list that reads as a single rounded panel: the first row
-/// rounds its top, the last its bottom, and rows between are split by a
-/// hairline.
+/// One row of a store list. Rows sit straight on the page, apart by
+/// space and artwork, like every list in Rhythmo: no panel, no lines.
 class _PanelRow extends StatelessWidget {
   const _PanelRow({
     required this.first,
@@ -952,41 +974,11 @@ class _PanelRow extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    const radius = Radius.circular(RhythmoRadii.lg);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: RhythmoSpace.lg),
-      // A Material, so the rows' hover and ink still paint on the panel.
-      child: Material(
-        color: colors.surfaceContainerHigh.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.vertical(
-          top: first ? radius : Radius.zero,
-          bottom: last ? radius : Radius.zero,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-              RhythmoSpace.xs,
-              first ? RhythmoSpace.xs : 0,
-              RhythmoSpace.xs,
-              last ? RhythmoSpace.xs : 0),
-          child: Column(
-            children: [
-              child,
-              if (!last)
-                const Divider(
-                  height: 1,
-                  indent: RhythmoSpace.lg + 44 + RhythmoSpace.lg,
-                  endIndent: RhythmoSpace.md,
-                  color: RhythmoColors.divider,
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            RhythmoSpace.sm, first ? RhythmoSpace.xs : 0, RhythmoSpace.sm, 2),
+        child: child,
+      );
 }
 
 /// The end of a listing with more to come: it asks for the next page as

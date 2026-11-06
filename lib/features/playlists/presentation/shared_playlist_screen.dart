@@ -7,8 +7,11 @@ import 'package:rhythmo/app/app_configuration.dart';
 import 'package:rhythmo/features/auth/presentation/sign_in_prompt.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/presentation/mini_player.dart';
+import 'package:rhythmo/features/likes/presentation/liked_songs_screen.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
+import 'package:rhythmo/features/library/data/track_artwork.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
+import 'package:rhythmo/features/notifications/data/notifications.dart';
 
 /// A playlist someone shared by link: its tracks can be played, not changed.
 class SharedPlaylistScreen extends StatefulWidget {
@@ -45,8 +48,11 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
 
   Future<void> _save() async {
     if (!widget.controller.signedIn) {
-      askToSignIn(context,
-          action: 'افزودن به کتابخانه', onSignIn: widget.onSignIn);
+      askToSignIn(
+        context,
+        action: 'افزودن به موسیقی من',
+        onSignIn: widget.onSignIn,
+      );
       return;
     }
     setState(() => _saving = true);
@@ -54,19 +60,22 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (result == SaveSharedResult.saved) widget.onSaved?.call();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(switch (result) {
-        SaveSharedResult.saved =>
-          'به فهرست‌های پخش و کتابخانه‌ات اضافه شد. این نسخه مال خودت است.',
-        SaveSharedResult.alreadyYours => 'این فهرست پخش خودت است.',
-        SaveSharedResult.noSpace =>
-          'فضای کافی در حسابت نیست. چند آهنگ را حذف کن و دوباره امتحان کن.',
-        SaveSharedResult.uploadsDisabled =>
-          'افزودن آهنگ فعلاً غیرفعال است. کمی بعد دوباره امتحان کن.',
-        SaveSharedResult.gone => 'این فهرست پخش دیگر به اشتراک گذاشته نمی‌شود.',
-        SaveSharedResult.failed => 'افزودن ناموفق بود. دوباره تلاش کن.',
-      }),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(switch (result) {
+          SaveSharedResult.saved =>
+            'به فهرست‌های پخش و «موسیقی من» اضافه شد. این نسخه مال خودت است.',
+          SaveSharedResult.alreadyYours => 'این فهرست پخش خودت است.',
+          SaveSharedResult.noSpace =>
+            'فضای کافی در حسابت نیست. چند آهنگ را حذف کن و دوباره امتحان کن.',
+          SaveSharedResult.uploadsDisabled =>
+            'افزودن آهنگ فعلاً غیرفعال است. کمی بعد دوباره امتحان کن.',
+          SaveSharedResult.gone =>
+            'این فهرست پخش دیگر به اشتراک گذاشته نمی‌شود.',
+          SaveSharedResult.failed => 'افزودن ناموفق بود. دوباره تلاش کن.',
+        }),
+      ),
+    );
   }
 
   Future<void> _like() async {
@@ -84,11 +93,73 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
       },
     );
     if (!mounted || result == LikeResult.done) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(result == LikeResult.gone
-          ? 'این فهرست پخش دیگر به اشتراک گذاشته نمی‌شود.'
-          : 'پسندیدن ثبت نشد. دوباره تلاش کن.'),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result == LikeResult.gone
+              ? 'این فهرست پخش دیگر به اشتراک گذاشته نمی‌شود.'
+              : 'پسندیدن ثبت نشد. دوباره تلاش کن.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _subscribe() async {
+    if (!widget.controller.signedIn) {
+      askToSignIn(context, action: 'عضویت', onSignIn: widget.onSignIn);
+      return;
+    }
+    final current = _playlist?.subscription;
+    if (current == null) return;
+    final result = await widget.controller.setSubscription(
+      widget.shareToken,
+      current,
+      onChange: (subscription) {
+        if (mounted) {
+          setState(() => _playlist = _playlist?.withSubscription(subscription));
+        }
+      },
+    );
+    if (!mounted) return;
+    final now = _playlist?.subscription;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(switch (result) {
+          LikeResult.done => now?.subscribed == true
+              ? 'عضو شدی. هر صوت تازه‌ای که اضافه شود خبرت می‌کنیم.'
+              : 'دیگر از این فهرست پخش اعلانی نمی‌گیری.',
+          LikeResult.gone => 'این فهرست پخش دیگر عمومی نیست.',
+          LikeResult.failed => 'عضویت ثبت نشد. دوباره تلاش کن.',
+        }),
+      ),
+    );
+  }
+
+  Future<void> _mute() async {
+    final current = _playlist?.subscription;
+    if (current == null || !current.subscribed) return;
+    final result = await widget.controller.setMuted(
+      widget.shareToken,
+      current,
+      onChange: (subscription) {
+        if (mounted) {
+          setState(() => _playlist = _playlist?.withSubscription(subscription));
+        }
+      },
+    );
+    if (!mounted) return;
+    final now = _playlist?.subscription;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(switch (result) {
+          LikeResult.done => now?.muted == true
+              ? 'بی‌صدا شد. صوت‌های تازه در اعلان‌ها می‌مانند ولی خبرت نمی‌کنیم.'
+              : 'صدادار شد. صوت‌های تازه را خبرت می‌کنیم.',
+          LikeResult.gone => 'این فهرست پخش دیگر عمومی نیست.',
+          LikeResult.failed => 'تغییر اعلان ثبت نشد. دوباره تلاش کن.',
+        }),
+      ),
+    );
   }
 
   @override
@@ -119,17 +190,18 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
     return Scaffold(
       extendBody: true,
       appBar: AppBar(
-        title: Text(
-          playlist?.name ?? 'فهرست پخش اشتراکی',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        // A back header: the name sits beside the cover once loaded.
+        title: _state == _Load.loaded
+            ? null
+            : const Text('فهرست پخش اشتراکی',
+                maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       bottomNavigationBar: MiniPlayer(player: widget.player),
       body: RhythmoBackdrop(
         child: switch (_state) {
-          _Load.loading =>
-            const RhythmoStateView.loading(title: 'در حال بارگذاری فهرست پخش…'),
+          _Load.loading => const RhythmoStateView.loading(
+              title: 'در حال بارگذاری فهرست پخش…',
+            ),
           _Load.unavailable => const _Message(
               icon: RhythmoIcons.linkBreak,
               text:
@@ -150,10 +222,17 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
                 playlist: playlist!,
                 player: widget.player,
                 saving: _saving,
+                onSignIn: widget.onSignIn,
                 onSave: playlist.isOwner ? null : _save,
                 onLike: widget.controller.isLiking(widget.shareToken)
                     ? null
                     : _like,
+                onSubscribe: widget.controller.isSubscribing(widget.shareToken)
+                    ? null
+                    : _subscribe,
+                onMute: widget.controller.isSubscribing(widget.shareToken)
+                    ? null
+                    : _mute,
               ),
             ),
         },
@@ -169,8 +248,18 @@ class _Contents extends StatelessWidget {
     required this.saving,
     this.onSave,
     this.onLike,
+    this.onSubscribe,
+    this.onMute,
+    this.onSignIn,
   });
 
+  final VoidCallback? onSignIn;
+
+  /// Mutes or unmutes the subscription; null while a change is on its way.
+  final VoidCallback? onMute;
+
+  /// Subscribes or unsubscribes; null while one is on its way.
+  final VoidCallback? onSubscribe;
   final SharedPlaylist playlist;
   final PlayerController player;
   final bool saving;
@@ -190,83 +279,71 @@ class _Contents extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            GlassSurface(
-              margin: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-              padding: const EdgeInsets.all(16),
-              radius: 24,
-              tint: Theme.of(context).colorScheme.primary,
+            _ChannelHeader(playlist: playlist),
+            if (playlist.description.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Text(
+                  playlist.description,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Row(
                 children: [
-                  Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      borderRadius: RhythmoRadii.surface,
-                      gradient: LinearGradient(
-                        begin: Alignment.topRight,
-                        end: Alignment.bottomLeft,
-                        colors: [
-                          Theme.of(context).colorScheme.primary,
-                          Theme.of(context).colorScheme.secondary,
-                        ],
-                      ),
-                    ),
-                    child: const Icon(RhythmoIcons.playlist),
-                  ),
-                  const SizedBox(width: 14),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Text(
-                          playlist.isOwner
-                              ? 'فهرست پخش خودت، که با لینک به اشتراک گذاشته‌ای'
-                              : 'اشتراک‌گذاری‌شده توسط ${playlist.owner}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          [
-                            '${persianDigits(tracks.length)} آهنگ',
-                            if (playlist.isOwner)
-                              playlist.isPublic ? 'عمومی' : 'فقط با لینک',
-                          ].join(' · '),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
+                        if (playlist.isPublic &&
+                            !playlist.isOwner &&
+                            playlist.subscription != null)
+                          PlaylistSubscribeButton(
+                            subscription: playlist.subscription!,
+                            onPressed: onSubscribe,
+                          ),
+                        if (playlist.subscription?.subscribed == true &&
+                            !playlist.isOwner)
+                          PlaylistMuteButton(
+                            subscription: playlist.subscription!,
+                            onPressed: onMute,
+                          ),
+                        PlaylistLikeButton(
+                            likes: playlist.likes, onPressed: onLike),
+                        if (onSave != null && tracks.isNotEmpty)
+                          OutlinedButton.icon(
+                            onPressed: saving ? null : onSave,
+                            label: const Text('افزودن به حساب من'),
+                            icon: saving
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(RhythmoIcons.plusCircle),
+                          ),
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
+                  // The one coral action: play it all (#448).
                   if (tracks.isNotEmpty)
-                    FilledButton.icon(
+                    IconButton.filled(
+                      key: const ValueKey('channel-play'),
+                      tooltip: 'پخش همه',
+                      iconSize: 28,
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(56, 56),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor:
+                            Theme.of(context).colorScheme.onPrimary,
+                      ),
                       onPressed: () => player.playFrom(tracks, 0),
                       icon: const Icon(RhythmoIcons.playFill),
-                      label: const Text('پخش همه'),
-                    ),
-                  PlaylistLikeButton(likes: playlist.likes, onPressed: onLike),
-                  if (onSave != null && tracks.isNotEmpty)
-                    OutlinedButton.icon(
-                      onPressed: saving ? null : onSave,
-                      icon: saving
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(RhythmoIcons.plusCircle),
-                      label: const Text('افزودن به حساب من'),
                     ),
                 ],
               ),
@@ -286,21 +363,40 @@ class _Contents extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final track = tracks[index];
                     return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: GlassSurface(
-                        blur: 0,
-                        shadow: false,
-                        radius: 18,
-                        tint: Theme.of(context).colorScheme.secondary,
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Material(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surface
+                            .withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(RhythmoRadii.sm),
+                        clipBehavior: Clip.antiAlias,
                         child: ListTile(
-                          leading:
-                              RhythmoArtworkTile(seed: track.id, track: track),
-                          title: Text(track.title,
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          key: ValueKey(track.id),
+                          minTileHeight: 64,
+                          minVerticalPadding: 4,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                          ),
+                          leading: RhythmoArtworkTile(
+                            seed: track.id,
+                            track: track,
+                          ),
+                          title: Text(
+                            track.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           subtitle: track.artist == null
                               ? null
                               : Text(track.artist!,
                                   maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: playlist.isPublic
+                              ? LikeButton(
+                                  track: track,
+                                  favorites: player.favorites,
+                                  onSignIn: onSignIn)
+                              : null,
                           onTap: () => player.playTapped(tracks, index),
                         ),
                       ),
@@ -310,6 +406,84 @@ class _Contents extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A 132 px cover beside what the playlist is, its name, who runs it and
+/// its counts (#448).
+class _ChannelHeader extends StatelessWidget {
+  const _ChannelHeader({required this.playlist});
+
+  static const double cover = 132;
+
+  final SharedPlaylist playlist;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final tracks = playlist.tracks;
+    final muted = theme.textTheme.bodySmall
+        ?.copyWith(color: colors.onSurfaceVariant, fontSize: 13);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          SizedBox.square(
+            key: const ValueKey('channel-cover'),
+            dimension: cover,
+            child: tracks.isEmpty
+                ? RhythmoArtworkTile(
+                    seed: playlist.shareToken,
+                    icon: RhythmoIcons.playlist,
+                    size: cover)
+                : TrackCover(
+                    track: tracks.first,
+                    radius: 12,
+                    child: const Icon(RhythmoIcons.playlist),
+                  ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(playlist.isPublic ? 'فهرست عمومی' : 'فهرست اشتراکی',
+                    style: muted),
+                const SizedBox(height: 2),
+                Text(
+                  playlist.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  playlist.isOwner
+                      ? 'فهرست پخش اشتراکی تو'
+                      : 'اشتراک‌گذاری‌شده توسط ${playlist.owner}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: muted,
+                ),
+                Text(
+                  [
+                    '${persianDigits(tracks.length)} آهنگ',
+                    if (playlist.isOwner)
+                      playlist.isPublic ? 'عمومی' : 'فقط با لینک',
+                    if (playlist.isPublic && playlist.subscription != null)
+                      '${persianDigits(playlist.subscription!.subscriberCount)} عضو',
+                  ].join(' · '),
+                  style: muted,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -338,8 +512,10 @@ class PlaylistLikeButton extends StatelessWidget {
     final liked = likes.liked;
     final count = likes.likeCount;
     final color = liked ? Theme.of(context).colorScheme.primary : null;
-    final icon =
-        Icon(liked ? RhythmoIcons.heartFill : RhythmoIcons.heart, color: color);
+    final icon = Icon(
+      liked ? RhythmoIcons.heartFill : RhythmoIcons.heart,
+      color: color,
+    );
     final tooltip = liked ? 'برداشتن پسند' : 'پسندیدن این فهرست پخش';
     return Tooltip(
       message: tooltip,
@@ -362,11 +538,75 @@ class PlaylistLikeButton extends StatelessWidget {
             : OutlinedButton.icon(
                 onPressed: onPressed,
                 icon: icon,
-                label: Text(liked
-                    ? 'پسندیدی · ${persianDigits(count)}'
-                    : 'پسندیدن · ${persianDigits(count)}'),
+                label: Text(
+                  liked
+                      ? 'پسندیدی · ${persianDigits(count)}'
+                      : 'پسندیدن · ${persianDigits(count)}',
+                ),
               ),
       ),
+    );
+  }
+}
+
+/// Subscribes to a public playlist like joining a channel, so new audio
+/// added to it shows up in the notifications. Subscribed reads as a filled
+/// button with a check, so the state never rests on color alone.
+class PlaylistSubscribeButton extends StatelessWidget {
+  const PlaylistSubscribeButton({
+    super.key,
+    required this.subscription,
+    required this.onPressed,
+  });
+
+  final PlaylistSubscription subscription;
+
+  /// Null while a change is on its way.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final subscribed = subscription.subscribed;
+    return Tooltip(
+      message: subscribed
+          ? 'لغو عضویت و قطع اعلان‌ها'
+          : 'عضویت و اعلان صوت‌های تازه',
+      child: subscribed
+          ? FilledButton.tonalIcon(
+              onPressed: onPressed,
+              icon: const Icon(RhythmoIcons.bellFill),
+              label: const Text('عضو هستی'),
+            )
+          : FilledButton.icon(
+              onPressed: onPressed,
+              icon: const Icon(RhythmoIcons.bell),
+              label: const Text('عضویت'),
+            ),
+    );
+  }
+}
+
+/// Mutes a subscribed channel, or unmutes it. Muted shows a struck bell
+/// and says so in its tooltip, so the state never rests on color alone.
+class PlaylistMuteButton extends StatelessWidget {
+  const PlaylistMuteButton({
+    super.key,
+    required this.subscription,
+    required this.onPressed,
+  });
+
+  final PlaylistSubscription subscription;
+
+  /// Null while a change is on its way.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = subscription.muted;
+    return IconButton.outlined(
+      tooltip: muted ? 'صدادار کردن اعلان‌ها' : 'بی‌صدا کردن اعلان‌ها',
+      onPressed: onPressed,
+      icon: Icon(muted ? RhythmoIcons.bellSlash : RhythmoIcons.bell),
     );
   }
 }
@@ -428,8 +668,10 @@ class _ShareSheetState extends State<_ShareSheet> {
       _busy = true;
       _error = null;
     });
-    final shared =
-        await widget.controller.share(widget.playlist.id, public: public);
+    final shared = await widget.controller.share(
+      widget.playlist.id,
+      public: public,
+    );
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -450,7 +692,9 @@ class _ShareSheetState extends State<_ShareSheet> {
       return;
     }
     await _share(
-        public: public, failure: 'تغییر نمایش ناموفق بود. دوباره تلاش کن.');
+      public: public,
+      failure: 'تغییر نمایش ناموفق بود. دوباره تلاش کن.',
+    );
   }
 
   Future<void> _unshare() async {
@@ -531,8 +775,9 @@ class _ShareSheetState extends State<_ShareSheet> {
                       : _rejected
                           ? 'مدیر درخواست قبلی عمومی شدن را نپذیرفت. می‌توانی دوباره درخواست بدهی.'
                           : 'در هیچ فهرستی نمی‌آید؛ فقط کسی که لینک را دارد پیدایش می‌کند. عمومی شدن حساب‌های تأییدنشده با تأیید مدیر است.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 16),
             if (link != null) ...[
@@ -545,8 +790,9 @@ class _ShareSheetState extends State<_ShareSheet> {
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: link));
                   if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('لینک کپی شد.')));
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('لینک کپی شد.')));
                 },
                 icon: const Icon(RhythmoIcons.copy),
                 label: const Text('کپی لینک'),
@@ -562,16 +808,19 @@ class _ShareSheetState extends State<_ShareSheet> {
                 onPressed: _busy
                     ? null
                     : () => _share(
-                        public: _public,
-                        failure: 'ساخت لینک ناموفق بود. دوباره تلاش کن.'),
+                          public: _public,
+                          failure: 'ساخت لینک ناموفق بود. دوباره تلاش کن.',
+                        ),
                 icon: const Icon(RhythmoIcons.linkSimple),
                 label: const Text('ساخت لینک اشتراک'),
               ),
             if (_error case final error?)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(error,
-                    style: TextStyle(color: theme.colorScheme.error)),
+                child: Text(
+                  error,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
               ),
           ],
         ),

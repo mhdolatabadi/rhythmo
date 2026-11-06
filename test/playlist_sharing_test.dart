@@ -25,6 +25,8 @@ class FakePlaylistsApi implements PlaylistsApi {
   String? collabToken;
   List<PlaylistMember> members = [];
   bool isOwner = true;
+  bool isAdmin = false;
+  String description = '';
   List<Track> tracks = [];
   List<Playlist>? userPlaylists;
   final createdNames = <String>[];
@@ -53,6 +55,8 @@ class FakePlaylistsApi implements PlaylistsApi {
         shareToken: shareToken,
         isPublic: isPublic,
         isOwner: isOwner,
+        isAdmin: isAdmin,
+        description: description,
         collabToken: isOwner ? collabToken : null,
         owner: 'o***@example.com',
         members: members,
@@ -182,8 +186,24 @@ class FakePlaylistsApi implements PlaylistsApi {
   }
 
   @override
-  Future<Playlist> renamePlaylist(String t, String id, String name) async =>
-      playlist;
+  Future<Playlist> renamePlaylist(String t, String id, String name,
+      {String? description}) async {
+    renamedTo = (name: name, description: description);
+    return playlist;
+  }
+
+  ({String name, String? description})? renamedTo;
+  final adminChanges = <(String, bool)>[];
+
+  @override
+  Future<void> setPlaylistMemberAdmin(
+      String t, String playlistId, String memberId, bool admin) async {
+    adminChanges.add((memberId, admin));
+    members = [
+      for (final m in members) m.id == memberId ? m.withAdmin(admin) : m
+    ];
+  }
+
   @override
   Future<Playlist> replacePlaylistTracks(
       String t, String id, List<String> trackIds) async {
@@ -375,6 +395,27 @@ void main() {
       expect(tracks.calls, contains('shared:$token:s1'));
     });
 
+    testWidgets(
+        'the header is a 132 px cover beside the name, with one coral play '
+        '(#448)', (tester) async {
+      final (tracks, _) = await pump(tester, token);
+
+      expect(tester.getSize(find.byKey(const ValueKey('channel-cover'))),
+          const Size(132, 132));
+      final cover = tester.getRect(find.byKey(const ValueKey('channel-cover')));
+      final name = tester.getRect(find.text('Friend mix'));
+      expect(name.top, greaterThanOrEqualTo(cover.top));
+      expect(name.bottom, lessThanOrEqualTo(cover.bottom));
+      final play = find.byKey(const ValueKey('channel-play'));
+      expect(tester.getSize(play).height, greaterThanOrEqualTo(48));
+      final button = tester.widget<IconButton>(play);
+      expect(button.style?.backgroundColor?.resolve({}),
+          Theme.of(tester.element(play)).colorScheme.primary);
+      await tester.tap(play);
+      await tester.pumpAndSettle();
+      expect(tracks.calls, contains('shared:$token:s1'));
+    });
+
     testWidgets('a recipient saves the playlist to their account',
         (tester) async {
       final (_, playlists) = await pump(tester, token);
@@ -384,7 +425,7 @@ void main() {
       expect(playlists.saved, [token]);
       expect(
           find.text(
-              'به فهرست‌های پخش و کتابخانه‌ات اضافه شد. این نسخه مال خودت است.'),
+              'به فهرست‌های پخش و «موسیقی من» اضافه شد. این نسخه مال خودت است.'),
           findsOneWidget);
     });
 

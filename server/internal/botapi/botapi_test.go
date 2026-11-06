@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -55,6 +56,14 @@ func TestParseDocumentTextGroupAndOtherUpdates(t *testing.T) {
 	u, ok, _ = Parse([]byte(`{"update_id":1,"message":{"message_id":2,"chat":{"id":-100,"type":"group"},"text":"/start"}}`))
 	if !ok || u.Private || u.Text != "/start" || u.File != nil {
 		t.Fatalf("group text = %+v", u)
+	}
+	u, ok, _ = Parse([]byte(`{"update_id":1,"channel_post":{"message_id":9,"chat":{"id":-1001,"type":"channel","title":"Golden"},
+		"audio":{"file_id":"c","file_name":"b.mp3","mime_type":"audio/mpeg","file_size":10}}}`))
+	if !ok || !u.Channel || u.Private || u.ChatID != "-1001" || u.ChatTitle != "Golden" || u.File == nil || u.File.ID != "c" {
+		t.Fatalf("channel post = %+v", u)
+	}
+	if _, ok, err := Parse([]byte(`{"update_id":1,"edited_channel_post":{"message_id":2}}`)); ok || err != nil {
+		t.Fatalf("edited channel post: ok=%v err=%v", ok, err)
 	}
 	if _, ok, err := Parse([]byte(`{"update_id":1,"edited_message":{"message_id":2}}`)); ok || err != nil {
 		t.Fatalf("edited message: ok=%v err=%v", ok, err)
@@ -165,6 +174,10 @@ func TestSetWebhookRegistersTheSecretToken(t *testing.T) {
 	}
 	if params["secret_token"] != "hook-secret" || params["url"] != "https://music.example.com/hook" {
 		t.Fatalf("setWebhook params = %v", params)
+	}
+	// Channel posts are asked for so channels can sync (#430).
+	if fmt.Sprint(params["allowed_updates"]) != "[message channel_post]" {
+		t.Fatalf("allowed_updates = %v", params["allowed_updates"])
 	}
 }
 

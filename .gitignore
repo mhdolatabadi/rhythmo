@@ -19,3 +19,4 @@ ios/Flutter/ephemeral/
 android/key.properties
 android/app/*.jks
 android/app/*.keystore
+__pycache__/

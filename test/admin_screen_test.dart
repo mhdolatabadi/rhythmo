@@ -2,13 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rhythmo/app/app_theme.dart';
+import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/presentation/admin_screen.dart';
 import 'package:rhythmo/features/admin/presentation/publication_review_screen.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
 
-class FakeAdminApi implements AdminApi {
+class FakeAdminApi implements AdminApi, AdminQuotaApi {
+  int quota = 1 << 30;
+  @override
+  Future<AdminAccount> increaseStorageQuota(
+      String token, String accountId, int bytes) async {
+    if (fail) throw const ApiException('unavailable');
+    quota = bytes;
+    return account;
+  }
+
   bool verified = false;
   bool fail = false;
   bool denied = false;
@@ -18,11 +28,15 @@ class FakeAdminApi implements AdminApi {
         user: AuthUser(
             id: 'account', email: 'member@example.com', verified: verified),
         createdAt: DateTime(2026),
+        storageQuotaBytes: quota,
       );
 
   @override
-  Future<AdminAccountPage> listAccounts(String token,
-      {String query = '', int offset = 0}) async {
+  Future<AdminAccountPage> listAccounts(
+    String token, {
+    String query = '',
+    int offset = 0,
+  }) async {
     this.query = query;
     if (denied) throw const ApiException('denied', statusCode: 403);
     return (accounts: [account], hasMore: false);
@@ -40,7 +54,10 @@ class FakeAdminApi implements AdminApi {
 
   @override
   Future<void> reviewPublication(
-      String token, PendingPublication publication, bool approved) async {
+    String token,
+    PendingPublication publication,
+    bool approved,
+  ) async {
     if (reviewStatus case final status?) {
       throw ApiException('failed', statusCode: status);
     }
@@ -49,7 +66,10 @@ class FakeAdminApi implements AdminApi {
 
   @override
   Future<AdminAccount> setAccountVerification(
-      String token, String accountId, bool verified) async {
+    String token,
+    String accountId,
+    bool verified,
+  ) async {
     if (fail) throw const ApiException('unavailable', statusCode: 500);
     this.verified = verified;
     return account;
@@ -58,15 +78,54 @@ class FakeAdminApi implements AdminApi {
 
 void main() {
   Future<void> pump(WidgetTester tester, FakeAdminApi api) async {
-    await tester.pumpWidget(MaterialApp(
-      locale: const Locale('fa'),
-      supportedLocales: const [Locale('fa')],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      theme: RhythmoTheme.dark(),
-      home: AdminScreen(api: api, token: () => 'token'),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('fa'),
+        supportedLocales: const [Locale('fa')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        theme: RhythmoTheme.dark(),
+        home: AdminScreen(api: api, token: () => 'token'),
+      ),
+    );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('admin increases capacity with Persian digits on a narrow phone',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = FakeAdminApi();
+    await tester.pumpWidget(
+        MaterialApp(home: AdminScreen(api: api, token: () => 'admin')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('افزایش ظرفیت آپلود'));
+    await tester.tap(find.text('افزایش ظرفیت آپلود'));
+    await tester.pumpAndSettle();
+    final field = find.widgetWithText(TextFormField, 'ظرفیت جدید (گیگابایت)');
+    await tester.enterText(field, '۵');
+    await tester.tap(find.text('افزایش ظرفیت'));
+    await tester.pumpAndSettle();
+    expect(api.quota, 5 * (1 << 30));
+    expect(find.textContaining('۵.۰۰'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cancelling quota editing leaves capacity unchanged',
+      (tester) async {
+    final api = FakeAdminApi();
+    await pump(tester, api);
+    await tester.ensureVisible(find.text('افزایش ظرفیت آپلود'));
+    await tester.tap(find.text('افزایش ظرفیت آپلود'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'ظرفیت جدید (گیگابایت)'), '۵');
+    await tester.tap(find.text('انصراف'));
+    await tester.pumpAndSettle();
+    expect(api.quota, 1 << 30);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('search, confirmation, verification and revoke', (tester) async {
     final api = FakeAdminApi();
@@ -75,16 +134,21 @@ void main() {
     await tester.tap(find.text('جست‌وجو'));
     await tester.pumpAndSettle();
     expect(api.query, 'member');
+    await tester.ensureVisible(find.text('تأیید حساب'));
     await tester.tap(find.text('تأیید حساب'));
     await tester.pumpAndSettle();
     expect(api.verified, isFalse);
-    await tester.tap(find.text('تأیید حساب').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'تأیید حساب'));
     await tester.pumpAndSettle();
     expect(api.verified, isTrue);
     expect(find.text('حساب تأییدشده'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    expect(find.text('حساب تأیید شد.'), findsNothing);
+    await tester.ensureVisible(find.text('لغو تأیید'));
     await tester.tap(find.text('لغو تأیید'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('لغو تأیید').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'لغو تأیید'));
     await tester.pumpAndSettle();
     expect(api.verified, isFalse);
   });
@@ -92,9 +156,10 @@ void main() {
   testWidgets('failed verification preserves displayed state', (tester) async {
     final api = FakeAdminApi()..fail = true;
     await pump(tester, api);
+    await tester.ensureVisible(find.text('تأیید حساب'));
     await tester.tap(find.text('تأیید حساب'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('تأیید حساب').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'تأیید حساب'));
     await tester.pumpAndSettle();
     expect(api.verified, isFalse);
     expect(find.text('تأیید نشده'), findsOneWidget);
@@ -104,12 +169,15 @@ void main() {
   testWidgets('forbidden directory hides accounts', (tester) async {
     await pump(tester, FakeAdminApi()..denied = true);
     expect(find.text('member@example.com'), findsNothing);
-    expect(find.text('دسترسی مدیریت نداری. دوباره وارد حساب مدیر شو.'),
-        findsOneWidget);
+    expect(
+      find.text('دسترسی مدیریت نداری. دوباره وارد حساب مدیر شو.'),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('narrow screen clears insets and keeps 48px actions',
-      (tester) async {
+  testWidgets('narrow screen clears insets and keeps 48px actions', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     tester.view.viewPadding = const FakeViewPadding(bottom: 34);
@@ -119,9 +187,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     final button = find.ancestor(
-        of: find.text('تأیید حساب'), matching: find.byType(OutlinedButton));
+      of: find.text('تأیید حساب'),
+      matching: find.byType(OutlinedButton),
+    );
     expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
-    expect(tester.getRect(button).right, lessThanOrEqualTo(336));
+    final email = tester.getRect(find.text('member@example.com'));
+    final action = tester.getRect(button);
+    final card = tester.getRect(find
+        .ancestor(
+            of: find.text('member@example.com'),
+            matching: find.byType(GlassSurface))
+        .last);
+    expect(card.contains(email.topLeft), isTrue);
+    expect(card.contains(email.bottomRight), isTrue);
+    expect(card.contains(action.topLeft), isTrue);
+    expect(card.contains(action.bottomRight), isTrue);
+    expect(tester.getRect(button).right, lessThanOrEqualTo(344));
   });
 
   group('publication review', () {
@@ -137,13 +218,15 @@ void main() {
         );
 
     Future<void> pumpReview(WidgetTester tester, FakeAdminApi api) async {
-      await tester.pumpWidget(MaterialApp(
-        locale: const Locale('fa'),
-        supportedLocales: const [Locale('fa')],
-        localizationsDelegates: GlobalMaterialLocalizations.delegates,
-        theme: RhythmoTheme.dark(),
-        home: PublicationReviewScreen(api: api, token: () => 'token'),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('fa'),
+          supportedLocales: const [Locale('fa')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          theme: RhythmoTheme.dark(),
+          home: PublicationReviewScreen(api: api, token: () => 'token'),
+        ),
+      );
       await tester.pumpAndSettle();
     }
 
@@ -198,25 +281,30 @@ void main() {
       expect(find.text('آهنگ'), findsOneWidget);
     });
 
-    testWidgets('narrow screen fits long titles and keeps 48px actions',
-        (tester) async {
+    testWidgets('narrow screen fits long titles and keeps 48px actions', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(360, 640);
       tester.view.devicePixelRatio = 1;
       tester.view.viewPadding = const FakeViewPadding(bottom: 34);
       addTearDown(tester.view.reset);
       final api = FakeAdminApi()
         ..pending = [
-          item('p1', PublicationKind.playlist,
-              'یک فهرست پخش با نامی بسیار بلند که باید کوتاه شود ' * 4),
+          item(
+            'p1',
+            PublicationKind.playlist,
+            'یک فهرست پخش با نامی بسیار بلند که باید کوتاه شود ' * 4,
+          ),
         ];
       await pumpReview(tester, api);
       expect(tester.takeException(), isNull);
       for (final label in ['رد', 'تأیید و عمومی کردن']) {
         final button = find.ancestor(
-            of: find.text(label),
-            matching: find.byWidgetPredicate((w) => w is ButtonStyleButton));
+          of: find.text(label),
+          matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+        );
         expect(tester.getSize(button.first).height, greaterThanOrEqualTo(48));
-        expect(tester.getRect(button.first).right, lessThanOrEqualTo(336));
+        expect(tester.getRect(button.first).right, lessThanOrEqualTo(344));
       }
     });
   });

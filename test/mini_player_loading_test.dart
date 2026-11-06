@@ -53,4 +53,36 @@ void main() {
     expect(find.text('در حال بارگذاری…'), findsNothing);
     expect(find.text('خواننده'), findsOneWidget);
   });
+
+  testWidgets(
+      'the flat mini player: a white play icon, a coral progress line, '
+      'no like and no skipping (#444)', (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final player = PlayerController(
+        api: FakeTracksApi(), engine: FakeAudioEngine(), token: () => 't');
+    addTearDown(player.dispose);
+    await tester.pumpWidget(MaterialApp(
+      theme: RhythmoTheme.dark(),
+      home: Scaffold(bottomNavigationBar: MiniPlayer(player: player)),
+    ));
+    await tester.runAsync(() => player.playFrom(const [_track], 0));
+    await tester.pump();
+
+    final scheme = RhythmoTheme.dark().colorScheme;
+    final play = tester.widget<Icon>(find.descendant(
+        of: find.byTooltip('توقف'), matching: find.byType(Icon)));
+    expect(play.color, scheme.onSurface);
+    final progress = tester.widget<LinearProgressIndicator>(find.descendant(
+        of: find.byType(MiniPlayer),
+        matching: find.byType(LinearProgressIndicator)));
+    expect(progress.color, scheme.primary);
+    // One control on a phone: liking and skipping live on now playing.
+    expect(find.byTooltip('پسندیدن'), findsNothing);
+    expect(find.byTooltip('بعدی'), findsNothing);
+    expect(find.byTooltip('قبلی'), findsNothing);
+    // A flat bar across the whole width, not a floating card.
+    expect(tester.getSize(find.byType(MiniPlayer)).width, 360);
+  });
 }

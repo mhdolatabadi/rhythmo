@@ -309,7 +309,7 @@ func TestResumeFinishesInterruptedImports(t *testing.T) {
 	h := newHarness(t)
 	h.signIn()
 	job, err := h.importer.Queue(context.Background(), h.provider,
-		Update{ChatID: "42", MessageID: "5", File: &File{ID: "song", Name: "a.mp3"}}, "u1")
+		Update{ChatID: "42", MessageID: "5", File: &File{ID: "song", Name: "a.mp3"}}, "u1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

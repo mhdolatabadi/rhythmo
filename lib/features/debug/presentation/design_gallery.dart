@@ -182,7 +182,7 @@ class DesignGallery extends StatelessWidget {
                   height: 280,
                   child: RhythmoStateView(
                     icon: RhythmoIcons.musicNotes,
-                    title: 'کتابخانهٔ شما خالی است',
+                    title: '«موسیقی من» خالی است',
                     message: 'با «افزودن موسیقی» اولین آهنگ را اضافه کنید.',
                   ),
                 ),
@@ -190,7 +190,7 @@ class DesignGallery extends StatelessWidget {
                   height: 300,
                   child: RhythmoStateView.error(
                     icon: RhythmoIcons.cloudSlash,
-                    title: 'کتابخانه دریافت نشد',
+                    title: '«موسیقی من» دریافت نشد',
                     message: 'اتصال اینترنت را بررسی کنید.',
                     action: FilledButton.icon(
                       onPressed: () {},
@@ -229,7 +229,7 @@ class DesignGallery extends StatelessWidget {
                     onPressed: () => showRhythmoConfirm(
                       context,
                       title: 'حذف فهرست پخش؟',
-                      message: 'آهنگ‌های کتابخانه حذف نمی‌شوند.',
+                      message: 'آهنگ‌های «موسیقی من» حذف نمی‌شوند.',
                       confirmLabel: 'حذف',
                       destructive: true,
                     ),

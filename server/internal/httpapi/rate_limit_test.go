@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -39,5 +40,26 @@ func TestClientIPUsesOnlyRhythmoProxyHeader(t *testing.T) {
 	request.Header.Set(clientIPHeader, "203.0.113.20")
 	if got := clientIP(request); got != "203.0.113.20" {
 		t.Fatalf("proxy client IP = %q", got)
+	}
+}
+
+func TestRateLimitIncludesRetrySecondsInJSON(t *testing.T) {
+	limiter := NewRateLimiter(RateLimit{Requests: 1, Window: time.Minute}, 10)
+	if !enforceRateLimit(httptest.NewRecorder(), limiter, "admin") {
+		t.Fatal("first request refused")
+	}
+	recorder := httptest.NewRecorder()
+	if enforceRateLimit(recorder, limiter, "admin") {
+		t.Fatal("limit was not enforced")
+	}
+	var body struct {
+		Error             string `json:"error"`
+		RetryAfterSeconds int    `json:"retryAfterSeconds"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Error != "rate_limited" || body.RetryAfterSeconds < 1 || recorder.Header().Get("Retry-After") == "" {
+		t.Fatalf("unusable retry response: %s", recorder.Body)
 	}
 }

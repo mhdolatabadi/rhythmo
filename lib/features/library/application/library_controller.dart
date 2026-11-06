@@ -5,6 +5,7 @@ import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/library/data/track_metadata.dart';
 import 'package:rhythmo/features/likes/data/likes.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum LibraryStatus { loading, error, loaded }
 
@@ -41,7 +42,7 @@ const importPollDelays = [
 ];
 
 /// The signed-in user's tracks, as the server lists them.
-class LibraryController extends ChangeNotifier {
+class LibraryController extends ChangeNotifier with QuietAfterDispose {
   LibraryController({
     required TracksApi api,
     required String? Function() token,

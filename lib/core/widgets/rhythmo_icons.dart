@@ -13,6 +13,9 @@ abstract final class RhythmoIcons {
       IconData(0xe5de, fontFamily: 'Phosphor');
   static const IconData arrowsClockwise =
       IconData(0xe094, fontFamily: 'Phosphor');
+  static const IconData bell = IconData(0xe0ce, fontFamily: 'Phosphor');
+  static const IconData bellFill = IconData(0xe0ce, fontFamily: 'PhosphorFill');
+  static const IconData bellSlash = IconData(0xe0d2, fontFamily: 'Phosphor');
   static const IconData caretDown = IconData(0xe136, fontFamily: 'Phosphor');
   static const IconData caretLeft = IconData(0xe138, fontFamily: 'Phosphor');
   static const IconData check = IconData(0xe182, fontFamily: 'Phosphor');
@@ -43,6 +46,7 @@ abstract final class RhythmoIcons {
   static const IconData link = IconData(0xe2e2, fontFamily: 'Phosphor');
   static const IconData linkBreak = IconData(0xe2e4, fontFamily: 'Phosphor');
   static const IconData linkSimple = IconData(0xe2e6, fontFamily: 'Phosphor');
+  static const IconData lockSimple = IconData(0xe308, fontFamily: 'Phosphor');
   static const IconData listPlus = IconData(0xe2f8, fontFamily: 'Phosphor');
   static const IconData magnifyingGlass =
       IconData(0xe30c, fontFamily: 'Phosphor');
@@ -65,24 +69,37 @@ abstract final class RhythmoIcons {
   static const IconData playlist = IconData(0xe6aa, fontFamily: 'Phosphor');
   static const IconData plus = IconData(0xe3d4, fontFamily: 'Phosphor');
   static const IconData plusCircle = IconData(0xe3d6, fontFamily: 'Phosphor');
+  static const IconData queue = IconData(0xe6ac, fontFamily: 'Phosphor');
   static const IconData quotes = IconData(0xe660, fontFamily: 'Phosphor');
   static const IconData repeat = IconData(0xe3f6, fontFamily: 'Phosphor');
   static const IconData robot = IconData(0xe762, fontFamily: 'Phosphor');
   static const IconData shareNetwork = IconData(0xe408, fontFamily: 'Phosphor');
+  static const IconData shield = IconData(0xe40a, fontFamily: 'Phosphor');
   static const IconData shieldCheck = IconData(0xe40c, fontFamily: 'Phosphor');
+  static const IconData shieldCheckFill =
+      IconData(0xe40c, fontFamily: 'PhosphorFill');
   static const IconData shuffle = IconData(0xe422, fontFamily: 'Phosphor');
   static const IconData signOut = IconData(0xe42a, fontFamily: 'Phosphor');
   static const IconData speakerHigh = IconData(0xe44a, fontFamily: 'Phosphor');
-  static const IconData storefront = IconData(0xe470, fontFamily: 'Phosphor');
   static const IconData sortAscending =
       IconData(0xe444, fontFamily: 'Phosphor');
   static const IconData trash = IconData(0xe4a6, fontFamily: 'Phosphor');
   static const IconData uploadSimple = IconData(0xe4c0, fontFamily: 'Phosphor');
   static const IconData user = IconData(0xe4c2, fontFamily: 'Phosphor');
+  static const IconData userFill = IconData(0xe4c2, fontFamily: 'PhosphorFill');
+  static const IconData house = IconData(0xe2c2, fontFamily: 'Phosphor');
+  static const IconData houseFill =
+      IconData(0xe2c2, fontFamily: 'PhosphorFill');
+  static const IconData books = IconData(0xe758, fontFamily: 'Phosphor');
+  static const IconData booksFill =
+      IconData(0xe758, fontFamily: 'PhosphorFill');
   static const IconData userCircle = IconData(0xe4c4, fontFamily: 'Phosphor');
   static const IconData userCircleMinus =
       IconData(0xe4c8, fontFamily: 'Phosphor');
   static const IconData vinylRecord = IconData(0xecac, fontFamily: 'Phosphor');
+  static const IconData vinylRecordFill =
+      IconData(0xecac, fontFamily: 'PhosphorFill');
+  static const IconData signIn = IconData(0xe428, fontFamily: 'Phosphor');
   static const IconData warning = IconData(0xe4e0, fontFamily: 'Phosphor');
   static const IconData warningCircle =
       IconData(0xe4e2, fontFamily: 'Phosphor');

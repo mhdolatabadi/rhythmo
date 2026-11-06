@@ -29,6 +29,7 @@ type CatalogStore interface {
 	ReportEntry(ctx context.Context, entryID, reporterID, reason string, details *string) error
 	OpenReports(ctx context.Context, limit int) ([]store.StoreReport, error)
 	SetHidden(ctx context.Context, entryID, adminID string, hidden bool) error
+	ModerateEntry(ctx context.Context, entryID, actorID string, remove bool) error
 	RecordStorePlay(ctx context.Context, entryID, listener string) error
 	StoreRanked(ctx context.Context, ranking store.StoreRanking, limit, offset int) ([]store.StoreEntry, bool, error)
 	StoreEntriesForTracks(ctx context.Context, trackIDs []string) (map[string]store.StoreEntry, error)
@@ -137,6 +138,8 @@ func (h *CatalogHandlers) register(mux *http.ServeMux) {
 	}
 	if h.admin != nil {
 		mux.HandleFunc("GET /api/v1/admin/store/reports", h.handleReports)
+		mux.HandleFunc("DELETE /api/v1/admin/store/tracks/{id}", h.handleModeration(true))
+		mux.HandleFunc("POST /api/v1/admin/store/tracks/{id}/dismiss-reports", h.handleModeration(false))
 		mux.HandleFunc("PUT /api/v1/admin/store/tracks/{id}/hidden", h.handleHide(true))
 		mux.HandleFunc("DELETE /api/v1/admin/store/tracks/{id}/hidden", h.handleHide(false))
 	}
@@ -562,4 +565,22 @@ func (h *CatalogHandlers) handleStreamArtwork(w http.ResponseWriter, r *http.Req
 		return
 	}
 	serveTrackArtwork(w, r, h.streams, entry.Track)
+}
+
+func (h *CatalogHandlers) handleModeration(remove bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actor, ok := h.admin.authorize(w, r)
+		if !ok {
+			return
+		}
+		err := h.catalog.ModerateEntry(r.Context(), r.PathValue("id"), actor, remove)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			writeError(w, http.StatusNotFound, "not_found")
+		case err != nil:
+			internalError(w, "moderate store song", err)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}
 }

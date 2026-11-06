@@ -52,6 +52,9 @@ type PublicPages struct {
 	// androidApp is where the Android app is installed from; the front page
 	// offers it only when set.
 	androidApp string
+	// androidCerts are the signing certificate fingerprints
+	// /.well-known/assetlinks.json vouches for.
+	androidCerts []string
 	// contact is the email the privacy page gives for questions and
 	// account deletion; the page leaves it out when it is empty.
 	contact string
@@ -135,8 +138,8 @@ func (p *PublicPages) questions() []publicQuestion {
 		{"ریتمو رایگان است؟", "بله. هر حساب " + quotaText(p.quotaBytes) + " فضای ابری برای موسیقی دارد."},
 		{"چه قالب‌هایی را می‌شود آپلود کرد؟", "MP3، M4A، AAC، FLAC، OGG، Opus، WAV و WebM."},
 		{"کیفیت آهنگ‌ها کم می‌شود؟", "نه. ریتمو فایل را همان‌طور که آپلود کرده‌ای نگه می‌دارد و پخش می‌کند."},
-		{"چه کسی فهرست‌های پخش مرا می‌بیند؟", "فقط خودت، مگر اینکه لینکش را بسازی. فهرستی که «عمومی» کنی در صفحه‌ی اول ریتمو هم نشان داده می‌شود و آهنگ‌هایش، بدون نام یا ایمیل تو، در استور ریتمو می‌آیند."},
-		{"استور ریتمو چیست؟", "همه‌ی آهنگ‌های فهرست‌های پخش عمومی، هر آهنگ یک بار، که هر کسی بدون ثبت‌نام می‌شنود و با حساب ریتمو به کتابخانه‌اش اضافه می‌کند. کتابخانه‌های خصوصی هیچ‌وقت در استور نمی‌آیند."},
+		{"چه کسی فهرست‌های پخش مرا می‌بیند؟", "فقط خودت، مگر اینکه لینکش را بسازی. فهرستی که «عمومی» کنی در صفحه‌ی اول ریتمو هم نشان داده می‌شود و آهنگ‌هایش، بدون نام یا ایمیل تو، در گنجینه ریتمو می‌آیند."},
+		{"گنجینه ریتمو چیست؟", "همه‌ی آهنگ‌های فهرست‌های پخش عمومی، هر آهنگ یک بار، که هر کسی بدون ثبت‌نام می‌شنود و با حساب ریتمو به کتابخانه‌اش اضافه می‌کند. کتابخانه‌های خصوصی هیچ‌وقت در گنجینه نمی‌آیند."},
 		{"اپ اندروید هم دارد؟", "بله. ریتمو روی وب بدون نصب کار می‌کند و اپ اندروید هم دارد که موسیقی گوشی را هم نشان می‌دهد و پخش بدون اینترنت دارد."},
 		{"چطور حسابم را حذف کنم؟", "از تنظیمات اپ، «حذف حساب کاربری» را بزن. همه‌ی آهنگ‌ها و فهرست‌های پخشت برای همیشه پاک می‌شوند."},
 	}
@@ -153,6 +156,7 @@ func (p *PublicPages) register(mux *http.ServeMux) {
 		mux.HandleFunc("GET /"+p.indexNowKey+".txt", p.handleIndexNowKey)
 	}
 	mux.HandleFunc("GET /robots.txt", p.handleRobots)
+	mux.HandleFunc("GET /.well-known/assetlinks.json", p.handleAssetLinks)
 	mux.HandleFunc("GET /rhythmo.png", p.handleIcon)
 	// The icon's URL before the rename, still in old shares and caches.
 	mux.HandleFunc("GET /nafir.png", p.handleIcon)
@@ -224,10 +228,12 @@ type publicTrack struct {
 type publicPlaylist struct {
 	ShareToken string
 	Name       string
-	Owner      string
-	TrackCount int
-	LikeCount  int
-	Tracks     []publicTrack
+	// Description is the channel's blurb (#428), if it has one.
+	Description string
+	Owner       string
+	TrackCount  int
+	LikeCount   int
+	Tracks      []publicTrack
 }
 
 // WithSite sets the origin, such as https://rhythmo.ir, that canonical,
@@ -459,7 +465,7 @@ func (p *PublicPages) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	site := p.origin(r)
 	token := *shared.ShareToken
 	page := publicPlaylist{
-		ShareToken: token, Name: shared.Name, Owner: bot.MaskEmail(shared.OwnerEmail),
+		ShareToken: token, Name: shared.Name, Description: shared.Description, Owner: bot.MaskEmail(shared.OwnerEmail),
 		TrackCount: len(shared.Tracks), LikeCount: likes.Count,
 	}
 	inStore := p.storeEntriesFor(r, shared.Tracks)
@@ -490,6 +496,9 @@ func (p *PublicPages) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 		description += "، از " + strings.Join(artists, "، ")
 	}
 	description += ". آنلاین و بدون ثبت‌نام بشنو."
+	if shared.Description != "" {
+		description = shared.Description + " — " + description
+	}
 	canonical := site + "/p/" + token
 	meta := pageMeta{
 		Title:       shared.Name + " | فهرست پخش آنلاین در ریتمو",

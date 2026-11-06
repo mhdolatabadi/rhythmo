@@ -351,3 +351,22 @@ func decodes(t *testing.T, name string, data []byte) {
 func bufioReader(data []byte) *bufio.Reader {
 	return bufio.NewReader(bytes.NewReader(data))
 }
+
+func TestReadMetadataMatchesInspect(t *testing.T) {
+	for _, name := range []string{"v24.mp3", "v23-cover-id3v1.mp3", "notag.mp3", "tagged.flac", "tagged.ogg", "tagged.opus"} {
+		t.Run(name, func(t *testing.T) {
+			data := fixture(t, name)
+			info, err := Inspect(bytes.NewReader(data), name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := ReadMetadata(bytes.NewReader(data), name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != info.Metadata {
+				t.Fatalf("metadata = %+v, want %+v", got, info.Metadata)
+			}
+		})
+	}
+}

@@ -134,6 +134,7 @@ func (h *LikeHandlers) handleLike(fromStore, liked bool) http.HandlerFunc {
 // likedSongResponse is one of «پسندیده‌ها»: the listener's own track
 // (source library, track) or a store song (source store, storeTrack).
 type likedSongResponse struct {
+	TrackIDs   []string            `json:"trackIds,omitempty"`
 	Source     string              `json:"source"`
 	LikedAt    time.Time           `json:"likedAt"`
 	Track      *trackResponse      `json:"track,omitempty"`
@@ -158,7 +159,7 @@ func (h *LikeHandlers) handleLiked(w http.ResponseWriter, r *http.Request) {
 	}
 	response := make([]likedSongResponse, 0, len(songs))
 	for _, song := range songs {
-		item := likedSongResponse{LikedAt: song.LikedAt.UTC()}
+		item := likedSongResponse{LikedAt: song.LikedAt.UTC(), TrackIDs: song.TrackIDs}
 		if song.Entry != nil {
 			track := toStoreTrackResponse(*song.Entry)
 			track.Liked = true

@@ -7,7 +7,8 @@ import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/presentation/now_playing_screen.dart';
 
 /// Responsive now-playing surface with track identity, playback controls,
-/// and progress.
+/// and progress: a slim glass bar whose only bright control is the white
+/// play button.
 class MiniPlayer extends StatefulWidget {
   const MiniPlayer({super.key, required this.player});
 
@@ -42,105 +43,102 @@ class _MiniPlayerState extends State<MiniPlayer> {
         final playing =
             status == PlayerStatus.playing || status == PlayerStatus.buffering;
 
-        return Align(
-          alignment: Alignment.bottomCenter,
-          heightFactor: 1,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 960),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: GlassSurface(
-                radius: 24,
-                blur: 24,
-                tint: RhythmoColors.primary,
-                child: SafeArea(
-                  top: false,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final compact = constraints.maxWidth < 620;
-                      final summary = _TrackSummary(
+        // A flat bar across the whole width, flush above the dock: no
+        // floating card and no glass.
+        return ColoredBox(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 960),
+              child: SafeArea(
+                top: false,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact = constraints.maxWidth < 620;
+                    final summary = _TrackSummary(
+                      track: track,
+                      status: status,
+                      onTap: _openNowPlaying,
+                      needsTap: player.needsTap,
+                    );
+                    final controls = _PlaybackControls(
+                      player: player,
+                      status: status,
+                      busy: busy,
+                      playing: playing,
+                    );
+
+                    if (compact) {
+                      return _CompactMiniPlayer(
                         track: track,
                         status: status,
-                        onTap: _openNowPlaying,
-                        needsTap: player.needsTap,
-                      );
-                      final controls = _PlaybackControls(
                         player: player,
-                        status: status,
                         busy: busy,
                         playing: playing,
+                        progress: durationMs > 0
+                            ? (positionMs / durationMs).clamp(0.0, 1.0)
+                            : null,
+                        onOpen: _openNowPlaying,
                       );
+                    }
 
-                      if (compact) {
-                        return _CompactMiniPlayer(
-                          track: track,
-                          status: status,
-                          player: player,
-                          busy: busy,
-                          playing: playing,
-                          progress: durationMs > 0
-                              ? (positionMs / durationMs).clamp(0.0, 1.0)
-                              : null,
-                          onOpen: _openNowPlaying,
-                        );
-                      }
-
-                      return Padding(
-                        padding:
-                            const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 8),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
+                    return Padding(
+                      padding:
+                          const EdgeInsetsDirectional.fromSTEB(20, 10, 20, 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(child: summary),
+                              const SizedBox(width: 24),
+                              controls,
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Directionality(
+                            textDirection: TextDirection.ltr,
+                            child: Row(
                               children: [
-                                Expanded(child: summary),
-                                const SizedBox(width: 24),
-                                controls,
+                                _TimeLabel(_format(player.position)),
+                                Expanded(
+                                  child: Slider(
+                                    value: _dragMs ?? positionMs,
+                                    max: durationMs > 0
+                                        ? durationMs.toDouble()
+                                        : 1,
+                                    semanticFormatterCallback: (value) =>
+                                        _format(
+                                      Duration(milliseconds: value.round()),
+                                    ),
+                                    onChanged: durationMs > 0
+                                        ? (value) =>
+                                            setState(() => _dragMs = value)
+                                        : null,
+                                    onChangeEnd: durationMs > 0
+                                        ? (value) {
+                                            setState(() => _dragMs = null);
+                                            player.seek(
+                                              Duration(
+                                                milliseconds: value.round(),
+                                              ),
+                                            );
+                                          }
+                                        : null,
+                                  ),
+                                ),
+                                _TimeLabel(
+                                  _format(player.duration ?? Duration.zero),
+                                ),
                               ],
                             ),
-                            const SizedBox(height: 4),
-                            Directionality(
-                              textDirection: TextDirection.ltr,
-                              child: Row(
-                                children: [
-                                  _TimeLabel(_format(player.position)),
-                                  Expanded(
-                                    child: Slider(
-                                      value: _dragMs ?? positionMs,
-                                      max: durationMs > 0
-                                          ? durationMs.toDouble()
-                                          : 1,
-                                      semanticFormatterCallback: (value) =>
-                                          _format(
-                                        Duration(milliseconds: value.round()),
-                                      ),
-                                      onChanged: durationMs > 0
-                                          ? (value) =>
-                                              setState(() => _dragMs = value)
-                                          : null,
-                                      onChangeEnd: durationMs > 0
-                                          ? (value) {
-                                              setState(() => _dragMs = null);
-                                              player.seek(
-                                                Duration(
-                                                  milliseconds: value.round(),
-                                                ),
-                                              );
-                                            }
-                                          : null,
-                                    ),
-                                  ),
-                                  _TimeLabel(
-                                    _format(player.duration ?? Duration.zero),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -150,6 +148,12 @@ class _MiniPlayerState extends State<MiniPlayer> {
     );
   }
 }
+
+/// White on the dark glass, as on the now-playing screen.
+ButtonStyle miniPlayButtonStyle(ColorScheme colors) => IconButton.styleFrom(
+      backgroundColor: colors.onSurface,
+      foregroundColor: colors.surface,
+    );
 
 class _CompactMiniPlayer extends StatelessWidget {
   const _CompactMiniPlayer({
@@ -176,7 +180,7 @@ class _CompactMiniPlayer extends StatelessWidget {
     return Stack(
       children: [
         Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(10, 4, 8, 8),
+          padding: const EdgeInsetsDirectional.fromSTEB(4, 6, 4, 4),
           child: Row(
             children: [
               InkWell(
@@ -185,11 +189,11 @@ class _CompactMiniPlayer extends StatelessWidget {
                 child: SizedBox.square(
                   dimension: 48,
                   child: Center(
-                    child: _MiniArtwork(track: track, status: status, size: 40),
+                    child: _MiniArtwork(track: track, status: status, size: 42),
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: RhythmoSpace.sm),
               Expanded(
                 child: InkWell(
                   borderRadius: BorderRadius.circular(RhythmoRadii.sm),
@@ -204,65 +208,49 @@ class _CompactMiniPlayer extends StatelessWidget {
                   ),
                 ),
               ),
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: 'قبلی',
-                      onPressed: player.previous,
-                      icon: const Icon(RhythmoIcons.skipBackFill),
-                    ),
-                    if (busy)
-                      const SizedBox.square(
-                        dimension: 42,
-                        child: Padding(
-                          padding: EdgeInsets.all(10),
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                        ),
-                      )
-                    else
-                      IconButton.filled(
-                        tooltip: status == PlayerStatus.error
-                            ? 'تلاش دوباره'
-                            : playing
-                                ? 'توقف'
-                                : 'پخش',
-                        onPressed: player.toggle,
-                        icon: Icon(
-                          status == PlayerStatus.error
-                              ? RhythmoIcons.arrowsClockwise
-                              : playing
-                                  ? RhythmoIcons.pauseFill
-                                  : RhythmoIcons.playFill,
-                        ),
-                      ),
-                    IconButton(
-                      tooltip: 'بعدی',
-                      onPressed: player.next,
-                      icon: const Icon(RhythmoIcons.skipForwardFill),
-                    ),
-                  ],
+              // One control: skipping lives on the now-playing screen.
+              if (busy)
+                const SizedBox.square(
+                  dimension: 48,
+                  child: Padding(
+                    padding: EdgeInsets.all(13),
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                )
+              else
+                IconButton(
+                  tooltip: status == PlayerStatus.error
+                      ? 'تلاش دوباره'
+                      : playing
+                          ? 'توقف'
+                          : 'پخش',
+                  onPressed: player.toggle,
+                  icon: Icon(
+                    status == PlayerStatus.error
+                        ? RhythmoIcons.arrowsClockwise
+                        : playing
+                            ? RhythmoIcons.pauseFill
+                            : RhythmoIcons.playFill,
+                    color: colors.onSurface,
+                  ),
                 ),
-              ),
             ],
           ),
         ),
+        // A thin coral line along the top edge shows how far the song is.
         if (progress case final value?)
-          PositionedDirectional(
-            start: 18,
-            end: 18,
-            bottom: 4,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(RhythmoRadii.pill),
-              child: Directionality(
-                textDirection: TextDirection.ltr,
-                child: LinearProgressIndicator(
-                  value: value,
-                  minHeight: 2,
-                  backgroundColor: colors.surfaceContainerHighest,
-                ),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            // Playback time runs left to right, as on every media control.
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: LinearProgressIndicator(
+                value: value,
+                minHeight: 2,
+                color: colors.primary,
+                backgroundColor: RhythmoColors.transparent,
               ),
             ),
           ),
@@ -321,23 +309,17 @@ class _MiniArtwork extends StatelessWidget {
         : track.isLocal
             ? RhythmoIcons.deviceMobile
             : RhythmoIcons.musicNote;
+    final radius = size >= 44 ? RhythmoRadii.sm : RhythmoRadii.xs;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(size >= 44 ? 14 : 12),
-        boxShadow: [
-          BoxShadow(
-            color: RhythmoColors.primary.withValues(alpha: 0.18),
-            offset: const Offset(0, 7),
-            blurRadius: 18,
-          ),
-        ],
+        borderRadius: BorderRadius.circular(radius),
       ),
       child: TrackCover(
           track: track,
-          radius: size >= 44 ? 14 : 12,
+          radius: radius,
           child: Icon(
             icon,
             size: size * 0.36,
@@ -374,13 +356,13 @@ class _MiniTrackText extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
         ),
         const SizedBox(height: 2),
         Text(
           switch (status) {
-            PlayerStatus.error => 'پخش ناموفق بود. دوباره تلاش کن.',
+            PlayerStatus.error => playbackErrorShort,
             PlayerStatus.loading ||
             PlayerStatus.buffering =>
               'در حال بارگذاری…',
@@ -446,6 +428,7 @@ class _PlaybackControls extends StatelessWidget {
                       ? 'توقف'
                       : 'پخش',
               iconSize: 28,
+              style: miniPlayButtonStyle(Theme.of(context).colorScheme),
               onPressed: player.toggle,
               icon: Icon(
                 status == PlayerStatus.error

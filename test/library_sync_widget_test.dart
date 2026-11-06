@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rhythmo/app/app_preferences.dart';
+import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
 import 'package:rhythmo/features/library/data/local_audio_library.dart';
@@ -16,13 +19,16 @@ import 'player_controller_test.dart' show FakeAudioEngine;
 import 'upload_controller_test.dart' show FakeTracksApi, FakeUploader;
 import 'widget_test.dart' show FakeAuthApi, FakePicker;
 
-Track _device(int id, String title, {int size = 4, String? fileName}) => Track(
+Track _device(int id, String title,
+        {int size = 4, String? fileName, DateTime? addedAt}) =>
+    Track(
       id: 'device:$id',
       title: title,
       contentType: 'audio/mpeg',
       sizeBytes: size,
       fileName: fileName ?? '$title.mp3',
       sourceUri: Uri.parse('content://media/external/audio/media/$id'),
+      addedAt: addedAt,
     );
 
 Future<void> _pump(
@@ -32,9 +38,13 @@ Future<void> _pump(
   FakeUploader? uploader,
   FakeUploadSource? source,
   FakeTrackDownloader? downloader,
+  AppPreferences? preferences,
 }) async {
   await tester.pumpWidget(RhythmoApp(
     healthCheck: () async {},
+    appPreferencesStore: preferences == null
+        ? null
+        : (MemoryAppPreferencesStore()..value = preferences),
     authApi: FakeAuthApi(),
     tokenStore: MemoryTokenStore('valid-token'),
     tracksApi: tracks,
@@ -59,6 +69,48 @@ Future<void> _openMenu(WidgetTester tester, String title) async {
 }
 
 void main() {
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  testWidgets('a song can be queued to play next or last, not the playing one',
+      (tester) async {
+    // Tall enough that the mini player covers no row.
+    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(
+      tester,
+      tracks: FakeTracksApi([
+        for (final title in ['One', 'Two'])
+          Track(
+              id: title,
+              title: title,
+              contentType: 'audio/mpeg',
+              sizeBytes: 100,
+              fileName: '$title.mp3'),
+      ]),
+      device: FakeLocalAudioLibrary(
+          const LocalAudioResult(LocalAudioStatus.loaded, [])),
+    );
+    await tester.runAsync(() async {
+      await tester.tap(find.text('One'));
+      await Future<void>.delayed(Duration.zero);
+    });
+    await tester.pumpAndSettle();
+
+    await _openMenu(tester, 'One');
+    expect(find.text('پسندیدن'), findsOneWidget);
+    expect(find.text('پخش بعدی'), findsNothing,
+        reason: 'the playing song is already playing');
+    Navigator.of(tester.element(find.text('پسندیدن'))).pop();
+    await tester.pumpAndSettle();
+
+    await _openMenu(tester, 'Two');
+    expect(find.text('پسندیدن'), findsOneWidget);
+    expect(find.text('افزودن به صف'), findsOneWidget);
+    await tester.tap(find.text('پخش بعدی'));
+    await tester.pumpAndSettle();
+    expect(find.text('«Two» بعد از این آهنگ پخش می‌شود.'), findsOneWidget);
+  });
+
   testWidgets('device, server and synced tracks appear once with badges',
       (tester) async {
     await _pump(
@@ -97,6 +149,35 @@ void main() {
         find.descendant(
             of: _row('Phone only'), matching: find.byTooltip('فقط روی دستگاه')),
         findsOneWidget);
+    // Where each song lives is said beside the artist (#445): a cloud for
+    // songs with a copy on the server, a label for songs only on the phone.
+    for (final title in ['Server only', 'Both']) {
+      expect(
+          find.descendant(
+              of: _row(title),
+              matching: find.byKey(const ValueKey('cloud-mark'))),
+          findsOneWidget,
+          reason: title);
+      expect(
+          find.descendant(of: _row(title), matching: find.text('فقط روی گوشی')),
+          findsNothing,
+          reason: title);
+    }
+    expect(
+        find.descendant(
+            of: _row('Phone only'), matching: find.text('فقط روی گوشی')),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: _row('Phone only'),
+            matching: find.byKey(const ValueKey('cloud-mark'))),
+        findsNothing);
+    // The artwork stays clean: no location badges on it.
+    expect(
+        find.descendant(
+            of: _row('Phone only'),
+            matching: find.byIcon(RhythmoIcons.deviceMobile)),
+        findsNothing);
 
     await _openMenu(tester, 'Both');
     expect(find.text('حذف از دستگاه'), findsOneWidget);
@@ -110,7 +191,61 @@ void main() {
     expect(find.text('آپلود به سرور'), findsOneWidget);
     expect(find.text('حذف از دستگاه'), findsOneWidget);
     expect(find.text('حذف از سرور'), findsNothing);
-    expect(find.text('ویرایش اطلاعات آهنگ'), findsNothing);
+    expect(find.text('ویرایش اطلاعات آهنگ'), findsOneWidget);
+  });
+
+  testWidgets(
+      'the list sorts server and device tracks together, and new device '
+      'music has its own tab on a narrow screen', (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final now = DateTime.now();
+    DateTime daysAgo(int days) => now.subtract(Duration(days: days));
+    await _pump(
+      tester,
+      tracks: FakeTracksApi([
+        Track(
+            id: 't1',
+            title: 'Server new',
+            contentType: 'audio/mpeg',
+            sizeBytes: 100,
+            addedAt: daysAgo(2)),
+        Track(
+            id: 't2',
+            title: 'Server old',
+            contentType: 'audio/mpeg',
+            sizeBytes: 200,
+            addedAt: daysAgo(90)),
+      ]),
+      device: FakeLocalAudioLibrary(LocalAudioResult(LocalAudioStatus.loaded, [
+        _device(1, 'Phone newest', size: 300, addedAt: daysAgo(1)),
+        _device(2, 'Phone mid', size: 400, addedAt: daysAgo(10)),
+        _device(3, 'Phone old', size: 500, addedAt: daysAgo(60)),
+      ])),
+      // The listener turned the «تازه‌های دستگاه» tab on.
+      preferences: const AppPreferences(hidden: {}),
+    );
+
+    double top(String title) => tester.getTopLeft(find.text(title)).dy;
+    final titles = [
+      'Phone newest',
+      'Server new',
+      'Phone mid',
+      'Phone old',
+      'Server old'
+    ];
+    for (var i = 1; i < titles.length; i++) {
+      expect(top(titles[i - 1]), lessThan(top(titles[i])), reason: titles[i]);
+    }
+
+    await tester.tap(find.text('تازه‌های دستگاه'));
+    await tester.pumpAndSettle();
+    expect(find.text('۲ آهنگ'), findsOneWidget);
+    expect(top('Phone newest'), lessThan(top('Phone mid')));
+    expect(find.text('Server new'), findsNothing);
+    expect(find.text('Phone old'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('editing from the menu saves and shows the new title',
@@ -206,6 +341,9 @@ void main() {
         findsOneWidget);
 
     tracks.createError = null;
+    // The failure's snack bar floats above the dock, over the only row.
+    ScaffoldMessenger.of(tester.element(_row('Song'))).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
     await _openMenu(tester, 'Song');
     await tester.tap(find.text('تلاش دوباره برای آپلود'));
     await tester.pumpAndSettle();

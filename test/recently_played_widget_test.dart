@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rhythmo/features/library/presentation/rhythmo_dock.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
@@ -10,6 +12,7 @@ import 'package:rhythmo/features/library/data/local_audio_library.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/library/presentation/library_screen.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
+import 'package:rhythmo/features/player/presentation/mini_player.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/main.dart';
 
@@ -93,6 +96,7 @@ void _expectTouchTarget(WidgetTester tester, Finder finder) {
 }
 
 void main() {
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   group('recently played', () {
     testWidgets(
         'on a 360 px phone the compact library truncates long titles, '
@@ -114,12 +118,12 @@ void main() {
 
       expect(find.text('اخیراً پخش‌شده'), findsNothing);
       expect(tester.takeException(), isNull);
-      // Search lives behind the header button, not above the list.
+      // Search lives behind the dock's bubble, not above the list.
       expect(find.byType(SearchBar), findsNothing);
-      _expectTouchTarget(tester, find.byTooltip('جست‌وجو در کتابخانه'));
-      final brand = tester.getRect(find.text('ریتمو'));
-      final search = tester.getRect(find.byTooltip('جست‌وجو در کتابخانه'));
-      expect((brand.center.dy - search.center.dy).abs(), lessThan(4));
+      _expectTouchTarget(tester, find.byTooltip('جست‌وجو'));
+      final dock = tester.getRect(find.byType(RhythmoDock));
+      final search = tester.getRect(find.byTooltip('جست‌وجو'));
+      expect(dock.contains(search.center), isTrue);
       expect(tester.getSize(_row(_longPersian)).height, lessThanOrEqualTo(72));
       _expectTouchTarget(tester, _row(_longPersian));
 
@@ -137,7 +141,9 @@ void main() {
       await tester.tap(find.text(_longPersian));
       await tester.pumpAndSettle();
       expect(find.byTooltip('توقف'), findsOneWidget);
-      final progress = find.byType(LinearProgressIndicator);
+      final progress = find.descendant(
+          of: find.byType(MiniPlayer),
+          matching: find.byType(LinearProgressIndicator));
       expect(progress, findsOneWidget);
       expect(Directionality.of(tester.element(progress)), TextDirection.ltr);
 
@@ -299,8 +305,8 @@ void main() {
           ]),
           history: history,
           playlists: playlists);
-      _expectTouchTarget(tester, find.byTooltip('جست‌وجو در کتابخانه'));
-      await tester.tap(find.byTooltip('جست‌وجو در کتابخانه'));
+      _expectTouchTarget(tester, find.byTooltip('جست‌وجو'));
+      await tester.tap(find.byTooltip('جست‌وجو'));
       await tester.pumpAndSettle();
     }
 
@@ -309,7 +315,9 @@ void main() {
         'and ZWNJ, on a 360 px phone', (tester) async {
       _phone(tester);
       await openSearch(tester);
-      expect(find.text('در همهٔ کتابخانه بگرد'), findsOneWidget);
+      // An empty field offers the public playlists as a rail (#448).
+      expect(find.text('فهرست‌های عمومی'), findsOneWidget);
+      expect(find.byKey(const ValueKey('search-public')), findsOneWidget);
 
       // «کلاسیک» with Persian letters finds «كلاسيك» spelled the Arabic way,
       // and «کلاسیکهای» without ZWNJ the popular «کلاسیک‌های».
@@ -385,7 +393,7 @@ void main() {
           tracks: FakeTracksApi([_cloud('a', 'Alpha')]),
           history: history,
           playlists: playlists);
-      await tester.tap(find.byTooltip('جست‌وجو در کتابخانه'));
+      await tester.tap(find.byTooltip('جست‌وجو'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await tester.enterText(_searchField, 'alpha');

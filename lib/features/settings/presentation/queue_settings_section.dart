@@ -21,7 +21,10 @@ class QueueSettingsSection extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 12, 8),
                     child: Text('صف پخش',
-                        style: Theme.of(context).textTheme.titleSmall),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant)),
                   ),
                   Card(
                     margin: EdgeInsets.zero,
@@ -54,7 +57,7 @@ class QueueSettingsSection extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const Divider(height: 1, indent: 16, endIndent: 16),
+                        const SizedBox(height: 4),
                         SwitchListTile(
                           title: const Text('جلوگیری از آهنگ تکراری'),
                           subtitle: const Text(

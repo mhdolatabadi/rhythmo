@@ -1,3 +1,4 @@
+import 'package:rhythmo/core/design/design.dart';
 import 'package:flutter/material.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/core/persian_digits.dart';
@@ -49,44 +50,49 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('دسترسی‌ها')),
-        body: widget.device.supportsNative
-            ? FutureBuilder<Map<String, bool>>(
-                future: _status,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError || snapshot.data?.isEmpty != false) {
-                    return Center(
-                        child: FilledButton(
-                            onPressed: _refresh,
-                            child:
-                                const Text('دریافت دوبارهٔ وضعیت دسترسی‌ها')));
-                  }
-                  return ListView(padding: const EdgeInsets.all(16), children: [
-                    for (final item in const {
-                      'audio': 'آهنگ‌های دستگاه',
-                      'microphone': 'میکروفن برای شناسایی آهنگ',
-                      'notifications': 'اعلان‌ها'
-                    }.entries)
-                      ListTile(
-                          title: Text(item.value),
-                          subtitle: Text(snapshot.data![item.key] == true
-                              ? 'مجاز'
-                              : 'غیرفعال')),
-                    const ListTile(
-                        title: Text('دسترسی‌ها را خودت مدیریت می‌کنی'),
-                        subtitle: Text(
-                            'بازکردن این صفحه هیچ دسترسی تازه‌ای درخواست نمی‌کند.')),
-                    FilledButton(
-                        onPressed: _open,
-                        child: const Text('بازکردن تنظیمات دستگاه')),
-                  ]);
-                })
-            : const Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                    'در وب، دسترسی میکروفن و فایل‌ها را از تنظیمات همین سایت در مرورگر مدیریت کن. دسترسی فقط هنگام استفاده از قابلیت مربوط درخواست می‌شود.')),
+        body: RhythmoBackdrop(
+            child: widget.device.supportsNative
+                ? FutureBuilder<Map<String, bool>>(
+                    future: _status,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError ||
+                          snapshot.data?.isEmpty != false) {
+                        return Center(
+                            child: FilledButton(
+                                onPressed: _refresh,
+                                child: const Text(
+                                    'دریافت دوبارهٔ وضعیت دسترسی‌ها')));
+                      }
+                      return ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            for (final item in const {
+                              'audio': 'آهنگ‌های دستگاه',
+                              'microphone': 'میکروفن برای شناسایی آهنگ',
+                              'notifications': 'اعلان‌ها'
+                            }.entries)
+                              ListTile(
+                                  title: Text(item.value),
+                                  subtitle: Text(
+                                      snapshot.data![item.key] == true
+                                          ? 'مجاز'
+                                          : 'غیرفعال')),
+                            const ListTile(
+                                title: Text('دسترسی‌ها را خودت مدیریت می‌کنی'),
+                                subtitle: Text(
+                                    'بازکردن این صفحه هیچ دسترسی تازه‌ای درخواست نمی‌کند.')),
+                            FilledButton(
+                                onPressed: _open,
+                                child: const Text('بازکردن تنظیمات دستگاه')),
+                          ]);
+                    })
+                : const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                        'در وب، دسترسی میکروفن و فایل‌ها را از تنظیمات همین سایت در مرورگر مدیریت کن. دسترسی فقط هنگام استفاده از قابلیت مربوط درخواست می‌شود.'))),
       );
 }
 
@@ -106,10 +112,11 @@ class _AboutScreenState extends State<AboutScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('دربارهٔ ریتمو')),
-        body: ListView(padding: const EdgeInsets.all(16), children: [
+        body: RhythmoBackdrop(
+            child: ListView(padding: const EdgeInsets.all(16), children: [
           const ListTile(
               title: Text('ریتمو'),
-              subtitle: Text('کتابخانهٔ موسیقی شخصی تو؛ روی وب و اندروید')),
+              subtitle: Text('موسیقی شخصی تو، روی وب و اندروید')),
           FutureBuilder<String?>(
               future: _version,
               builder: (context, snapshot) => ListTile(
@@ -138,6 +145,6 @@ class _AboutScreenState extends State<AboutScreen> {
               title: const Text('مجوزهای نرم‌افزار'),
               onTap: () =>
                   showLicensePage(context: context, applicationName: 'ریتمو')),
-        ]),
+        ])),
       );
 }

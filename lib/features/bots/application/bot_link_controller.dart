@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/bots/data/messenger_bot.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum BotLinkStatus { idle, loading, ready, failed }
 
@@ -8,7 +9,7 @@ enum BotSendResult { queued, notLinked, tooLarge, failed }
 
 /// Which messenger bots exist, and the one-time code that links one of their
 /// chats to this account.
-class BotLinkController extends ChangeNotifier {
+class BotLinkController extends ChangeNotifier with QuietAfterDispose {
   BotLinkController({
     required BotsApi api,
     required String? Function() token,
