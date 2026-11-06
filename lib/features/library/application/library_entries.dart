@@ -44,7 +44,7 @@ class LibraryEntry {
 /// Merges the account's tracks with the device's music so each file appears
 /// once. A device file is the server copy of a track when their sizes match
 /// exactly (uploads are never transcoded) and so does their filename, as the
-/// server stores it, or their title.
+/// server stores it (original display name or legacy storage name), or title.
 List<LibraryEntry> mergeLibrary(List<Track> cloud, List<Track> local) {
   final unmatched = <int, List<Track>>{};
   for (final track in cloud) {
@@ -92,10 +92,21 @@ bool _sameFile(Track cloud, Track device) {
   final deviceName = device.fileName;
   if (cloudName != null &&
       deviceName != null &&
-      safeFileName(deviceName) == cloudName) {
+      (_displayName(deviceName) == _displayName(cloudName) ||
+          safeFileName(deviceName) == cloudName)) {
     return true;
   }
   return _comparable(cloud.title) == _comparable(device.title);
+}
+
+// The API preserves Unicode and spaces in display filenames. Only the
+// storage key uses safeFileName; comparing just that loses uploaded files
+// when their embedded title differs from their filename.
+String _displayName(String name) {
+  final base = name.replaceAll('\\', '/').split('/').last;
+  final dot = base.lastIndexOf('.');
+  if (dot < 0) return base;
+  return '${base.substring(0, dot)}${base.substring(dot).toLowerCase()}';
 }
 
 String _comparable(String text) =>
