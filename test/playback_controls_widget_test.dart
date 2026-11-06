@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -119,12 +118,10 @@ void main() {
       expectTarget(tester, find.byTooltip('زمان‌سنج خواب: توقف تا ۴۵:۰۰'),
           'sleep timer');
       expectTarget(tester, find.byTooltip('سرعت پخش'), 'speed');
-      expectTarget(tester, find.byTooltip('جزئیات آهنگ'), 'details');
+      expectTarget(tester, find.byTooltip('گزینه‌های آهنگ'), 'details');
       expect(find.text('۱٫۷۵×'), findsOneWidget);
-      final queueLabel =
-          tester.renderObject<RenderParagraph>(find.text('صف پخش (۲)'));
-      expect(queueLabel.didExceedMaxLines, isFalse,
-          reason: 'the queue label is not cut off');
+      // The queue is an icon with a count; its name is in the tooltip.
+      expectTarget(tester, find.byTooltip('صف پخش (۲)'), 'queue');
       final status = tester.getRect(find.byKey(const ValueKey('sleep-status')));
       expect(status.left, greaterThanOrEqualTo(0));
       expect(status.right, lessThanOrEqualTo(360));

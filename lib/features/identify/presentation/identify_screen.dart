@@ -217,8 +217,7 @@ class _Intro extends StatelessWidget {
         Text(
           'آهنگی که پخش می‌شود را بشناسید',
           textAlign: TextAlign.center,
-          style:
-              theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          style: theme.textTheme.titleLarge,
         ),
         const SizedBox(height: 8),
         Text(
@@ -313,8 +312,7 @@ class _Listening extends StatelessWidget {
         const SizedBox(height: 24),
         Text(
           'در حال گوش دادن…',
-          style:
-              theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          style: theme.textTheme.titleLarge,
         ),
         const SizedBox(height: 8),
         Text(
@@ -411,8 +409,7 @@ class _Result extends StatelessWidget {
                         track.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                        style: theme.textTheme.titleLarge,
                       ),
                       const SizedBox(height: 4),
                       Text(

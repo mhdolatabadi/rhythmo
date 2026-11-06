@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rhythmo/app/app_preferences.dart';
+import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
@@ -36,9 +38,13 @@ Future<void> _pump(
   FakeUploader? uploader,
   FakeUploadSource? source,
   FakeTrackDownloader? downloader,
+  AppPreferences? preferences,
 }) async {
   await tester.pumpWidget(RhythmoApp(
     healthCheck: () async {},
+    appPreferencesStore: preferences == null
+        ? null
+        : (MemoryAppPreferencesStore()..value = preferences),
     authApi: FakeAuthApi(),
     tokenStore: MemoryTokenStore('valid-token'),
     tracksApi: tracks,
@@ -64,6 +70,47 @@ Future<void> _openMenu(WidgetTester tester, String title) async {
 
 void main() {
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  testWidgets('a song can be queued to play next or last, not the playing one',
+      (tester) async {
+    // Tall enough that the mini player covers no row.
+    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(
+      tester,
+      tracks: FakeTracksApi([
+        for (final title in ['One', 'Two'])
+          Track(
+              id: title,
+              title: title,
+              contentType: 'audio/mpeg',
+              sizeBytes: 100,
+              fileName: '$title.mp3'),
+      ]),
+      device: FakeLocalAudioLibrary(
+          const LocalAudioResult(LocalAudioStatus.loaded, [])),
+    );
+    await tester.runAsync(() async {
+      await tester.tap(find.text('One'));
+      await Future<void>.delayed(Duration.zero);
+    });
+    await tester.pumpAndSettle();
+
+    await _openMenu(tester, 'One');
+    expect(find.text('پسندیدن'), findsOneWidget);
+    expect(find.text('پخش بعدی'), findsNothing,
+        reason: 'the playing song is already playing');
+    Navigator.of(tester.element(find.text('پسندیدن'))).pop();
+    await tester.pumpAndSettle();
+
+    await _openMenu(tester, 'Two');
+    expect(find.text('پسندیدن'), findsOneWidget);
+    expect(find.text('افزودن به صف'), findsOneWidget);
+    await tester.tap(find.text('پخش بعدی'));
+    await tester.pumpAndSettle();
+    expect(find.text('«Two» بعد از این آهنگ پخش می‌شود.'), findsOneWidget);
+  });
+
   testWidgets('device, server and synced tracks appear once with badges',
       (tester) async {
     await _pump(
@@ -102,6 +149,35 @@ void main() {
         find.descendant(
             of: _row('Phone only'), matching: find.byTooltip('فقط روی دستگاه')),
         findsOneWidget);
+    // Where each song lives is said beside the artist (#445): a cloud for
+    // songs with a copy on the server, a label for songs only on the phone.
+    for (final title in ['Server only', 'Both']) {
+      expect(
+          find.descendant(
+              of: _row(title),
+              matching: find.byKey(const ValueKey('cloud-mark'))),
+          findsOneWidget,
+          reason: title);
+      expect(
+          find.descendant(of: _row(title), matching: find.text('فقط روی گوشی')),
+          findsNothing,
+          reason: title);
+    }
+    expect(
+        find.descendant(
+            of: _row('Phone only'), matching: find.text('فقط روی گوشی')),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: _row('Phone only'),
+            matching: find.byKey(const ValueKey('cloud-mark'))),
+        findsNothing);
+    // The artwork stays clean: no location badges on it.
+    expect(
+        find.descendant(
+            of: _row('Phone only'),
+            matching: find.byIcon(RhythmoIcons.deviceMobile)),
+        findsNothing);
 
     await _openMenu(tester, 'Both');
     expect(find.text('حذف از دستگاه'), findsOneWidget);
@@ -147,6 +223,8 @@ void main() {
         _device(2, 'Phone mid', size: 400, addedAt: daysAgo(10)),
         _device(3, 'Phone old', size: 500, addedAt: daysAgo(60)),
       ])),
+      // The listener turned the «تازه‌های دستگاه» tab on.
+      preferences: const AppPreferences(hidden: {}),
     );
 
     double top(String title) => tester.getTopLeft(find.text(title)).dy;

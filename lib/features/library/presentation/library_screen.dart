@@ -37,9 +37,12 @@ import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/features/playlists/application/device_playlist_import.dart';
 import 'package:rhythmo/features/playlists/data/device_playlist_source.dart';
 import 'package:rhythmo/features/playlists/presentation/device_playlist_import_dialog.dart';
+import 'package:rhythmo/features/playlists/presentation/add_to_playlist.dart';
 import 'package:rhythmo/features/playlists/presentation/playlists_screen.dart';
 import 'package:rhythmo/features/playlists/presentation/popular_playlists_screen.dart';
 import 'package:rhythmo/features/store/presentation/store_screen.dart';
+import 'package:rhythmo/features/store/presentation/store_carousel.dart';
+import 'package:rhythmo/features/store/data/store_catalog.dart';
 import 'package:rhythmo/features/bots/application/bot_link_controller.dart';
 import 'package:rhythmo/features/bots/data/messenger_bot.dart';
 import 'package:rhythmo/features/identify/application/identify_controller.dart';
@@ -334,6 +337,8 @@ class _LibraryScreenState extends State<LibraryScreen>
     widget.botLinks?.load();
     widget.recent?.load();
     widget.notifications?.startPolling();
+    // «خانه» shows the newest of them (#447).
+    widget.notifications?.load();
     _recentSearches.load();
     widget.library.addListener(_onLibraryChanged);
     widget.localAudio.addListener(_onLocalAudioChanged);
@@ -575,15 +580,6 @@ class _LibraryScreenState extends State<LibraryScreen>
         builder: (_) => Scaffold(
               appBar: AppBar(
                 title: const Text('فهرست‌های پخش'),
-                actions: [
-                  if (widget.store != null)
-                    IconButton(
-                      tooltip: 'گنجینه',
-                      onPressed: _openStore,
-                      icon: const Icon(RhythmoIcons.vinylRecord),
-                    ),
-                  PopularPlaylistsButton(onOpen: _openPopular),
-                ],
               ),
               bottomNavigationBar: MiniPlayer(player: widget.player),
               body: RhythmoBackdrop(
@@ -609,6 +605,20 @@ class _LibraryScreenState extends State<LibraryScreen>
     if (mounted) playlists.load();
   }
 
+  Future<void> _openChannel(String shareToken) async {
+    final playlists = widget.playlists;
+    if (playlists == null) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => SharedPlaylistScreen(
+        shareToken: shareToken,
+        controller: playlists,
+        player: widget.player,
+        onSaved: widget.library.load,
+      ),
+    ));
+    if (mounted) widget.notifications?.load();
+  }
+
   Future<void> _openNotifications() async {
     final notifications = widget.notifications;
     final playlists = widget.playlists;
@@ -628,8 +638,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     final store = widget.store;
     if (store == null) return;
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => StoreScreen(
-          controller: store, player: widget.player, identify: widget.identify),
+      builder: (_) => StoreScreen(controller: store, player: widget.player),
     ));
   }
 
@@ -638,6 +647,9 @@ class _LibraryScreenState extends State<LibraryScreen>
         .push(MaterialPageRoute<void>(
           builder: (_) => SettingsScreen(
             email: widget.email,
+            verified: widget.verified,
+            onAdmin: widget.onAdmin,
+            onLogout: widget.onLogout,
             onFeedback: widget.onFeedback,
             onDeleteAccount: widget.onDeleteAccount,
             onSignOutEverywhere: widget.onSignOutEverywhere,
@@ -695,120 +707,23 @@ class _LibraryScreenState extends State<LibraryScreen>
           entry.track,
       ];
 
-  List<Widget> _accountActions(BuildContext context) {
-    final wideActions = widget.onAdmin == null ? 720 : 960;
-    final identify = widget.identify;
-    final identifySong = identify == null
-        ? null
-        : IconButton(
-            tooltip: 'این آهنگ چیه؟',
-            onPressed: () => openIdentify(context, identify, widget.player),
-            icon: const Icon(RhythmoIcons.microphoneStage),
-          );
-    final popular = widget.playlists == null
-        ? null
-        : PopularPlaylistsButton(onOpen: _openPopular);
-    final bell = widget.notifications == null || widget.playlists == null
-        ? null
-        : NotificationsButton(
-            controller: widget.notifications!, onOpen: _openNotifications);
-    final storeButton = widget.store == null
-        ? null
-        : IconButton(
-            tooltip: 'گنجینه',
-            onPressed: _openStore,
-            icon: const Icon(RhythmoIcons.vinylRecord),
-          );
-    if (MediaQuery.sizeOf(context).width >= wideActions) {
-      return [
-        if (bell != null) bell,
-        if (popular != null) popular,
-        if (storeButton != null) storeButton,
-        if (identifySong != null) identifySong,
-        const SizedBox(width: 8),
-        _AccountChip(email: widget.email, verified: widget.verified),
-        if (widget.onAdmin != null)
-          IconButton(
-            tooltip: 'مدیریت حساب‌ها',
-            onPressed: widget.onAdmin,
-            icon: const Icon(RhythmoIcons.usersFill),
-          ),
+  /// The header keeps only the notifications bell: every other place has
+  /// its one way in, from the dock or from «خانه».
+  List<Widget> _headerActions(BuildContext context) => [
+        if (widget.notifications != null && widget.playlists != null)
+          NotificationsButton(
+              controller: widget.notifications!, onOpen: _openNotifications),
+        // The account and settings open from here; the dock is for music.
         IconButton(
-          tooltip: 'تنظیمات',
           onPressed: _openSettings,
-          icon: const Icon(RhythmoIcons.gear),
+          tooltip: 'حساب',
+          icon: AccountAvatar(verified: widget.verified, size: 28),
         ),
-        IconButton(
-          tooltip: 'خروج',
-          onPressed: widget.onLogout,
-          icon: const Icon(RhythmoIcons.signOut),
-        ),
-        const SizedBox(width: 32),
+        SizedBox(
+            width: MediaQuery.sizeOf(context).width >= 720
+                ? RhythmoSpace.xxl
+                : RhythmoSpace.sm),
       ];
-    }
-    return [
-      if (bell != null) bell,
-      if (popular != null) popular,
-      if (storeButton != null) storeButton,
-      if (identifySong != null) identifySong,
-      PopupMenuButton<_HeaderAction>(
-        tooltip: 'حساب و تنظیمات',
-        icon: AccountAvatar(verified: widget.verified),
-        onSelected: (action) {
-          switch (action) {
-            case _HeaderAction.settings:
-              _openSettings();
-            case _HeaderAction.admin:
-              widget.onAdmin?.call();
-            case _HeaderAction.logout:
-              widget.onLogout();
-          }
-        },
-        itemBuilder: (context) => [
-          PopupMenuItem<_HeaderAction>(
-            enabled: false,
-            child: Text(
-              widget.email,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (widget.verified)
-            const PopupMenuItem<_HeaderAction>(
-              enabled: false,
-              child: Text('حساب تأییدشده'),
-            ),
-          if (widget.onAdmin != null)
-            const PopupMenuItem(
-              value: _HeaderAction.admin,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(RhythmoIcons.usersFill),
-                title: Text('مدیریت حساب‌ها'),
-              ),
-            ),
-          const PopupMenuDivider(),
-          const PopupMenuItem(
-            value: _HeaderAction.settings,
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(RhythmoIcons.gear),
-              title: Text('تنظیمات'),
-            ),
-          ),
-          const PopupMenuItem(
-            value: _HeaderAction.logout,
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(RhythmoIcons.signOut),
-              title: Text('خروج از حساب'),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(width: 8),
-    ];
-  }
 
   /// Brand and actions share one toolbar above the category tabs.
   Widget _header(BuildContext context) {
@@ -821,14 +736,11 @@ class _LibraryScreenState extends State<LibraryScreen>
       tabAlignment: wide || _visibleTabs.length > 4
           ? TabAlignment.start
           : TabAlignment.fill,
-      labelStyle: Theme.of(context)
-          .textTheme
-          .titleSmall
-          ?.copyWith(fontWeight: FontWeight.w800),
+      labelStyle: Theme.of(context).textTheme.titleSmall,
       unselectedLabelStyle: Theme.of(context)
           .textTheme
           .titleSmall
-          ?.copyWith(fontWeight: FontWeight.w500),
+          ?.copyWith(fontWeight: FontWeight.w400),
       // Phone tabs share a narrow width: tighter padding, and a label that
       // still does not fit shrinks a little instead of being clipped.
       labelPadding: wide
@@ -860,7 +772,7 @@ class _LibraryScreenState extends State<LibraryScreen>
             toolbarHeight: 76,
             titleSpacing: 32,
             title: const RhythmoBrand(compact: false),
-            actions: _accountActions(context),
+            actions: _headerActions(context),
             bottom: bottom,
           )
         : SliverAppBar(
@@ -869,18 +781,21 @@ class _LibraryScreenState extends State<LibraryScreen>
             title: const RhythmoBrand(compact: true),
             // Opaque, because the lists scroll underneath it.
             backgroundColor: Theme.of(context).colorScheme.surface,
-            actions: _accountActions(context),
+            actions: _headerActions(context),
             bottom: bottom,
           );
   }
 
   void _selectDestination(DockDestination destination) {
-    if (destination == DockDestination.account) {
-      // Account and settings open as their own page.
-      _openSettings();
-      return;
+    switch (destination) {
+      // Search opens as its own page.
+      case DockDestination.search:
+        _openSearch();
+      case DockDestination.home ||
+            DockDestination.liked ||
+            DockDestination.library:
+        setState(() => _destination = destination);
     }
-    setState(() => _destination = destination);
   }
 
   Widget _destinationBody(BuildContext context) => switch (_destination) {
@@ -890,10 +805,22 @@ class _LibraryScreenState extends State<LibraryScreen>
             changes: _libraryChanges,
             tracks: _unifiedTracks,
             recent: widget.recent,
+            notifications:
+                widget.playlists == null ? null : widget.notifications,
+            onOpenNotifications: _openNotifications,
+            onOpenChannel: _openChannel,
             onAddMusic: _showAddMenu,
+            onPopular: widget.playlists == null ? null : _openPopular,
+            onStore: widget.store == null ? null : _openStore,
+            onIdentify: widget.identify == null
+                ? null
+                : () => openIdentify(context, widget.identify!, widget.player),
           ),
-        DockDestination.liked => _likedView(context),
-        DockDestination.library || DockDestination.account => NestedScrollView(
+        DockDestination.liked => NestedScrollView(
+            headerSliverBuilder: (context, _) => [_appBar(context)],
+            body: _favoritesBody(),
+          ),
+        _ => NestedScrollView(
             headerSliverBuilder: (context, _) => [_header(context)],
             body: TabBarView(
               controller: _tabs,
@@ -905,18 +832,6 @@ class _LibraryScreenState extends State<LibraryScreen>
             ),
           ),
       };
-
-  /// «پسندیده‌ها» from the dock: the liked songs with the library's row
-  /// actions.
-  Widget _likedView(BuildContext context) => NestedScrollView(
-        headerSliverBuilder: (context, _) => [
-          SliverOverlapAbsorber(
-            handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-            sliver: _appBar(context),
-          ),
-        ],
-        body: Builder(builder: (context) => _favoritesBody()),
-      );
 
   Widget _favoritesBody() => ListenableBuilder(
       listenable: Listenable.merge([_libraryChanges, widget.player.favorites]),
@@ -939,7 +854,6 @@ class _LibraryScreenState extends State<LibraryScreen>
         player: widget.player,
         selected: _destination,
         onSelect: _selectDestination,
-        onSearch: _openSearch,
       ),
       floatingActionButtonLocation: const _LibraryAddButtonLocation(),
       floatingActionButton: _destination != DockDestination.library ||
@@ -967,7 +881,6 @@ class _LibraryScreenState extends State<LibraryScreen>
         LibraryTab.newOnDevice => _newOnDeviceTab(),
         LibraryTab.albums => _groupsTab(albums: true),
         LibraryTab.artists => _groupsTab(albums: false),
-        LibraryTab.favorites => _favoritesBody(),
       };
 
   /// The device's music added in the last 30 days, newest first, with the
@@ -1088,6 +1001,8 @@ class _LibraryScreenState extends State<LibraryScreen>
         player: widget.player,
         onSharedSaved: widget.library.load,
         recentSearches: _recentSearches,
+        store: widget.store,
+        onOpenStore: widget.store == null ? null : _openStore,
       ),
     ));
   }
@@ -1155,9 +1070,9 @@ String _syncVerb(SyncKind kind) => switch (kind) {
       SyncKind.download => 'دانلود',
     };
 
-enum _HeaderAction { settings, logout, admin }
-
 enum _TrackAction {
+  playNext,
+  addToQueue,
   addToPlaylist,
   sendToBot,
   uploadToServer,
@@ -1170,27 +1085,6 @@ enum _TrackAction {
   like,
   publish,
   delete,
-}
-
-class _AccountChip extends StatelessWidget {
-  const _AccountChip({required this.email, required this.verified});
-
-  final String email;
-  final bool verified;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: verified ? '$email · حساب تأییدشده' : email,
-      child: GlassSurface(
-        blur: 0,
-        shadow: false,
-        radius: 14,
-        padding: const EdgeInsets.all(9),
-        child: AccountAvatar(verified: verified, size: 22),
-      ),
-    );
-  }
 }
 
 /// One library tab, kept alive so its scroll position survives switching
@@ -1288,8 +1182,7 @@ class _GroupList extends StatelessWidget {
                 group.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+                style: theme.textTheme.bodyLarge?.copyWith(
                   color: group.unknown ? colors.onSurfaceVariant : null,
                 ),
               ),
@@ -1367,7 +1260,7 @@ class _AlbumCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: group.unknown ? colors.onSurfaceVariant : null,
             ),
           ),
@@ -1452,8 +1345,7 @@ class _TrackGroupScreen extends StatelessWidget {
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
-                                    style: theme.textTheme.headlineSmall
-                                        ?.copyWith(fontWeight: FontWeight.w800),
+                                    style: theme.textTheme.headlineSmall,
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -1574,8 +1466,6 @@ class _TrackList extends StatefulWidget {
 }
 
 class _TrackListState extends State<_TrackList> {
-  static const _createPlaylistAction = '__create_playlist__';
-
   final Set<String> _selectedIds = {};
 
   @override
@@ -1712,6 +1602,11 @@ class _TrackListState extends State<_TrackList> {
           RhythmoIcons.cloudArrowDown,
           sync.downloadsToDevice ? 'دانلود روی دستگاه' : 'دانلود فایل',
         ),
+      // What to do with the song comes first, then where it lives.
+      if (widget.player.track?.id != track.id) ...[
+        item(_TrackAction.playNext, RhythmoIcons.queue, 'پخش بعدی'),
+        item(_TrackAction.addToQueue, RhythmoIcons.listPlus, 'افزودن به صف'),
+      ],
       item(
         _TrackAction.like,
         widget.player.favorites.contains(track.id)
@@ -1720,7 +1615,7 @@ class _TrackListState extends State<_TrackList> {
         widget.player.favorites.contains(track.id) ? 'نپسندیدن' : 'پسندیدن',
       ),
       if (widget.playlists != null)
-        item(_TrackAction.addToPlaylist, RhythmoIcons.listPlus,
+        item(_TrackAction.addToPlaylist, RhythmoIcons.playlist,
             'افزودن به فهرست پخش'),
       if (widget.onEditMetadata != null)
         item(_TrackAction.editMetadata, RhythmoIcons.pencilSimple,
@@ -1764,6 +1659,8 @@ class _TrackListState extends State<_TrackList> {
       tooltip: 'اقدامات آهنگ',
       onSelected: (choice) {
         switch (choice) {
+          case (_TrackAction.playNext || _TrackAction.addToQueue, _):
+            _enqueue(context, track, next: choice.$1 == _TrackAction.playNext);
           case (_TrackAction.addToPlaylist, _):
             _addToPlaylist(context, track);
           case (_TrackAction.sendToBot, final bot?):
@@ -1811,109 +1708,22 @@ class _TrackListState extends State<_TrackList> {
     }
   }
 
+  Future<void> _enqueue(BuildContext context, Track track,
+      {required bool next}) async {
+    final playing = widget.player.track != null;
+    await widget.player.enqueue(track, next: next);
+    if (!context.mounted || !playing) return;
+    _message(
+        context,
+        next
+            ? '«${track.title}» بعد از این آهنگ پخش می‌شود.'
+            : '«${track.title}» به آخر صف رفت.');
+  }
+
   Future<void> _addToPlaylist(BuildContext context, Track track) async {
     final controller = widget.playlists;
     if (controller == null) return;
-    final loaded = await controller.load();
-    if (!context.mounted) return;
-    if (!loaded) {
-      _message(context, 'دریافت فهرست‌های پخش ناموفق بود.');
-      return;
-    }
-
-    var playlistId = controller.playlists.isEmpty
-        ? await _createPlaylist(context, controller)
-        : await showDialog<String>(
-            context: context,
-            builder: (context) => SimpleDialog(
-              title: const Text('افزودن به فهرست پخش'),
-              children: [
-                SimpleDialogOption(
-                  onPressed: () =>
-                      Navigator.pop(context, _createPlaylistAction),
-                  child: const ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(RhythmoIcons.plus),
-                    title: Text('فهرست پخش جدید'),
-                  ),
-                ),
-                const Divider(height: 1),
-                for (final playlist in controller.playlists)
-                  SimpleDialogOption(
-                    onPressed: () => Navigator.pop(context, playlist.id),
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(RhythmoIcons.playlist),
-                      title: Text(playlist.name),
-                      subtitle: Text(
-                          '${persianDigits(playlist.displayTrackCount)} قطعه موسیقی'),
-                    ),
-                  ),
-              ],
-            ),
-          );
-
-    if (!context.mounted || playlistId == null) return;
-    if (playlistId == _createPlaylistAction) {
-      playlistId = await _createPlaylist(context, controller);
-      if (!context.mounted || playlistId == null) return;
-    }
-
-    final result = await controller.addDeviceTrack(playlistId, track);
-    if (!context.mounted) return;
-    switch (result) {
-      case AddTrackResult.added:
-        _message(context, 'آهنگ به فهرست پخش اضافه شد.');
-      case AddTrackResult.alreadyPresent:
-        _message(context, 'این آهنگ از قبل در فهرست پخش است.');
-      case AddTrackResult.failure:
-        _message(context, 'افزودن آهنگ به فهرست پخش ناموفق بود.');
-    }
-  }
-
-  Future<String?> _createPlaylist(
-    BuildContext context,
-    PlaylistsController controller,
-  ) async {
-    final nameController = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('فهرست پخش جدید'),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-          textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(labelText: 'نام فهرست پخش'),
-          onSubmitted: (value) {
-            final name = value.trim();
-            if (name.isNotEmpty) Navigator.pop(context, name);
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('انصراف'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = nameController.text.trim();
-              if (name.isNotEmpty) Navigator.pop(context, name);
-            },
-            child: const Text('ساخت'),
-          ),
-        ],
-      ),
-    );
-    if (!context.mounted || name == null) return null;
-
-    final playlist = await controller.create(name);
-    if (!context.mounted) return null;
-    if (playlist == null) {
-      _message(context, 'ساخت فهرست پخش ناموفق بود.');
-      return null;
-    }
-    return playlist.id;
+    await addTrackToPlaylist(context, controller, track);
   }
 
   void _message(BuildContext context, String text) {
@@ -2145,8 +1955,11 @@ class _TrackRow extends StatelessWidget {
       child: GestureDetector(
         onSecondaryTapUp: (details) =>
             _openContextMenu(context, details.globalPosition),
+        // The row is one tap target, so it carries the song's name; the
+        // title text below stays out of the tree so it is read only once.
         child: Semantics(
           selected: selected,
+          label: track.title,
           child: ListTile(
             selected: selecting ? selected : current,
             onTap: onTap,
@@ -2174,13 +1987,17 @@ class _TrackRow extends StatelessWidget {
                   const SizedBox(width: 4),
                 ],
                 Expanded(
-                  child: Text(
-                    track.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: current ? FontWeight.w700 : FontWeight.w600,
-                      color: current ? colors.primary : colors.onSurface,
+                  child: ExcludeSemantics(
+                    child: Text(
+                      track.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      // Regular, as every list title; the playing one is
+                      // medium and ember.
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: current ? FontWeight.w500 : FontWeight.w400,
+                        color: current ? colors.primary : colors.onSurface,
+                      ),
                     ),
                   ),
                 ),
@@ -2209,6 +2026,7 @@ class _TrackRow extends StatelessWidget {
                 ),
               null => Row(
                   children: [
+                    TrackSyncMark(location: locationOf(track)),
                     Expanded(
                       child: Text(
                         artist == null || artist.isEmpty
@@ -2231,6 +2049,60 @@ class _TrackRow extends StatelessWidget {
             },
             trailing: actions,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Before the artist: whether the song has a copy in the account's cloud.
+/// A synced song shows a small cloud with a check; a song that lives only
+/// on this phone says so in a small label. The app knows from the copies a
+/// row stands for: an uploaded copy on the server makes it synced.
+class TrackSyncMark extends StatelessWidget {
+  const TrackSyncMark({super.key, required this.location});
+
+  final TrackLocation location;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    if (location == TrackLocation.device) {
+      return Padding(
+        padding: const EdgeInsetsDirectional.only(end: RhythmoSpace.xs + 2),
+        child: Semantics(
+          label: 'فقط روی گوشی',
+          excludeSemantics: true,
+          child: DecoratedBox(
+            key: const ValueKey('device-only-label'),
+            decoration: BoxDecoration(
+              color: colors.secondaryContainer,
+              borderRadius: BorderRadius.circular(RhythmoRadii.bar),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Text(
+                'فقط روی گوشی',
+                style: Theme.of(context)
+                    .textTheme
+                    .labelSmall
+                    ?.copyWith(color: colors.onSecondaryContainer, height: 1.5),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: RhythmoSpace.xs),
+      child: Tooltip(
+        message: 'در فضای ابری',
+        child: Semantics(
+          label: 'در فضای ابری',
+          child: Icon(RhythmoIcons.cloudCheck,
+              key: const ValueKey('cloud-mark'),
+              size: 14,
+              color: colors.secondary),
         ),
       ),
     );
@@ -2354,6 +2226,16 @@ class _TrackArtwork extends StatelessWidget {
             ),
         },
     };
+    // The usual places, on the server or on both, need no mark on every
+    // row; only what asks for attention gets a badge. The place is still
+    // named on hover and to screen readers.
+    // Where the song lives is said in words beside the artist
+    // ([TrackSyncMark]); the artwork only marks transfers and bot imports.
+    final quiet = sync == null &&
+        switch ((location, track.importedFrom)) {
+          (TrackLocation.server, final String _) => false,
+          _ => true,
+        };
     return SizedBox.square(
       dimension: 48,
       child: Stack(
@@ -2378,24 +2260,32 @@ class _TrackArtwork extends StatelessWidget {
                       : colors.onSurfaceVariant,
                 )),
           ),
-          PositionedDirectional(
-            end: -4,
-            bottom: -4,
-            child: Tooltip(
-              message: where,
-              child: Semantics(
-                label: where,
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: colors.surface,
-                    shape: BoxShape.circle,
+          if (quiet)
+            Positioned.fill(
+              child: Tooltip(
+                message: where,
+                child: Semantics(label: where, child: const SizedBox.expand()),
+              ),
+            ),
+          if (!quiet)
+            PositionedDirectional(
+              end: -4,
+              bottom: -4,
+              child: Tooltip(
+                message: where,
+                child: Semantics(
+                  label: where,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      shape: BoxShape.circle,
+                    ),
+                    child: badge,
                   ),
-                  child: badge,
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -2767,7 +2657,15 @@ class LibrarySearchScreen extends StatefulWidget {
     this.playlists,
     this.onSharedSaved,
     this.recentSearches,
+    this.store,
+    this.onOpenStore,
   });
+
+  /// گنجینه, for «داغ در گنجینه» while the field is empty; null hides it.
+  final StoreController? store;
+
+  /// Opens گنجینه, from «همه».
+  final VoidCallback? onOpenStore;
 
   /// Changes to the tracks, which the results follow.
   final Listenable changes;
@@ -2873,23 +2771,27 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
               children: [
                 Padding(
                   padding: EdgeInsets.fromLTRB(side, 8, side, 8),
-                  child: SearchBar(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    controller: _field,
-                    autoFocus: true,
-                    hintText: 'آهنگ، خواننده، آلبوم یا فهرست پخش',
-                    leading: const Icon(RhythmoIcons.magnifyingGlass),
-                    textInputAction: TextInputAction.search,
-                    trailing: [
-                      if (_query.isNotEmpty)
-                        IconButton(
-                          tooltip: 'پاک کردن جست‌وجو',
-                          onPressed: _clear,
-                          icon: const Icon(RhythmoIcons.x),
-                        ),
-                    ],
-                    onChanged: (value) => setState(() => _query = value),
-                    onSubmitted: (_) => _remember(),
+                  // One node for the whole bar, so a screen reader finds a
+                  // labelled 48 px field rather than a bare tap area.
+                  child: MergeSemantics(
+                    child: SearchBar(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      controller: _field,
+                      autoFocus: true,
+                      hintText: 'آهنگ، خواننده، آلبوم یا فهرست پخش',
+                      leading: const Icon(RhythmoIcons.magnifyingGlass),
+                      textInputAction: TextInputAction.search,
+                      trailing: [
+                        if (_query.isNotEmpty)
+                          IconButton(
+                            tooltip: 'پاک کردن جست‌وجو',
+                            onPressed: _clear,
+                            icon: const Icon(RhythmoIcons.x),
+                          ),
+                      ],
+                      onChanged: (value) => setState(() => _query = value),
+                      onSubmitted: (_) => _remember(),
+                    ),
                   ),
                 ),
                 Expanded(
@@ -2918,13 +2820,42 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
         );
     if (normalizeForSearch(_query).isEmpty) {
       final recent = widget.recentSearches?.items ?? const <String>[];
-      if (recent.isNotEmpty) {
-        return _RecentSearches(
-          searches: recent,
-          side: side,
-          onRun: _runRecent,
-          onRemove: widget.recentSearches!.remove,
-          onClear: widget.recentSearches!.clear,
+      // Something to find while nothing is typed: what is hot in گنجینه
+      // and the public playlists, both as rails (#448). No genre tiles.
+      final popular = widget.playlists?.popular ?? const <PublicPlaylist>[];
+      final browse = [
+        if (widget.store case final store?)
+          StoreCarousel(
+            key: const ValueKey('search-hot'),
+            controller: store,
+            ranking: StoreRanking.trending,
+            player: widget.player,
+            title: 'داغ در گنجینه',
+            numbered: true,
+            onAll: widget.onOpenStore,
+            padding: EdgeInsets.symmetric(horizontal: side + 8),
+          ),
+        if (popular.isNotEmpty)
+          _PublicPlaylistRail(
+            playlists: popular,
+            side: side + 8,
+            onOpen: _openPopular,
+          ),
+      ];
+      if (recent.isNotEmpty || browse.isNotEmpty) {
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 128),
+          children: [
+            if (recent.isNotEmpty)
+              _RecentSearches(
+                searches: recent,
+                side: side,
+                onRun: _runRecent,
+                onRemove: widget.recentSearches!.remove,
+                onClear: widget.recentSearches!.clear,
+              ),
+            ...browse,
+          ],
         );
       }
       return centered(const _LibraryState(
@@ -3087,49 +3018,128 @@ class _RecentSearches extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListView(
-      // Room for the mini player under the last search.
-      padding: EdgeInsets.fromLTRB(side, RhythmoSpace.xs, side, 128),
-      children: [
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(
-              RhythmoSpace.sm, RhythmoSpace.md, 0, RhythmoSpace.xs),
-          child: Row(
-            children: [
-              Expanded(
-                child: Semantics(
-                  header: true,
-                  child: Text(
-                    'جست‌وجوهای اخیر',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(side, RhythmoSpace.xs, side, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(
+                RhythmoSpace.sm, RhythmoSpace.md, 0, RhythmoSpace.xs),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      'جست‌وجوهای اخیر',
+                      style: theme.textTheme.titleMedium,
+                    ),
                   ),
                 ),
-              ),
-              TextButton(
-                onPressed: onClear,
-                child: const Text('پاک کردن همه'),
-              ),
-            ],
-          ),
-        ),
-        for (final (index, search) in searches.indexed) ...[
-          if (index > 0) const _Hairline(indent: 56),
-          ListTile(
-            minTileHeight: 52,
-            contentPadding: const EdgeInsetsDirectional.only(
-                start: RhythmoSpace.lg, end: 0),
-            leading: Icon(RhythmoIcons.clockCounterClockwise,
-                color: theme.colorScheme.onSurfaceVariant),
-            title: Text(search, maxLines: 1, overflow: TextOverflow.ellipsis),
-            onTap: () => onRun(search),
-            trailing: IconButton(
-              tooltip: 'حذف از جست‌وجوهای اخیر',
-              onPressed: () => onRemove(search),
-              icon: const Icon(RhythmoIcons.x, size: 18),
+                TextButton(
+                  onPressed: onClear,
+                  child: const Text('پاک کردن همه'),
+                ),
+              ],
             ),
           ),
+          for (final (index, search) in searches.indexed) ...[
+            if (index > 0) const _Hairline(indent: 56),
+            ListTile(
+              minTileHeight: 52,
+              contentPadding: const EdgeInsetsDirectional.only(
+                  start: RhythmoSpace.lg, end: 0),
+              leading: Icon(RhythmoIcons.clockCounterClockwise,
+                  color: theme.colorScheme.onSurfaceVariant),
+              title: Text(search, maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: () => onRun(search),
+              trailing: IconButton(
+                tooltip: 'حذف از جست‌وجوهای اخیر',
+                onPressed: () => onRemove(search),
+                icon: const Icon(RhythmoIcons.x, size: 18),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// «فهرست‌های عمومی»: a rail of 148 px playlist cards (#448).
+class _PublicPlaylistRail extends StatelessWidget {
+  const _PublicPlaylistRail({
+    required this.playlists,
+    required this.side,
+    required this.onOpen,
+  });
+
+  static const double size = 148;
+
+  final List<PublicPlaylist> playlists;
+  final double side;
+  final ValueChanged<PublicPlaylist> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(side, RhythmoSpace.lg, side, 0),
+          child: Semantics(
+            header: true,
+            child: Text('فهرست‌های عمومی', style: theme.textTheme.titleMedium),
+          ),
+        ),
+        const SizedBox(height: RhythmoSpace.sm),
+        SizedBox(
+          height: size + 52,
+          child: ListView.separated(
+            key: const ValueKey('search-public'),
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: side),
+            itemCount: playlists.length,
+            separatorBuilder: (_, __) => const SizedBox(width: RhythmoSpace.md),
+            itemBuilder: (context, index) {
+              final playlist = playlists[index];
+              final likes = playlist.likes.likeCount;
+              return SizedBox(
+                width: size,
+                child: InkWell(
+                  borderRadius: RhythmoRadii.control,
+                  onTap: () => onOpen(playlist),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RhythmoArtworkTile(
+                          seed: playlist.shareToken,
+                          icon: RhythmoIcons.playlist,
+                          size: size),
+                      const SizedBox(height: RhythmoSpace.xs),
+                      Text(playlist.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall),
+                      Text(
+                        [
+                          '${persianDigits(playlist.trackCount)} آهنگ',
+                          if (likes > 0) '${persianDigits(likes)} پسند',
+                        ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
       ],
     );
   }
@@ -3155,14 +3165,13 @@ class _Hairline extends StatelessWidget {
 }
 
 /// The hairline between track rows: from the title's start edge.
+/// The space between two track rows. Rows are told apart by their artwork
+/// and spacing, not by lines, which made long lists read as busy.
 class _RowHairline extends StatelessWidget {
   const _RowHairline();
 
-  // Row padding, the 48 px artwork and the gap before the title.
-  static const indent = 8.0 + 48 + 12;
-
   @override
-  Widget build(BuildContext context) => const _Hairline(indent: indent);
+  Widget build(BuildContext context) => const SizedBox(height: 2);
 }
 
 /// A group's title in the search results, with how many it found.
@@ -3191,8 +3200,7 @@ class _ResultsHeader extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800),
+                  style: theme.textTheme.titleMedium,
                 ),
               ),
               if (count > 0)

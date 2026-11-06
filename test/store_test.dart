@@ -69,10 +69,14 @@ class FakeStoreApi implements StoreApi {
   /// What the carousels rank; empty means nothing has a score yet.
   List<Track> ranked = [];
 
+  /// Holds the carousels' first page back until it completes.
+  Completer<void>? rankedGate;
+
   @override
   Future<StorePage<Track>> storeRanked(String? token, StoreRanking ranking,
       {int offset = 0}) async {
     calls.add('ranked:${ranking.wire}:$offset');
+    await rankedGate?.future;
     if (error != null) throw error!;
     final list =
         ranking == StoreRanking.popular ? ranked : ranked.reversed.toList();
@@ -428,6 +432,8 @@ void main() {
       // The artist is the row's only secondary detail; the size is not.
       expect(find.text('خواننده‌ای با نام بسیار بلند 0'), findsOneWidget);
       expect(find.textContaining(formatSize(3 * 1024 * 1024)), findsNothing);
+      // Rows sit on the page like «موسیقی من»'s: no lines between them.
+      expect(find.byType(Divider), findsNothing);
 
       await player.play(song(0, title: '$long 0'));
       await tester.pumpAndSettle();

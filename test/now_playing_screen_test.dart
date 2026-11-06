@@ -8,8 +8,11 @@ import 'package:rhythmo/features/player/application/favorite_tracks.dart';
 import 'package:rhythmo/features/player/application/play_queue.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/presentation/now_playing_screen.dart';
+import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
+import 'package:rhythmo/features/playlists/presentation/add_to_playlist.dart';
 
 import 'player_controller_test.dart' show FakeAudioEngine;
+import 'playlist_sharing_test.dart' show FakePlaylistsApi;
 import 'upload_controller_test.dart' show FakeTracksApi;
 
 const _tracks = [
@@ -61,17 +64,24 @@ void main() {
 
   /// A page with an "open" button, then the now-playing screen opened over
   /// it, as the mini player does.
-  Future<void> open(WidgetTester tester, {bool reduceMotion = false}) async {
+  Future<void> open(WidgetTester tester,
+      {bool reduceMotion = false, PlaylistsController? playlists}) async {
     await player.playFrom(_tracks, 0);
     await tester.pumpWidget(MaterialApp(
       locale: const Locale('fa'),
       supportedLocales: const [Locale('fa')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: RhythmoTheme.dark(),
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(disableAnimations: reduceMotion),
-        child: child!,
-      ),
+      builder: (context, child) {
+        final page = MediaQuery(
+          data:
+              MediaQuery.of(context).copyWith(disableAnimations: reduceMotion),
+          child: child!,
+        );
+        return playlists == null
+            ? page
+            : PlaylistsScope(controller: playlists, child: page);
+      },
       home: Builder(
         builder: (context) => Scaffold(
           body: Center(
@@ -150,7 +160,7 @@ void main() {
       (tester) async {
     await open(tester);
 
-    await tester.tap(find.text('صف پخش (۲)'));
+    await tester.tap(find.byTooltip('صف پخش (۲)'));
     await advanceUi(tester);
 
     final sheet = find.byType(QueueSheet);
@@ -203,10 +213,49 @@ void main() {
     expect(find.byType(QueueSheet), findsOneWidget);
   });
 
+  testWidgets('a signed-in listener adds the playing song to a playlist',
+      (tester) async {
+    final api = FakePlaylistsApi();
+    await open(tester,
+        playlists: PlaylistsController(api: api, token: () => 'tok'));
+
+    await tester.tap(find.byTooltip('گزینه‌های آهنگ'));
+    await advanceUi(tester);
+    expect(find.text(_tracks[0].title), findsWidgets);
+    await tester.tap(find.text('افزودن به فهرست پخش'));
+    await advanceUi(tester);
+    // The picker, which always offers a new playlist too.
+    expect(find.text('فهرست پخش جدید'), findsOneWidget);
+  });
+
+  testWidgets('a failed song says so in words, not only with an icon',
+      (tester) async {
+    final engine = FakeAudioEngine()
+      ..onLoad = (_) async => throw Exception('offline');
+    player = PlayerController(
+      api: FakeTracksApi(),
+      engine: engine,
+      token: () => 'tok',
+      favorites: FavoriteTracks(store: store),
+    );
+    await open(tester);
+
+    expect(player.status, PlayerStatus.error);
+    expect(find.text(playbackErrorMessage), findsOneWidget);
+    expect(find.byTooltip('تلاش دوباره'), findsOneWidget);
+    // The notice takes the «بعدی در صف» row's place, so nothing shifts.
+    expect(find.textContaining('بعدی در صف'), findsNothing);
+  });
+
   testWidgets('the details sheet shows the file and its size', (tester) async {
     await open(tester);
 
-    await tester.tap(find.byTooltip('جزئیات آهنگ'));
+    await tester.tap(find.byTooltip('گزینه‌های آهنگ'));
+    await advanceUi(tester);
+    // Without playlists or a store song, details is the only option.
+    expect(find.text('افزودن به فهرست پخش'), findsNothing);
+    expect(find.text('کپی لینک آهنگ'), findsNothing);
+    await tester.tap(find.text('جزئیات آهنگ'));
     await advanceUi(tester);
 
     expect(find.text('Album'), findsOneWidget);
@@ -264,7 +313,7 @@ void main() {
       'توقف',
       'بعدی',
       'تکرار: خاموش',
-      'جزئیات آهنگ',
+      'گزینه‌های آهنگ',
     ]) {
       final rect = tester.getRect(find.byTooltip(tooltip));
       expect(rect.width, greaterThanOrEqualTo(48), reason: tooltip);
@@ -273,7 +322,7 @@ void main() {
           screen.contains(rect.topLeft) && rect.right <= screen.right, isTrue,
           reason: '$tooltip is on screen');
     }
-    final queue = tester.getRect(find.text('صف پخش (۲)'));
+    final queue = tester.getRect(find.byTooltip('صف پخش (۲)'));
     expect(queue.bottom, lessThanOrEqualTo(640 - 34),
         reason: 'the bottom row clears the gesture bar');
     final title = tester.getRect(find.text(_tracks[0].title));
@@ -281,7 +330,7 @@ void main() {
     expect(title.left, greaterThanOrEqualTo(0));
 
     // The queue sheet also fits, and its last row clears the inset.
-    await tester.tap(find.text('صف پخش (۲)'));
+    await tester.tap(find.byTooltip('صف پخش (۲)'));
     await advanceUi(tester);
     expect(tester.takeException(), isNull);
     expect(
@@ -318,5 +367,25 @@ void main() {
     const track =
         Track(id: 'x', title: '', contentType: 'audio/mpeg', sizeBytes: 1);
     expect(trackTint(track), trackTint(track));
+  });
+
+  testWidgets(
+      'the cover fills the screen and the controls sit low, as icons (#446)',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await open(tester);
+
+    expect(find.byKey(const ValueKey('cover-wash')), findsOneWidget);
+    // No text on the bottom buttons; names are tooltips.
+    expect(find.text('صف پخش (۲)'), findsNothing);
+    expect(find.byTooltip('صف پخش (۲)'), findsOneWidget);
+    // Every control is in the lower part of the screen, in thumb reach.
+    for (final tooltip in ['قبلی', 'بعدی', 'صف پخش (۲)']) {
+      expect(tester.getCenter(find.byTooltip(tooltip)).dy, greaterThan(844 / 2),
+          reason: tooltip);
+    }
+    expect(tester.takeException(), isNull);
   });
 }

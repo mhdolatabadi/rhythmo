@@ -27,7 +27,9 @@ class PlaybackSettingsSection extends StatelessWidget {
                     padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 12, 8),
                     child: Text(
                       'پخش',
-                      style: Theme.of(context).textTheme.titleSmall,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   ),
                   Card(
@@ -53,7 +55,7 @@ class PlaybackSettingsSection extends StatelessWidget {
                               builder: (_) => SleepTimerSheet(player: player),
                             ),
                           ),
-                          const Divider(height: 1, indent: 16, endIndent: 16),
+                          const SizedBox(height: 4),
                           ListTile(
                             leading: const Icon(RhythmoIcons.gauge),
                             title: const Text('سرعت پخش'),

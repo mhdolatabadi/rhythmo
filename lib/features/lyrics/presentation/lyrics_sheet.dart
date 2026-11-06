@@ -221,8 +221,7 @@ class _LyricsViewState extends State<LyricsView> {
                   children: [
                     Text(
                       'متن آهنگ',
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w800),
+                      style: theme.textTheme.titleLarge,
                     ),
                     if (track != null)
                       Text(
@@ -587,7 +586,7 @@ class _LyricLineTile extends StatelessWidget {
                 curve: RhythmoMotion.standard,
                 style: (style ?? const TextStyle()).copyWith(
                   color: color,
-                  fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 ),
                 // An empty timed line is an instrumental break.
                 child: text.isEmpty
@@ -709,8 +708,7 @@ class _LyricsChooserState extends State<LyricsChooser> {
           padding: const EdgeInsetsDirectional.fromSTEB(24, 0, 24, 12),
           child: Text(
             'انتخاب متن آهنگ',
-            style: theme.textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w800),
+            style: theme.textTheme.titleLarge,
           ),
         ),
         Padding(

@@ -268,7 +268,7 @@ void main() {
 
       engine.positionCtl.add(const Duration(seconds: 6));
       await _advance(tester);
-      expect(weight('Second line in English'), FontWeight.w800);
+      expect(weight('Second line in English'), FontWeight.w700);
       expect(weight('خط اول'), FontWeight.w500);
       final english = tester.widget<Text>(find.text('Second line in English'));
       expect(english.textDirection, TextDirection.ltr);
@@ -285,7 +285,7 @@ void main() {
       await tester.tap(find.text('خط چهارم'));
       await _advance(tester);
       expect(engine.calls, contains('seek:15'));
-      expect(weight('خط چهارم'), FontWeight.w800);
+      expect(weight('خط چهارم'), FontWeight.w700);
       final line = tester.getRect(find.text('خط چهارم'));
       expect(line.width, lessThanOrEqualTo(360));
     });

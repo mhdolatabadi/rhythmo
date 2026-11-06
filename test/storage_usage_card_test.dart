@@ -17,6 +17,11 @@ void main() {
     expect(find.text('۲۵۶.۰ مگابایت از ۱.۰ گیگابایت'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(find.textContaining('پر است'), findsNothing);
+    // A thin violet-to-coral bar (#449).
+    final bar = tester
+        .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
+    expect(bar.minHeight, 4);
+    expect(find.byKey(const ValueKey('storage-gradient')), findsOneWidget);
   });
 
   testWidgets('warns when nearly full and when full', (tester) async {

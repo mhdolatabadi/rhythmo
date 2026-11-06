@@ -46,6 +46,7 @@ abstract final class RhythmoIcons {
   static const IconData link = IconData(0xe2e2, fontFamily: 'Phosphor');
   static const IconData linkBreak = IconData(0xe2e4, fontFamily: 'Phosphor');
   static const IconData linkSimple = IconData(0xe2e6, fontFamily: 'Phosphor');
+  static const IconData lockSimple = IconData(0xe308, fontFamily: 'Phosphor');
   static const IconData listPlus = IconData(0xe2f8, fontFamily: 'Phosphor');
   static const IconData magnifyingGlass =
       IconData(0xe30c, fontFamily: 'Phosphor');
@@ -68,6 +69,7 @@ abstract final class RhythmoIcons {
   static const IconData playlist = IconData(0xe6aa, fontFamily: 'Phosphor');
   static const IconData plus = IconData(0xe3d4, fontFamily: 'Phosphor');
   static const IconData plusCircle = IconData(0xe3d6, fontFamily: 'Phosphor');
+  static const IconData queue = IconData(0xe6ac, fontFamily: 'Phosphor');
   static const IconData quotes = IconData(0xe660, fontFamily: 'Phosphor');
   static const IconData repeat = IconData(0xe3f6, fontFamily: 'Phosphor');
   static const IconData robot = IconData(0xe762, fontFamily: 'Phosphor');

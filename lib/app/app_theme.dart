@@ -124,7 +124,6 @@ abstract final class RhythmoTheme {
         ),
         titleTextStyle: base.textTheme.headlineSmall?.copyWith(
           color: colors.onSurface,
-          fontWeight: FontWeight.w700,
         ),
         contentTextStyle: base.textTheme.bodyLarge?.copyWith(
           color: colors.onSurfaceVariant,
@@ -192,7 +191,14 @@ abstract final class RhythmoTheme {
         minLeadingWidth: 32,
         horizontalTitleGap: 12,
         iconColor: colors.onSurfaceVariant,
-        textColor: colors.onSurface,
+        // A row is one regular white line over smaller, muted detail: the
+        // subtitle never matches the title's size or colour.
+        titleTextStyle:
+            base.textTheme.bodyLarge?.copyWith(color: colors.onSurface),
+        subtitleTextStyle:
+            base.textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+        leadingAndTrailingTextStyle: base.textTheme.labelMedium
+            ?.copyWith(color: colors.onSurfaceVariant),
         selectedColor: colors.onSecondaryContainer,
         selectedTileColor: colors.secondaryContainer,
         shape: controlShape,

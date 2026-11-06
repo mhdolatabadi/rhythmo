@@ -9,6 +9,7 @@ import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/presentation/mini_player.dart';
 import 'package:rhythmo/features/likes/presentation/liked_songs_screen.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
+import 'package:rhythmo/features/library/data/track_artwork.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/features/notifications/data/notifications.dart';
 
@@ -189,11 +190,11 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
     return Scaffold(
       extendBody: true,
       appBar: AppBar(
-        title: Text(
-          playlist?.name ?? 'فهرست پخش اشتراکی',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        // A back header: the name sits beside the cover once loaded.
+        title: _state == _Load.loaded
+            ? null
+            : const Text('فهرست پخش اشتراکی',
+                maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       bottomNavigationBar: MiniPlayer(player: widget.player),
       body: RhythmoBackdrop(
@@ -278,109 +279,71 @@ class _Contents extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            GlassSurface(
-              margin: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-              padding: const EdgeInsets.all(12),
-              radius: 18,
-              tint: Theme.of(context).colorScheme.primary,
+            _ChannelHeader(playlist: playlist),
+            if (playlist.description.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Text(
+                  playlist.description,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Row(
                 children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      borderRadius: RhythmoRadii.surface,
-                      gradient: LinearGradient(
-                        begin: Alignment.topRight,
-                        end: Alignment.bottomLeft,
-                        colors: [
-                          Theme.of(context).colorScheme.primary,
-                          Theme.of(context).colorScheme.secondary,
-                        ],
-                      ),
-                    ),
-                    child: const Icon(RhythmoIcons.playlist),
-                  ),
-                  const SizedBox(width: 14),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Text(
-                          playlist.isOwner
-                              ? 'فهرست پخش اشتراکی تو'
-                              : 'اشتراک‌گذاری‌شده توسط ${playlist.owner}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          [
-                            '${persianDigits(tracks.length)} آهنگ',
-                            if (playlist.isOwner)
-                              playlist.isPublic ? 'عمومی' : 'فقط با لینک',
-                            if (playlist.isPublic &&
-                                playlist.subscription != null)
-                              '${persianDigits(playlist.subscription!.subscriberCount)} عضو',
-                          ].join(' · '),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        if (playlist.description.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            playlist.description,
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium,
+                        if (playlist.isPublic &&
+                            !playlist.isOwner &&
+                            playlist.subscription != null)
+                          PlaylistSubscribeButton(
+                            subscription: playlist.subscription!,
+                            onPressed: onSubscribe,
                           ),
-                        ],
+                        if (playlist.subscription?.subscribed == true &&
+                            !playlist.isOwner)
+                          PlaylistMuteButton(
+                            subscription: playlist.subscription!,
+                            onPressed: onMute,
+                          ),
+                        PlaylistLikeButton(
+                            likes: playlist.likes, onPressed: onLike),
+                        if (onSave != null && tracks.isNotEmpty)
+                          OutlinedButton.icon(
+                            onPressed: saving ? null : onSave,
+                            label: const Text('افزودن به حساب من'),
+                            icon: saving
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(RhythmoIcons.plusCircle),
+                          ),
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
+                  // The one coral action: play it all (#448).
                   if (tracks.isNotEmpty)
-                    FilledButton.icon(
-                      style: rhythmoPlayStyle(context),
+                    IconButton.filled(
+                      key: const ValueKey('channel-play'),
+                      tooltip: 'پخش همه',
+                      iconSize: 28,
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(56, 56),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor:
+                            Theme.of(context).colorScheme.onPrimary,
+                      ),
                       onPressed: () => player.playFrom(tracks, 0),
                       icon: const Icon(RhythmoIcons.playFill),
-                      label: const Text('پخش همه'),
-                    ),
-                  if (playlist.isPublic &&
-                      !playlist.isOwner &&
-                      playlist.subscription != null)
-                    PlaylistSubscribeButton(
-                      subscription: playlist.subscription!,
-                      onPressed: onSubscribe,
-                    ),
-                  if (playlist.subscription?.subscribed == true &&
-                      !playlist.isOwner)
-                    PlaylistMuteButton(
-                      subscription: playlist.subscription!,
-                      onPressed: onMute,
-                    ),
-                  PlaylistLikeButton(likes: playlist.likes, onPressed: onLike),
-                  if (onSave != null && tracks.isNotEmpty)
-                    OutlinedButton.icon(
-                      onPressed: saving ? null : onSave,
-                      icon: saving
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(RhythmoIcons.plusCircle),
-                      label: const Text('افزودن به حساب من'),
                     ),
                 ],
               ),
@@ -443,6 +406,84 @@ class _Contents extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A 132 px cover beside what the playlist is, its name, who runs it and
+/// its counts (#448).
+class _ChannelHeader extends StatelessWidget {
+  const _ChannelHeader({required this.playlist});
+
+  static const double cover = 132;
+
+  final SharedPlaylist playlist;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final tracks = playlist.tracks;
+    final muted = theme.textTheme.bodySmall
+        ?.copyWith(color: colors.onSurfaceVariant, fontSize: 13);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          SizedBox.square(
+            key: const ValueKey('channel-cover'),
+            dimension: cover,
+            child: tracks.isEmpty
+                ? RhythmoArtworkTile(
+                    seed: playlist.shareToken,
+                    icon: RhythmoIcons.playlist,
+                    size: cover)
+                : TrackCover(
+                    track: tracks.first,
+                    radius: 12,
+                    child: const Icon(RhythmoIcons.playlist),
+                  ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(playlist.isPublic ? 'فهرست عمومی' : 'فهرست اشتراکی',
+                    style: muted),
+                const SizedBox(height: 2),
+                Text(
+                  playlist.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  playlist.isOwner
+                      ? 'فهرست پخش اشتراکی تو'
+                      : 'اشتراک‌گذاری‌شده توسط ${playlist.owner}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: muted,
+                ),
+                Text(
+                  [
+                    '${persianDigits(tracks.length)} آهنگ',
+                    if (playlist.isOwner)
+                      playlist.isPublic ? 'عمومی' : 'فقط با لینک',
+                    if (playlist.isPublic && playlist.subscription != null)
+                      '${persianDigits(playlist.subscription!.subscriberCount)} عضو',
+                  ].join(' · '),
+                  style: muted,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

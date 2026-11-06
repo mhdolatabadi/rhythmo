@@ -19,47 +19,59 @@ class AppearanceSettingsSection extends StatelessWidget {
             child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
           child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('ظاهر و موسیقی من',
-                        style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 8),
+                    Padding(
+                      padding:
+                          const EdgeInsetsDirectional.fromSTEB(12, 0, 12, 8),
+                      child: Text('ظاهر و موسیقی من',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant)),
+                    ),
                     Card(
+                        margin: EdgeInsets.zero,
+                        clipBehavior: Clip.antiAlias,
                         child: Column(children: [
-                      ListTile(
-                          title: const Text('حالت نمایش'),
-                          subtitle:
-                              Text(themeModeLabel(preferences.value.themeMode)),
-                          onTap: () => showModalBottomSheet<void>(
-                              context: context,
-                              useSafeArea: true,
-                              builder: (sheetContext) => Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        for (final mode in ThemeMode.values)
-                                          ListTile(
-                                              title: Text(themeModeLabel(mode)),
-                                              selected:
-                                                  preferences.value.themeMode ==
+                          ListTile(
+                              title: const Text('حالت نمایش'),
+                              subtitle: Text(
+                                  themeModeLabel(preferences.value.themeMode)),
+                              onTap: () => showModalBottomSheet<void>(
+                                  context: context,
+                                  useSafeArea: true,
+                                  builder: (sheetContext) => Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            for (final mode in ThemeMode.values)
+                                              ListTile(
+                                                  title: Text(
+                                                      themeModeLabel(mode)),
+                                                  selected: preferences
+                                                          .value.themeMode ==
                                                       mode,
-                                              onTap: () {
-                                                preferences.update(
-                                                    themeMode: mode);
-                                                Navigator.pop(sheetContext);
-                                              }),
-                                      ]))),
-                      const Divider(height: 1),
-                      ListTile(
-                          title: const Text('مدیریت تب‌ها'),
-                          subtitle: const Text(
-                              'نمایش، پنهان‌کردن و جابه‌جایی بخش‌های «موسیقی من»'),
-                          onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                  builder: (_) => ManageTabsScreen(
-                                      preferences: preferences)))),
-                    ])),
+                                                  onTap: () {
+                                                    preferences.update(
+                                                        themeMode: mode);
+                                                    Navigator.pop(sheetContext);
+                                                  }),
+                                          ]))),
+                          const SizedBox(height: 4),
+                          ListTile(
+                              title: const Text('مدیریت تب‌ها'),
+                              subtitle: const Text(
+                                  'نمایش، پنهان‌کردن و جابه‌جایی بخش‌های «موسیقی من»'),
+                              onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                      builder: (_) => ManageTabsScreen(
+                                          preferences: preferences)))),
+                        ])),
                   ])),
         )),
       );

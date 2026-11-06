@@ -3,6 +3,9 @@ import 'package:rhythmo/core/persian_digits.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:rhythmo/app/app_configuration.dart';
+import 'package:rhythmo/features/playlists/presentation/add_to_playlist.dart';
 import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/format_size.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
@@ -44,6 +47,13 @@ Future<void> openNowPlaying(BuildContext context, PlayerController player) {
     ),
   );
 }
+
+/// The mini player's one-line note when a song fails to play.
+const playbackErrorShort = 'پخش ناموفق بود. دوباره تلاش کن.';
+
+/// The player screen's note when a song fails to play.
+const playbackErrorMessage = 'پخش این آهنگ ناموفق بود. اتصال اینترنت را '
+    'بررسی کن و دکمه‌ی وسط را برای تلاش دوباره بزن.';
 
 /// The artist, or where the track plays from when it has none.
 String trackSubtitle(Track track) {
@@ -167,6 +177,36 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     );
   }
 
+  /// «گزینه‌های آهنگ»: what to do with the playing song. Liking, the queue,
+  /// lyrics and the sleep timer already have their own buttons here.
+  Future<void> _openActions(Track track) async {
+    final playlists = PlaylistsScope.maybeOf(context);
+    final storeLink = track.fromStore
+        ? AppConfiguration.sitePage('/store/t/${track.id}')
+        : null;
+    final choice = await showModalBottomSheet<_TrackChoice>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) => _TrackActionsSheet(
+        track: track,
+        canAddToPlaylist: playlists?.signedIn ?? false,
+        canCopyLink: storeLink != null,
+      ),
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case _TrackChoice.addToPlaylist:
+        await addTrackToPlaylist(context, playlists!, track);
+      case _TrackChoice.copyLink:
+        await Clipboard.setData(ClipboardData(text: storeLink.toString()));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('لینک آهنگ کپی شد.')));
+      case _TrackChoice.details:
+        _openDetails(track);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -187,26 +227,32 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
             behavior: HitTestBehavior.opaque,
             onVerticalDragUpdate: _onDragUpdate,
             onVerticalDragEnd: _onDragEnd,
-            child: RhythmoBackdrop(
-              child: Material(
-                type: MaterialType.transparency,
-                child: SafeArea(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints:
-                          const BoxConstraints(maxWidth: nowPlayingMaxWidth),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(RhythmoSpace.lg, 0,
-                            RhythmoSpace.lg, RhythmoSpace.sm),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) =>
-                              _layout(context, constraints, track, tint),
+            // The song's own cover fills the screen; a dark wash over its
+            // lower part keeps the title and controls readable.
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _CoverBackdrop(track: track, tint: tint),
+                Material(
+                  type: MaterialType.transparency,
+                  child: SafeArea(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(maxWidth: nowPlayingMaxWidth),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(RhythmoSpace.lg, 0,
+                              RhythmoSpace.lg, RhythmoSpace.sm),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) =>
+                                _layout(context, constraints, track, tint),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         );
@@ -223,7 +269,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     final header = _Header(
       player: _player,
       onClose: _close,
-      onMore: () => _openDetails(track),
+      onMore: () => _openActions(track),
     );
     final next = _player.upcoming.firstOrNull;
     final title = _TitleRow(
@@ -232,7 +278,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
       onLike: () => _like(track),
     );
     final details = <Widget>[
-      if (next != null) _UpNext(track: next, onQueue: _openQueue),
+      if (_player.status == PlayerStatus.error)
+        const _PlaybackError()
+      else if (next != null)
+        _UpNext(track: next, onQueue: _openQueue),
       const SizedBox(height: RhythmoSpace.xs),
       _SeekBar(
         player: _player,
@@ -263,26 +312,60 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     return Column(
       children: [
         header,
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(
-                top: RhythmoSpace.xs, bottom: RhythmoSpace.md),
-            child: LayoutBuilder(
-              builder: (context, box) => Center(
-                child: NowPlayingArtwork(
-                  track: track,
-                  status: _player.status,
-                  tint: tint,
-                  // A little narrower than the column, as on the design.
-                  size: min(box.maxWidth * 0.8, box.maxHeight),
-                ),
+        // The cover behind is the artwork; every control sits low, in
+        // reach of the thumb.
+        const Spacer(),
+        title,
+        const SizedBox(height: RhythmoSpace.lg),
+        ...details,
+      ],
+    );
+  }
+}
+
+/// The song's cover across the whole screen, or its tint while there is no
+/// cover, under a dark wash that deepens towards the bottom.
+class _CoverBackdrop extends StatelessWidget {
+  const _CoverBackdrop({required this.track, required this.tint});
+
+  final Track track;
+  final Color tint;
+
+  @override
+  Widget build(BuildContext context) {
+    final night = RhythmoColors.background;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        TrackCover(
+          track: track,
+          radius: 0,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color.lerp(tint, night, 0.45)!, night],
               ),
             ),
           ),
         ),
-        title,
-        const SizedBox(height: RhythmoSpace.lg),
-        ...details,
+        DecoratedBox(
+          key: const ValueKey('cover-wash'),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                night.withValues(alpha: 0.25),
+                night.withValues(alpha: 0.1),
+                night.withValues(alpha: 0.72),
+                night.withValues(alpha: 0.95),
+              ],
+              stops: const [0, 0.3, 0.6, 1],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -341,7 +424,7 @@ class _Header extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: 'جزئیات آهنگ',
+            tooltip: 'گزینه‌های آهنگ',
             onPressed: onMore,
             icon: const Icon(RhythmoIcons.dotsThreeVertical),
           ),
@@ -437,7 +520,7 @@ class _TitleRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               Text(
@@ -636,25 +719,21 @@ class _BottomRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // Gives way first on a narrow phone, so speed and details still fit.
-        Expanded(
-          child: Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton.icon(
-              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: onQueue,
-              icon: const Icon(RhythmoIcons.playlist),
-              label: Text(
-                upcoming == 0
-                    ? 'صف پخش'
-                    // Not «·»: beside Persian digits it reads as a zero.
-                    : 'صف پخش (${persianDigits(upcoming)})',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+        // Icons only: their names are in the tooltips and for screen
+        // readers. A small count says how many songs wait in the queue.
+        IconButton(
+          tooltip: upcoming == 0
+              ? 'صف پخش'
+              // Not «·»: beside Persian digits it reads as a zero.
+              : 'صف پخش (${persianDigits(upcoming)})',
+          onPressed: onQueue,
+          icon: Badge(
+            isLabelVisible: upcoming > 0,
+            label: Text(persianDigits(upcoming)),
+            child: const Icon(RhythmoIcons.queue),
           ),
         ),
+        const Spacer(),
         SpeedButton(player: player),
         if (onLyrics != null)
           IconButton(
@@ -670,6 +749,36 @@ class _BottomRow extends StatelessWidget {
 
 /// «بعدی در صف»: the track that plays next, as one compact row. Tapping it
 /// opens the queue.
+/// Says in words that the song failed, so the retry button in the middle
+/// of the controls isn't mistaken for repeat.
+class _PlaybackError extends StatelessWidget {
+  const _PlaybackError();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.error;
+    return Semantics(
+      liveRegion: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: RhythmoSpace.sm),
+        child: Row(
+          children: [
+            Icon(RhythmoIcons.warningCircle, size: 20, color: color),
+            const SizedBox(width: RhythmoSpace.sm),
+            Expanded(
+              child: Text(
+                playbackErrorMessage,
+                style: theme.textTheme.bodyMedium?.copyWith(color: color),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _UpNext extends StatelessWidget {
   const _UpNext({required this.track, required this.onQueue});
 
@@ -845,6 +954,68 @@ class QueueSheet extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+enum _TrackChoice { addToPlaylist, copyLink, details }
+
+/// The ⋮ sheet of the full-screen player: the song on top, then a short
+/// list of what can be done with it.
+class _TrackActionsSheet extends StatelessWidget {
+  const _TrackActionsSheet({
+    required this.track,
+    required this.canAddToPlaylist,
+    required this.canCopyLink,
+  });
+
+  final Track track;
+  final bool canAddToPlaylist;
+  final bool canCopyLink;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    Widget option(_TrackChoice choice, IconData icon, String label) => ListTile(
+          contentPadding: const EdgeInsetsDirectional.symmetric(
+              horizontal: RhythmoSpace.xxl),
+          leading: Icon(icon),
+          title: Text(label),
+          onTap: () => Navigator.pop(context, choice),
+        );
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewPaddingOf(context).bottom + RhythmoSpace.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(
+                RhythmoSpace.xxl, 0, RhythmoSpace.xxl, RhythmoSpace.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(track.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleLarge),
+                Text(trackSubtitle(track),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          if (canAddToPlaylist)
+            option(_TrackChoice.addToPlaylist, RhythmoIcons.playlist,
+                'افزودن به فهرست پخش'),
+          if (canCopyLink)
+            option(_TrackChoice.copyLink, RhythmoIcons.link, 'کپی لینک آهنگ'),
+          option(_TrackChoice.details, RhythmoIcons.musicNotes, 'جزئیات آهنگ'),
+        ],
       ),
     );
   }

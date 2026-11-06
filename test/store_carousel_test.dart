@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -75,6 +76,65 @@ void main() {
       expect(find.text(ranking.label), findsNothing);
     }
     expect(find.text('Song 0'), findsOneWidget);
+  });
+
+  testWidgets('the song list keeps its place while the carousels load',
+      (tester) async {
+    setUpStore(tester);
+    api.ranked = ranked();
+    api.rankedGate = Completer<void>();
+    await tester
+        .pumpWidget(_app(StoreScreen(controller: store, player: player)));
+    await tester.pump();
+    await tester.pump();
+    // The list shows before the shelves; a tap here must not land on
+    // another song once they arrive.
+    final before = tester.getTopLeft(find.text('همه‌ی آهنگ‌ها'));
+    expect(find.text(StoreRanking.popular.label), findsOneWidget);
+    api.rankedGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('$long 0'), findsWidgets);
+    expect(tester.getTopLeft(find.text('همه‌ی آهنگ‌ها')), before);
+  });
+
+  testWidgets(
+      'the hot rail ranks with big thin numerals, and «همه» opens the rest '
+      '(#448)', (tester) async {
+    setUpStore(tester);
+    api.ranked = ranked();
+    var all = 0;
+    await tester.pumpWidget(_app(Scaffold(
+      body: StoreCarousel(
+        controller: store,
+        ranking: StoreRanking.trending,
+        player: player,
+        title: 'داغ در گنجینه',
+        numbered: true,
+        onAll: () => all++,
+      ),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('داغ در گنجینه'), findsOneWidget);
+    final first = tester.widget<Text>(find.byKey(const ValueKey('rank-1')));
+    expect(first.data, '۱');
+    expect(first.style?.fontWeight, FontWeight.w200);
+    expect(find.byKey(const ValueKey('rank-2')), findsOneWidget);
+    await tester.tap(find.text('همه'));
+    expect(all, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a carousel without numbers has no rank numerals',
+      (tester) async {
+    setUpStore(tester);
+    api.ranked = ranked();
+    await tester.pumpWidget(_app(Scaffold(
+      body: StoreCarousel(
+          controller: store, ranking: StoreRanking.popular, player: player),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rank-1')), findsNothing);
+    expect(find.text('همه'), findsNothing);
   });
 
   testWidgets('popular and trending carousels fit a narrow phone and play',
