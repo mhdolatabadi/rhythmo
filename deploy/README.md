@@ -466,17 +466,16 @@ and plain text in PostgreSQL. Machine transcripts may contain mistakes, especial
 with chanting, backing music and crowds. Original audio is never rewritten.
 Generated text is currently available to the owner, not shared playlist visitors.
 
-Provision and measure resources before enabling: the default CPU/int8 `large-v3-turbo` model
+The default CPU/int8 `large-v3-turbo` model
 container is limited to 2 CPUs and 4 GiB RAM. Quality and processing time must be
 verified against real Persian recitations; these limits are not performance guarantees.
 For mostly Arabic recordings set `TRANSCRIPTION_LANGUAGE=auto` or `ar`. A larger
 model may need increased memory in `compose.yaml`.
 
-To turn it on, add `TRANSCRIPTION_ENABLED=true` to `deploy/.env` and run the normal
-deployment workflow. When `TRANSCRIPTION_TOKEN` is missing or shorter than 32
-characters, the deployment script generates one into `.env` without printing it. It
-then enables the optional Compose profile, pulls the immutable transcriber image and
-starts it. No port is published; the API streams original audio directly over the
+It is on by default: every deployment enables the `transcription` Compose profile,
+pulls the immutable transcriber image and starts it. (`TRANSCRIPTION_ENABLED` is no
+longer read.) When `TRANSCRIPTION_TOKEN` is missing or shorter than 32 characters, the
+deployment script generates one into `.env` without printing it. No port is published; the API streams original audio directly over the
 internal container network using the token. The default `large-v3-turbo` model,
 much more accurate in Persian than `small`, is built into the image, so the server
 needs no access to Hugging Face. Another `TRANSCRIPTION_MODEL` is downloaded on
@@ -488,5 +487,5 @@ is deleted after each inference; transcripts are deleted with their track/accoun
 Failed jobs can be retried. After a worker crash its lease is recovered after
 2 hours; stale workers cannot overwrite a newer result. Jobs time out after
 110 minutes. Disabling the feature leaves stored results in the database, and
-reenabling recovers the queue. To roll back, set `TRANSCRIPTION_ENABLED=false` and
+reenabling recovers the queue. To turn it off, set `TRANSCRIPTION_DISABLED=true` and
 run the normal deployment workflow; do not delete the model volume or user data.
