@@ -647,13 +647,12 @@ void main() {
   testWidgets('settings opens playlists even when their tab is hidden',
       (tester) async {
     final store = MemoryAppPreferencesStore()
-      ..value = const AppPreferences(
-          hidden: {LibraryTab.playlists, LibraryTab.favorites});
+      ..value = const AppPreferences(hidden: {LibraryTab.playlists});
     await _pumpApp(tester,
         tokenStore: MemoryTokenStore('valid-token'),
         appPreferencesStore: store,
         playlists: FakePlaylistsApi());
-    expect(find.widgetWithText(Tab, 'فهرست‌های پخش'), findsNothing);
+    expect(find.widgetWithText(Tab, 'فهرست‌ها'), findsNothing);
     await tester.tap(find.byTooltip('حساب'));
     await tester.pumpAndSettle();
     await _revealSetting(tester, find.text('مدیریت فهرست‌های پخش'));
@@ -724,7 +723,7 @@ void main() {
         greaterThan(tester.getCenter(find.widgetWithText(Tab, 'آهنگ‌ها')).dx));
     await preferences.update(hidden: {});
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(Tab, 'پسندیده‌ها'), findsOneWidget);
+    expect(find.widgetWithText(Tab, 'آلبوم‌ها'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -1155,18 +1154,21 @@ void main() {
         tokenStore: MemoryTokenStore('valid-token'),
         tracks: FakeTracksApi(manyTracks()),
         playlists: FakePlaylistsApi(),
+        // Albums and artists are off by default; this listener turned them on.
+        appPreferencesStore: MemoryAppPreferencesStore()
+          ..value = const AppPreferences(hidden: {}),
       );
     }
 
     testWidgets('switch between tracks, playlists, albums and artists',
         (tester) async {
       await pumpPhone(tester);
-      for (final tab in ['آهنگ‌ها', 'فهرست‌های پخش', 'آلبوم‌ها', 'هنرمندان']) {
+      for (final tab in ['آهنگ‌ها', 'فهرست‌ها', 'آلبوم‌ها', 'هنرمندان']) {
         expect(find.widgetWithText(Tab, tab), findsOneWidget);
       }
       expect(find.byTooltip('افزودن موسیقی'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(Tab, 'فهرست‌های پخش'));
+      await tester.tap(find.widgetWithText(Tab, 'فهرست‌ها'));
       await tester.pumpAndSettle();
       expect(find.byTooltip('فهرست پخش جدید'), findsOneWidget);
       expect(find.text('فهرست پخش جدید'), findsNothing);
@@ -1939,9 +1941,11 @@ void main() {
     addTearDown(tester.view.reset);
     await _pumpApp(tester,
         tokenStore: MemoryTokenStore('valid-token'),
-        playlists: FakePlaylistsApi());
+        playlists: FakePlaylistsApi(),
+        appPreferencesStore: MemoryAppPreferencesStore()
+          ..value = const AppPreferences(hidden: {}));
 
-    for (final label in ['آهنگ‌ها', 'فهرست‌های پخش', 'آلبوم‌ها', 'هنرمندان']) {
+    for (final label in ['آهنگ‌ها', 'فهرست‌ها', 'آلبوم‌ها', 'هنرمندان']) {
       final text =
           find.descendant(of: find.byType(TabBar), matching: find.text(label));
       expect(text, findsOneWidget, reason: label);

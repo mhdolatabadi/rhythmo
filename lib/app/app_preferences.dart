@@ -4,13 +4,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum LibraryTab {
   tracks('آهنگ‌ها'),
-
-  /// Second, and shown by default: the dock has no liked entry of its own.
-  favorites('پسندیده‌ها'),
+  playlists('فهرست‌ها'),
 
   /// Music added to this device lately, newest first; Android only.
   newOnDevice('تازه‌های دستگاه'),
-  playlists('فهرست‌های پخش'),
   albums('آلبوم‌ها'),
   artists('هنرمندان');
 
@@ -22,7 +19,16 @@ class AppPreferences {
   const AppPreferences(
       {this.themeMode = ThemeMode.dark,
       this.order = LibraryTab.values,
-      this.hidden = const {}});
+      this.hidden = defaultHiddenTabs});
+
+  /// «موسیقی من» opens with two tabs, songs and playlists (#445); the
+  /// others can be turned on in settings. Liked songs have their own place
+  /// in the dock, so they are not a tab.
+  static const defaultHiddenTabs = {
+    LibraryTab.newOnDevice,
+    LibraryTab.albums,
+    LibraryTab.artists,
+  };
   final ThemeMode themeMode;
   final List<LibraryTab> order;
   final Set<LibraryTab> hidden;
@@ -45,18 +51,14 @@ class AppPreferences {
         order.add(tab);
       }
     }
-    // Before version 2 «پسندیده‌ها» was hidden by default because the dock
-    // had its own entry; that entry is gone, so the tab comes back once.
-    final migrated = value['v'] is int && (value['v'] as int) >= 2;
     final hidden = value['hidden'] is List
         ? {
             for (final tab in LibraryTab.values)
               if ((value['hidden'] as List).contains(tab.name) &&
-                  tab != LibraryTab.tracks &&
-                  (migrated || tab != LibraryTab.favorites))
+                  tab != LibraryTab.tracks)
                 tab
           }
-        : const <LibraryTab>{};
+        : defaultHiddenTabs;
     return AppPreferences(
         themeMode: ThemeMode.values.firstWhere(
             (mode) => mode.name == value['theme'],
@@ -65,7 +67,7 @@ class AppPreferences {
         hidden: Set.unmodifiable(hidden));
   }
   Map<String, Object> toJson() => {
-        'v': 2,
+        'v': 3,
         'theme': themeMode.name,
         'tabs': order.map((tab) => tab.name).toList(),
         'hidden': hidden.map((tab) => tab.name).toList()

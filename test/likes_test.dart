@@ -437,7 +437,7 @@ void main() {
   group('library', () {
     Future<void> pumpLibrary(
         WidgetTester tester, FakeTracksApi tracks, FakeLikesApi likes,
-        {Set<LibraryTab> hidden = const {LibraryTab.favorites}}) async {
+        {Set<LibraryTab> hidden = const {}}) async {
       _narrow(tester, size: const Size(360, 740));
       await tester.pumpWidget(RhythmoApp(
         healthCheck: () async {},
@@ -510,13 +510,13 @@ void main() {
       expect(likes.calls, contains('unpublish:t1'));
     });
 
-    testWidgets('the «پسندیده‌ها» tab lists server likes', (tester) async {
+    testWidgets('«پسندیده‌ها» in the dock lists server likes', (tester) async {
       final tracks =
           FakeTracksApi([own('t1', title: 'mine'), own('t2', title: 'other')]);
       final likes = FakeLikesApi(
           liked: [song(3, title: 'from the store'), own('t1', title: 'mine')]);
-      await pumpLibrary(tester, tracks, likes, hidden: const {});
-      await tester.tap(find.widgetWithText(Tab, 'پسندیده‌ها'));
+      await pumpLibrary(tester, tracks, likes);
+      await tester.tap(find.byTooltip('پسندیده‌ها'));
       await tester.pumpAndSettle();
       expect(find.text('from the store'), findsOneWidget);
       expect(find.text('mine'), findsOneWidget);

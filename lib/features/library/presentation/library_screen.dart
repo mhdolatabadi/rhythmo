@@ -859,7 +859,6 @@ class _LibraryScreenState extends State<LibraryScreen>
         LibraryTab.newOnDevice => _newOnDeviceTab(),
         LibraryTab.albums => _groupsTab(albums: true),
         LibraryTab.artists => _groupsTab(albums: false),
-        LibraryTab.favorites => _favoritesBody(),
       };
 
   /// The device's music added in the last 30 days, newest first, with the
@@ -2003,6 +2002,7 @@ class _TrackRow extends StatelessWidget {
                 ),
               null => Row(
                   children: [
+                    TrackSyncMark(location: locationOf(track)),
                     Expanded(
                       child: Text(
                         artist == null || artist.isEmpty
@@ -2025,6 +2025,60 @@ class _TrackRow extends StatelessWidget {
             },
             trailing: actions,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Before the artist: whether the song has a copy in the account's cloud.
+/// A synced song shows a small cloud with a check; a song that lives only
+/// on this phone says so in a small label. The app knows from the copies a
+/// row stands for: an uploaded copy on the server makes it synced.
+class TrackSyncMark extends StatelessWidget {
+  const TrackSyncMark({super.key, required this.location});
+
+  final TrackLocation location;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    if (location == TrackLocation.device) {
+      return Padding(
+        padding: const EdgeInsetsDirectional.only(end: RhythmoSpace.xs + 2),
+        child: Semantics(
+          label: 'فقط روی گوشی',
+          excludeSemantics: true,
+          child: DecoratedBox(
+            key: const ValueKey('device-only-label'),
+            decoration: BoxDecoration(
+              color: colors.secondaryContainer,
+              borderRadius: BorderRadius.circular(RhythmoRadii.bar),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Text(
+                'فقط روی گوشی',
+                style: Theme.of(context)
+                    .textTheme
+                    .labelSmall
+                    ?.copyWith(color: colors.onSecondaryContainer, height: 1.5),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: RhythmoSpace.xs),
+      child: Tooltip(
+        message: 'در فضای ابری',
+        child: Semantics(
+          label: 'در فضای ابری',
+          child: Icon(RhythmoIcons.cloudCheck,
+              key: const ValueKey('cloud-mark'),
+              size: 14,
+              color: colors.secondary),
         ),
       ),
     );
@@ -2151,11 +2205,12 @@ class _TrackArtwork extends StatelessWidget {
     // The usual places, on the server or on both, need no mark on every
     // row; only what asks for attention gets a badge. The place is still
     // named on hover and to screen readers.
+    // Where the song lives is said in words beside the artist
+    // ([TrackSyncMark]); the artwork only marks transfers and bot imports.
     final quiet = sync == null &&
         switch ((location, track.importedFrom)) {
-          (TrackLocation.synced, _) => true,
-          (TrackLocation.server, null) => true,
-          _ => false,
+          (TrackLocation.server, final String _) => false,
+          _ => true,
         };
     return SizedBox.square(
       dimension: 48,

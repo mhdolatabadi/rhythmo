@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rhythmo/app/app_preferences.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/core/api/api_client.dart';
@@ -37,9 +38,13 @@ Future<void> _pump(
   FakeUploader? uploader,
   FakeUploadSource? source,
   FakeTrackDownloader? downloader,
+  AppPreferences? preferences,
 }) async {
   await tester.pumpWidget(RhythmoApp(
     healthCheck: () async {},
+    appPreferencesStore: preferences == null
+        ? null
+        : (MemoryAppPreferencesStore()..value = preferences),
     authApi: FakeAuthApi(),
     tokenStore: MemoryTokenStore('valid-token'),
     tracksApi: tracks,
@@ -144,21 +149,35 @@ void main() {
         find.descendant(
             of: _row('Phone only'), matching: find.byTooltip('فقط روی دستگاه')),
         findsOneWidget);
-    // Only the place that needs attention wears a badge; the usual ones
-    // are named on hover alone, so rows stay quiet.
+    // Where each song lives is said beside the artist (#445): a cloud for
+    // songs with a copy on the server, a label for songs only on the phone.
+    for (final title in ['Server only', 'Both']) {
+      expect(
+          find.descendant(
+              of: _row(title),
+              matching: find.byKey(const ValueKey('cloud-mark'))),
+          findsOneWidget,
+          reason: title);
+      expect(
+          find.descendant(of: _row(title), matching: find.text('فقط روی گوشی')),
+          findsNothing,
+          reason: title);
+    }
     expect(
         find.descendant(
-            of: _row('Server only'), matching: find.byIcon(RhythmoIcons.cloud)),
-        findsNothing);
+            of: _row('Phone only'), matching: find.text('فقط روی گوشی')),
+        findsOneWidget);
     expect(
         find.descendant(
-            of: _row('Both'), matching: find.byIcon(RhythmoIcons.checkCircle)),
+            of: _row('Phone only'),
+            matching: find.byKey(const ValueKey('cloud-mark'))),
         findsNothing);
+    // The artwork stays clean: no location badges on it.
     expect(
         find.descendant(
             of: _row('Phone only'),
             matching: find.byIcon(RhythmoIcons.deviceMobile)),
-        findsOneWidget);
+        findsNothing);
 
     await _openMenu(tester, 'Both');
     expect(find.text('حذف از دستگاه'), findsOneWidget);
@@ -204,6 +223,8 @@ void main() {
         _device(2, 'Phone mid', size: 400, addedAt: daysAgo(10)),
         _device(3, 'Phone old', size: 500, addedAt: daysAgo(60)),
       ])),
+      // The listener turned the «تازه‌های دستگاه» tab on.
+      preferences: const AppPreferences(hidden: {}),
     );
 
     double top(String title) => tester.getTopLeft(find.text(title)).dy;
