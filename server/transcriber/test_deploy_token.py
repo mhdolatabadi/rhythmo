@@ -26,17 +26,19 @@ class DeployTokenTest(unittest.TestCase):
             return result.stdout, tokens
 
     def test_generates_a_missing_or_short_token_once(self):
-        for env in ('TRANSCRIPTION_ENABLED=true\n', 'TRANSCRIPTION_ENABLED=true\nTRANSCRIPTION_TOKEN=short\n'):
+        for env in ('', 'TRANSCRIPTION_ENABLED=false\n', 'TRANSCRIPTION_TOKEN=short\n',
+                    'TRANSCRIPTION_DISABLED=false\r\n'):
             output, tokens = self.run_block(env)
             self.assertEqual(len(tokens), 1)
             self.assertRegex(tokens[0], r'^[0-9a-f]{64}$')
             self.assertNotIn(tokens[0], output)
 
-    def test_keeps_an_existing_token_and_ignores_disabled(self):
+    def test_keeps_an_existing_token_and_skips_when_disabled(self):
         kept = 'k' * 40
-        self.assertEqual(self.run_block(f'TRANSCRIPTION_ENABLED=true\nTRANSCRIPTION_TOKEN={kept}\n'),
-                         ('', [kept]))
-        self.assertEqual(self.run_block('TRANSCRIPTION_ENABLED=false\n'), ('', []))
+        self.assertEqual(self.run_block(f'TRANSCRIPTION_TOKEN={kept}\n'), ('', [kept]))
+        for env in ('TRANSCRIPTION_DISABLED=true\n', 'TRANSCRIPTION_DISABLED="TRUE"\r\n',
+                    ' TRANSCRIPTION_DISABLED = 1\n'):
+            self.assertEqual(self.run_block(env), ('', []))
 
 
 if __name__ == '__main__':
