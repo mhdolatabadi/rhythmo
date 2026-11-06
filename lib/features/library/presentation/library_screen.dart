@@ -816,8 +816,17 @@ class _LibraryScreenState extends State<LibraryScreen>
                 ? null
                 : () => openIdentify(context, widget.identify!, widget.player),
           ),
+        // The list's SliverOverlapInjector reads this absorber. Without it
+        // the handle kept the library's taller header (with its tabs) and
+        // pushed a short list down the page.
         DockDestination.liked => NestedScrollView(
-            headerSliverBuilder: (context, _) => [_appBar(context)],
+            headerSliverBuilder: (context, _) => [
+              SliverOverlapAbsorber(
+                handle:
+                    NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+                sliver: _appBar(context),
+              ),
+            ],
             body: _favoritesBody(),
           ),
         _ => NestedScrollView(

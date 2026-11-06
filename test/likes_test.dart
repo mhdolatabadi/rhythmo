@@ -522,5 +522,25 @@ void main() {
       expect(find.text('mine'), findsOneWidget);
       expect(find.text('other'), findsNothing);
     });
+
+    testWidgets(
+        'a short «پسندیده‌ها» list starts right under the header, after '
+        'visiting «موسیقی من»', (tester) async {
+      final tracks =
+          FakeTracksApi([own('t1', title: 'mine'), own('t2', title: 'other')]);
+      final likes = FakeLikesApi(liked: [own('t1', title: 'mine')]);
+      await pumpLibrary(tester, tracks, likes);
+      // The app opens on «موسیقی من», whose tabs sit under the header.
+      expect(find.text('آهنگ‌ها'), findsOneWidget);
+      await tester.tap(find.byTooltip('پسندیده‌ها'));
+      await tester.pumpAndSettle();
+
+      final header = tester.getRect(find.byType(AppBar));
+      final count = tester.getRect(find.text('۱ آهنگ'));
+      // Only the list's own padding separates it from the header; no gap
+      // left over from the library's tab bar.
+      expect(count.top - header.bottom, inInclusiveRange(0, 40));
+      expect(tester.takeException(), isNull);
+    });
   });
 }
