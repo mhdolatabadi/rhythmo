@@ -188,4 +188,40 @@ void main() {
     expect(libraryTabViewPhysics(isWeb: true),
         isA<NeverScrollableScrollPhysics>());
   });
+
+  testWidgets('lectures fold into one section, by topic', (tester) async {
+    Track lecture(int session) => Track(
+          id: 'l$session',
+          title: 'فاطمیه؛ جلسه $session',
+          artist: 'حامد کاشانی',
+          album: 'فاطمیه',
+          trackNumber: session,
+          source: 'bale_archive',
+          contentType: 'audio/mpeg',
+          sizeBytes: 1024,
+        );
+    await _pump(tester, const Size(360, 740), [
+      const Track(
+          id: 's1', title: 'آهنگ', contentType: 'audio/mpeg', sizeBytes: 1024),
+      lecture(2),
+      lecture(1),
+    ]);
+    expect(tester.takeException(), isNull);
+    expect(find.text('آهنگ'), findsOneWidget);
+    expect(find.text('سخنرانی‌ها'), findsOneWidget);
+    expect(find.text('۲ جلسه در ۱ موضوع'), findsOneWidget);
+    expect(find.text('فاطمیه؛ جلسه 1'), findsNothing);
+
+    await tester.tap(find.text('سخنرانی‌ها'));
+    await tester.pumpAndSettle();
+    expect(find.text('فاطمیه'), findsOneWidget);
+    expect(find.text('فاطمیه؛ جلسه 1'), findsNothing);
+
+    await tester.tap(find.text('فاطمیه'));
+    await tester.pumpAndSettle();
+    final first = tester.getRect(find.text('فاطمیه؛ جلسه 1'));
+    final second = tester.getRect(find.text('فاطمیه؛ جلسه 2'));
+    expect(first.top, lessThan(second.top));
+    expect(tester.takeException(), isNull);
+  });
 }
