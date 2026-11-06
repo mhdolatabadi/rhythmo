@@ -46,7 +46,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
         // A flat bar across the whole width, flush above the dock: no
         // floating card and no glass.
         return ColoredBox(
-          color: Theme.of(context).colorScheme.surface,
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
           child: Align(
             alignment: Alignment.bottomCenter,
             heightFactor: 1,

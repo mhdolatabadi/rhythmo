@@ -34,69 +34,92 @@ class StorageUsageCard extends StatelessWidget {
             : progress >= nearlyFull
                 ? 'فضای حسابت تقریباً پر است.'
                 : null;
-    return GlassSurface(
-      blur: 12,
-      radius: 16,
-      shadow: false,
-      padding: const EdgeInsets.all(16),
-      child: Semantics(
-        label: 'فضای ابری مصرف‌شده',
-        value: known ? '${persianDigits(percent)} درصد' : null,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Icon(RhythmoIcons.cloud, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'فضای ابری',
-                  style: theme.textTheme.titleSmall,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    known
-                        ? '${formatSize(usedBytes)} از ${formatSize(limitBytes)}'
-                        : '${formatSize(usedBytes)} مصرف‌شده',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                    style: theme.textTheme.labelLarge
-                        ?.copyWith(color: colors.onSurfaceVariant),
-                  ),
-                ),
-              ],
-            ),
-            if (known) ...[
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(RhythmoRadii.pill),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 6,
-                  color: warning == null ? null : colors.error,
-                ),
-              ),
-            ],
-            if (warning != null) ...[
-              const SizedBox(height: 10),
+    // A flat card on `surface`, like every settings group (#449).
+    return Material(
+      color: colors.surfaceContainerLow,
+      borderRadius: RhythmoRadii.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Semantics(
+          label: 'فضای ابری مصرف‌شده',
+          value: known ? '${persianDigits(percent)} درصد' : null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(RhythmoIcons.warning, size: 18, color: colors.error),
-                  const SizedBox(width: 6),
+                  const Icon(RhythmoIcons.cloud, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'فضای ابری',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      warning,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: colors.error),
+                      known
+                          ? '${formatSize(usedBytes)} از ${formatSize(limitBytes)}'
+                          : '${formatSize(usedBytes)} مصرف‌شده',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: theme.textTheme.labelLarge
+                          ?.copyWith(color: colors.onSurfaceVariant),
                     ),
                   ),
                 ],
               ),
+              if (known) ...[
+                const SizedBox(height: 12),
+                // A thin violet-to-coral bar; red only when it warns.
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(RhythmoRadii.pill),
+                  child: Stack(
+                    children: [
+                      Container(
+                          height: 4, color: colors.surfaceContainerHighest),
+                      ShaderMask(
+                        key: const ValueKey('storage-gradient'),
+                        blendMode: BlendMode.srcIn,
+                        shaderCallback: (bounds) => LinearGradient(
+                          begin: AlignmentDirectional.centerStart
+                              .resolve(Directionality.of(context)),
+                          end: AlignmentDirectional.centerEnd
+                              .resolve(Directionality.of(context)),
+                          colors: warning == null
+                              ? [colors.secondary, colors.primary]
+                              : [colors.error, colors.error],
+                        ).createShader(bounds),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 4,
+                          color: colors.onSurface,
+                          backgroundColor: Colors.transparent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (warning != null) ...[
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(RhythmoIcons.warning, size: 18, color: colors.error),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        warning,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: colors.error),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

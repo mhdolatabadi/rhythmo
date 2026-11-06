@@ -223,7 +223,8 @@ class _Card extends StatelessWidget {
                             fontWeight: FontWeight.w200,
                             color: colors.onSurface,
                             shadows: const [
-                              Shadow(color: RhythmoColors.shadow, blurRadius: 12),
+                              Shadow(
+                                  color: RhythmoColors.shadow, blurRadius: 12),
                             ],
                           ),
                         ),

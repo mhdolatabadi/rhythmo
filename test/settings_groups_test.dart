@@ -36,13 +36,25 @@ void main() {
     expect(top('a@example.com'), lessThan(top('کش موسیقی')));
     expect(top('کش موسیقی'), lessThan(top('دسترسی‌ها')));
     expect(top('دسترسی‌ها'), lessThan(top('ارتباط با مدیر')));
-    expect(top('حریم خصوصی'), lessThan(top('خروج از حساب')));
-    expect(top('خروج از حساب'), lessThan(top('حذف حساب کاربری')));
+    expect(top('حریم خصوصی'), lessThan(top('حذف حساب کاربری')));
+    // «خروج از حساب» is a card of its own, last (#449).
+    expect(top('حذف حساب کاربری'), lessThan(top('خروج از حساب')));
+    final signOut = find.ancestor(
+        of: find.byKey(const ValueKey('sign-out')),
+        matching: find.byType(SettingsGroup));
+    expect(find.descendant(of: signOut, matching: find.byType(ListTile)),
+        findsOne);
+    // The account row says how it signs in.
+    expect(find.text('ورود با ایمیل'), findsOneWidget);
 
-    expect(find.byType(SettingsGroup), findsNWidgets(4));
-    for (final label in ['این دستگاه', 'پشتیبانی']) {
+    expect(find.byType(SettingsGroup), findsNWidgets(5));
+    for (final label in ['این دستگاه', 'پشتیبانی', 'امنیت حساب']) {
       expect(find.text(label), findsOneWidget);
     }
+    // Flat cards on `surface` (#449).
+    final card =
+        tester.widget<Card>(find.byKey(const ValueKey('settings-card')).first);
+    expect(card.color, RhythmoTheme.dark().colorScheme.surfaceContainerLow);
     // Space, not lines, between rows.
     expect(find.byType(Divider), findsNothing);
   });

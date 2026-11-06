@@ -26,7 +26,10 @@ class SettingsGroup extends StatelessWidget {
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             ),
+          // Flat on `surface`, not glass (#449).
           Card(
+            key: const ValueKey('settings-card'),
+            color: theme.colorScheme.surfaceContainerLow,
             margin: EdgeInsets.zero,
             clipBehavior: Clip.antiAlias,
             child: ListTileTheme(

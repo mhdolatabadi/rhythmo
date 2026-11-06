@@ -157,7 +157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               bottom: 24 + MediaQuery.paddingOf(context).bottom,
             ),
             children: [
-              // The account first: «حساب» in the dock is the one way here.
+              // The account first: the avatar in the header is the way here.
               SettingsGroup(children: [
                 if (widget.email case final email?)
                   ListTile(
@@ -169,8 +169,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    subtitle:
-                        widget.verified ? const Text('حساب تأییدشده') : null,
+                    // How this account signs in, so it is clear which one
+                    // it is (#449).
+                    subtitle: Text(widget.verified
+                        ? 'ورود با ایمیل · حساب تأییدشده'
+                        : 'ورود با ایمیل'),
                   ),
                 if (widget.onManagePlaylists case final manage?)
                   ListTile(
@@ -272,16 +275,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => _openPage('/privacy'),
                 ),
               ]),
-              SettingsGroup(children: [
-                if (widget.onLogout case final logout?)
-                  ListTile(
-                    leading: const Icon(RhythmoIcons.signOut),
-                    title: const Text('خروج از حساب'),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      logout();
-                    },
-                  ),
+              SettingsGroup(label: 'امنیت حساب', children: [
                 if (widget.onSignOutEverywhere case final signOut?)
                   ListTile(
                     leading: const Icon(RhythmoIcons.signOut),
@@ -305,6 +299,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () => _openDeleteAccount(email, delete),
                   ),
               ]),
+              // Signing out is a card of its own, at the end (#449).
+              if (widget.onLogout case final logout?)
+                SettingsGroup(children: [
+                  ListTile(
+                    key: const ValueKey('sign-out'),
+                    leading: const Icon(RhythmoIcons.signOut),
+                    title: const Text('خروج از حساب'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      logout();
+                    },
+                  ),
+                ]),
               // Debug builds only: every token and component on one page.
               if (kDebugMode)
                 ListTile(
