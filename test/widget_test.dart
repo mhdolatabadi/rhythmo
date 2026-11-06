@@ -829,12 +829,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('۲ آهنگ انتخاب‌شده'), findsOneWidget);
     expect(find.byTooltip('توقف'), findsNothing);
-    await tester.tap(find.text('لغو انتخاب همه'));
+    await tester.tap(find.byTooltip('لغو انتخاب همه'));
     await tester.pumpAndSettle();
     expect(find.byType(Checkbox), findsNothing);
     await tester.longPress(find.text('First'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('انتخاب همه'));
+    await tester.tap(find.byTooltip('انتخاب همه'));
     await tester.pumpAndSettle();
     expect(find.text('۲ آهنگ انتخاب‌شده'), findsOneWidget);
     await tester.tap(find.byTooltip('لغو انتخاب'));
@@ -842,6 +842,57 @@ void main() {
     await tester.tap(find.text('Second'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('توقف'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('several selected tracks get bulk actions and back clears them',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pumpApp(tester,
+        tokenStore: MemoryTokenStore('valid-token'),
+        tracks: FakeTracksApi(const [
+          Track(
+              id: 's1',
+              title: 'First',
+              contentType: 'audio/mpeg',
+              sizeBytes: 1),
+          Track(
+              id: 's2',
+              title: 'Second',
+              contentType: 'audio/mpeg',
+              sizeBytes: 1),
+        ]));
+    await tester.longPress(find.text('First'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Second'));
+    await tester.pumpAndSettle();
+    expect(find.text('۲ آهنگ انتخاب‌شده'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('اقدامات انتخاب‌شده‌ها'));
+    await tester.pumpAndSettle();
+    expect(find.text('پخش بعدی'), findsOneWidget);
+    expect(find.text('افزودن به صف'), findsOneWidget);
+    expect(find.text('حذف آهنگ‌ها'), findsOneWidget);
+    await tester.tap(find.text('پسندیدن همه'));
+    await tester.pumpAndSettle();
+    expect(find.text('۲ آهنگ انتخاب‌شده'), findsNothing);
+
+    await tester.longPress(find.text('First'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Second'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('اقدامات انتخاب‌شده‌ها'));
+    await tester.pumpAndSettle();
+    expect(find.text('نپسندیدن همه'), findsOneWidget);
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('۲ آهنگ انتخاب‌شده'), findsNothing);
+    expect(find.text('First'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

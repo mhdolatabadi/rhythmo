@@ -573,6 +573,158 @@ class _LibraryScreenState extends State<LibraryScreen>
     );
   }
 
+  /// Deletes several selected songs from the server after one confirmation.
+  Future<void> _confirmDeleteTracks(List<Track> tracks) async {
+    if (tracks.isEmpty) return;
+    if (tracks.length == 1) return _confirmDeleteTrack(tracks.single);
+    final count = persianDigits(tracks.length);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(RhythmoIcons.trash),
+        title: Text('حذف $count آهنگ؟'),
+        content: const Text(
+            'نسخهٔ سرور این آهنگ‌ها برای همیشه از فضای ابری و فهرست‌های پخش '
+            'حذف می‌شود؛ فایل‌هایی که روی دستگاه هم هستند، می‌مانند.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('انصراف'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('حذف $count آهنگ'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    var deleted = 0;
+    for (final track in tracks) {
+      if (!await widget.library.deleteTrack(track.id)) continue;
+      deleted++;
+      await widget.player.removeTrack(track.id);
+      widget.recent?.remove(track.id);
+    }
+    if (!mounted) return;
+    if (deleted > 0) widget.playlists?.load();
+    final failed = tracks.length - deleted;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(failed == 0
+          ? '$count آهنگ حذف شد.'
+          : deleted == 0
+              ? 'حذف آهنگ‌ها ناموفق بود. دوباره تلاش کن.'
+              : '${persianDigits(deleted)} آهنگ حذف شد؛ '
+                  'حذف ${persianDigits(failed)} آهنگ ناموفق بود.'),
+    ));
+  }
+
+  /// Removes several selected songs from this device after one
+  /// confirmation, stopping if the system asks and the listener declines.
+  Future<void> _confirmRemoveTracksFromDevice(List<Track> tracks) async {
+    if (tracks.isEmpty) return;
+    if (tracks.length == 1) return _confirmRemoveFromDevice(tracks.single);
+    final count = persianDigits(tracks.length);
+    final onlyHere = tracks
+        .where((track) => locationOf(track) != TrackLocation.synced)
+        .length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(RhythmoIcons.deviceMobile),
+        title: Text('حذف $count آهنگ از دستگاه؟'),
+        content: Text(onlyHere == 0
+            ? 'فایل‌ها از حافظهٔ دستگاه پاک می‌شوند و نسخهٔ سرورشان می‌ماند.'
+            : '${persianDigits(onlyHere)} آهنگ روی سرور نیست و با حذف از '
+                'دستگاه برای همیشه پاک می‌شود.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('انصراف'),
+          ),
+          FilledButton(
+            style: onlyHere == 0
+                ? null
+                : FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    foregroundColor: Theme.of(context).colorScheme.onError,
+                  ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('حذف از دستگاه'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    var removed = 0;
+    String? problem;
+    for (final track in tracks) {
+      final result = await widget.localAudio.delete(track);
+      if (result == DeviceDeleteResult.declined) break;
+      if (result == DeviceDeleteResult.permissionDenied) {
+        problem = 'ریتمو اجازهٔ تغییر حافظهٔ دستگاه را ندارد.';
+        break;
+      }
+      if (result == DeviceDeleteResult.failed) {
+        problem = 'حذف بعضی آهنگ‌ها از دستگاه ناموفق بود.';
+        continue;
+      }
+      removed++;
+      if (locationOf(track) != TrackLocation.synced) {
+        await widget.player.removeTrack(track.id);
+      }
+    }
+    if (!mounted) return;
+    final message = [
+      if (removed > 0) '${persianDigits(removed)} آهنگ از دستگاه حذف شد.',
+      if (problem != null) problem,
+    ].join(' ');
+    if (message.isEmpty) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Asks the bot to send several selected songs, with one summary.
+  Future<void> _sendTracksToBot(List<Track> tracks, MessengerBot bot) async {
+    if (tracks.isEmpty) return;
+    if (tracks.length == 1) return _sendToBot(tracks.single, bot);
+    final links = widget.botLinks;
+    if (links == null) return;
+    var queued = 0, tooLarge = 0, failed = 0;
+    var notLinked = false;
+    for (final track in tracks) {
+      switch (await links.send(bot.provider, track.id)) {
+        case BotSendResult.queued:
+          queued++;
+        case BotSendResult.tooLarge:
+          tooLarge++;
+        case BotSendResult.failed:
+          failed++;
+        case BotSendResult.notLinked:
+          notLinked = true;
+      }
+      if (notLinked) break;
+    }
+    if (!mounted) return;
+    final message = notLinked
+        ? 'گفتگوی ${bot.name} دیگر به حسابت وصل نیست. از تنظیمات دوباره وصلش کن.'
+        : [
+            if (queued > 0)
+              'بات ریتمو ${persianDigits(queued)} آهنگ را در ${bot.name} برایت می‌فرستد.',
+            if (tooLarge > 0)
+              '${persianDigits(tooLarge)} آهنگ برای فرستادن بزرگ است.',
+            if (failed > 0) 'فرستادن ${persianDigits(failed)} آهنگ ناموفق بود.',
+          ].join(' ');
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
   void _managePlaylists() {
     final playlists = widget.playlists;
     if (playlists == null) return;
@@ -985,9 +1137,13 @@ class _LibraryScreenState extends State<LibraryScreen>
             widget.library.isUpdating(trackId),
         linkedBots: widget.botLinks?.linkedBots ?? const [],
         onSendToBot: _sendToBot,
+        onDeleteMany: _confirmDeleteTracks,
+        onSendManyToBot: _sendTracksToBot,
         sync: widget.sync,
         onRemoveFromDevice:
             widget.localAudio.supported ? _confirmRemoveFromDevice : null,
+        onRemoveManyFromDevice:
+            widget.localAudio.supported ? _confirmRemoveTracksFromDevice : null,
         deviceNotice: deviceNotice,
         filterable: filterable,
         nested: nested,
@@ -1436,6 +1592,9 @@ class _TrackList extends StatefulWidget {
     this.onSendToBot,
     this.sync,
     this.onRemoveFromDevice,
+    this.onDeleteMany,
+    this.onRemoveManyFromDevice,
+    this.onSendManyToBot,
     this.deviceNotice,
     this.filterable = true,
     this.nested = true,
@@ -1461,6 +1620,13 @@ class _TrackList extends StatefulWidget {
   /// uploading, retrying and cancelling.
   final LibrarySyncController? sync;
   final Future<void> Function(Track track)? onRemoveFromDevice;
+
+  /// The same actions for several selected songs at once, each with one
+  /// confirmation and one summary.
+  final Future<void> Function(List<Track> tracks)? onDeleteMany;
+  final Future<void> Function(List<Track> tracks)? onRemoveManyFromDevice;
+  final Future<void> Function(List<Track> tracks, MessengerBot bot)?
+      onSendManyToBot;
   final _DeviceNotice? deviceNotice;
 
   /// Whether the list can be searched and sorted; otherwise it keeps its
@@ -1487,52 +1653,254 @@ class _TrackListState extends State<_TrackList> {
         if (!_selectedIds.remove(track.id)) _selectedIds.add(track.id);
       });
 
+  /// Pinned above the rows while songs are selected, so its actions stay in
+  /// reach however far the list scrolls.
   Widget _selectionBar(List<Track> visible) {
     final selected = widget.tracks
         .where((track) => _selectedIds.contains(track.id))
         .toList();
     final allVisible = visible.isNotEmpty &&
         visible.every((track) => _selectedIds.contains(track.id));
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        IconButton(
-          tooltip: 'لغو انتخاب',
-          onPressed: () => setState(_selectedIds.clear),
-          icon: const Icon(RhythmoIcons.x),
+    final theme = Theme.of(context);
+    final single =
+        selected.length == 1 ? _actionsFor(context, selected.single) : null;
+    return Material(
+      color: theme.colorScheme.surface,
+      child: SizedBox(
+        height: _SelectionBarDelegate.height,
+        child: Row(
+          children: [
+            IconButton(
+              tooltip: 'لغو انتخاب',
+              onPressed: () => setState(_selectedIds.clear),
+              icon: const Icon(RhythmoIcons.x),
+            ),
+            Expanded(
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  '${persianDigits(selected.length)} آهنگ انتخاب‌شده',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: allVisible ? 'لغو انتخاب همه' : 'انتخاب همه',
+              onPressed: visible.isEmpty
+                  ? null
+                  : () => setState(() {
+                        final ids = visible.map((track) => track.id);
+                        if (allVisible) {
+                          _selectedIds.removeAll(ids);
+                        } else {
+                          _selectedIds.addAll(ids);
+                        }
+                      }),
+              icon: Icon(allVisible
+                  ? RhythmoIcons.checkCircleFill
+                  : RhythmoIcons.checkCircle),
+            ),
+            IconButton(
+              tooltip: 'پخش انتخاب‌شده‌ها',
+              onPressed: selected.isEmpty
+                  ? null
+                  : () {
+                      widget.player.playFrom(selected, 0);
+                      setState(_selectedIds.clear);
+                    },
+              icon: const Icon(RhythmoIcons.playFill),
+            ),
+            if (single != null)
+              single
+            else if (selected.length > 1)
+              _bulkActions(context, selected),
+          ],
         ),
-        Semantics(
-          liveRegion: true,
-          child: Text('${persianDigits(selected.length)} آهنگ انتخاب‌شده'),
-        ),
-        TextButton(
-          onPressed: visible.isEmpty
-              ? null
-              : () => setState(() {
-                    final ids = visible.map((track) => track.id);
-                    if (allVisible) {
-                      _selectedIds.removeAll(ids);
-                    } else {
-                      _selectedIds.addAll(ids);
-                    }
-                  }),
-          child: Text(allVisible ? 'لغو انتخاب همه' : 'انتخاب همه'),
-        ),
-        IconButton(
-          tooltip: 'پخش انتخاب‌شده‌ها',
-          onPressed: selected.isEmpty
-              ? null
-              : () {
-                  widget.player.playFrom(selected, 0);
-                  setState(_selectedIds.clear);
-                },
-          icon: const Icon(RhythmoIcons.playFill),
-        ),
-        if (selected.length == 1)
-          if (_actionsFor(context, selected.single) case final actions?)
-            actions,
-      ],
+      ),
     );
+  }
+
+  /// «اقدامات انتخاب‌شده‌ها»: what the row menu offers, for several songs.
+  /// Listening actions apply to every song; managing ones only to the
+  /// listener's own songs, as on each row.
+  Widget _bulkActions(BuildContext context, List<Track> selected) {
+    final own = [
+      for (final track in selected)
+        if (track.addedBy == null &&
+            !track.fromStore &&
+            widget.isDeleting?.call(track.id) != true)
+          track
+    ];
+    final sync = widget.sync;
+    bool idle(Track track) => sync?.operationFor(track.id) == null;
+    final toUpload = sync == null
+        ? const <Track>[]
+        : [
+            for (final track in own)
+              if (idle(track) && locationOf(track) == TrackLocation.device)
+                track
+          ];
+    final toDownload = sync == null
+        ? const <Track>[]
+        : [
+            for (final track in own)
+              if (idle(track) && locationOf(track) == TrackLocation.server)
+                track
+          ];
+    final onServer = [
+      for (final track in own)
+        if (locationOf(track) != TrackLocation.device) track
+    ];
+    final onDevice = [
+      for (final track in own)
+        if (locationOf(track) != TrackLocation.server && idle(track)) track
+    ];
+    final queueable = [
+      for (final track in selected)
+        if (widget.player.track?.id != track.id) track
+    ];
+    final allLiked =
+        selected.every((track) => widget.player.favorites.contains(track.id));
+    final error = Theme.of(context).colorScheme.error;
+
+    PopupMenuItem<VoidCallback> item(
+      IconData icon,
+      String label,
+      VoidCallback action, {
+      bool destructive = false,
+    }) =>
+        PopupMenuItem(
+          value: action,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(icon, color: destructive ? error : null),
+            title: Text(
+              label,
+              style: destructive ? TextStyle(color: error) : null,
+            ),
+          ),
+        );
+    String count(List<Track> tracks) => tracks.length == selected.length
+        ? ''
+        : ' (${persianDigits(tracks.length)})';
+    void done() => setState(_selectedIds.clear);
+
+    final items = <PopupMenuEntry<VoidCallback>>[
+      if (queueable.isNotEmpty) ...[
+        item(RhythmoIcons.queue, 'پخش بعدی', () {
+          _enqueueAll(context, queueable, next: true);
+          done();
+        }),
+        item(RhythmoIcons.listPlus, 'افزودن به صف', () {
+          _enqueueAll(context, queueable, next: false);
+          done();
+        }),
+      ],
+      item(
+        allLiked ? RhythmoIcons.heartFill : RhythmoIcons.heart,
+        allLiked ? 'نپسندیدن همه' : 'پسندیدن همه',
+        () {
+          _likeAll(context, selected, like: !allLiked);
+          done();
+        },
+      ),
+      if (widget.playlists case final playlists?)
+        item(RhythmoIcons.playlist, 'افزودن به فهرست پخش', () {
+          addTracksToPlaylist(context, playlists, selected);
+          done();
+        }),
+      if (toUpload.isNotEmpty)
+        item(RhythmoIcons.cloudArrowUp, 'آپلود به سرور${count(toUpload)}', () {
+          for (final track in toUpload) {
+            sync!.upload(track);
+          }
+          done();
+        }),
+      if (toDownload.isNotEmpty)
+        item(
+          RhythmoIcons.cloudArrowDown,
+          '${sync!.downloadsToDevice ? 'دانلود روی دستگاه' : 'دانلود فایل'}'
+          '${count(toDownload)}',
+          () {
+            for (final track in toDownload) {
+              sync.download(track);
+            }
+            done();
+          },
+        ),
+      if (onServer.isNotEmpty && widget.onSendManyToBot != null)
+        for (final bot in widget.linkedBots)
+          item(RhythmoIcons.paperPlaneTilt,
+              'ارسال به ${bot.name}${count(onServer)}', () {
+            widget.onSendManyToBot!(onServer, bot);
+            done();
+          }),
+      if (onDevice.isNotEmpty && widget.onRemoveManyFromDevice != null)
+        item(RhythmoIcons.deviceMobile, 'حذف از دستگاه${count(onDevice)}', () {
+          widget.onRemoveManyFromDevice!(onDevice);
+          done();
+        },
+            destructive: onDevice
+                .any((track) => locationOf(track) == TrackLocation.device)),
+      if (onServer.isNotEmpty && widget.onDeleteMany != null)
+        item(RhythmoIcons.trash, 'حذف آهنگ‌ها${count(onServer)}', () {
+          widget.onDeleteMany!(onServer);
+          done();
+        }, destructive: true),
+    ];
+    return PopupMenuButton<VoidCallback>(
+      tooltip: 'اقدامات انتخاب‌شده‌ها',
+      icon: const Icon(RhythmoIcons.dotsThreeVertical),
+      onSelected: (action) => action(),
+      itemBuilder: (context) => items,
+    );
+  }
+
+  Future<void> _enqueueAll(BuildContext context, List<Track> tracks,
+      {required bool next}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final playing = widget.player.track != null;
+    if (!playing) {
+      await widget.player.playFrom(tracks, 0);
+      return;
+    }
+    // «پخش بعدی» puts each one right after the current song, so going
+    // backwards keeps the selection's order.
+    for (final track in next ? tracks.reversed : tracks) {
+      await widget.player.enqueue(track, next: next);
+    }
+    final count = persianDigits(tracks.length);
+    messenger.showSnackBar(SnackBar(
+        content: Text(next
+            ? '$count آهنگ بعد از این آهنگ پخش می‌شود.'
+            : '$count آهنگ به آخر صف رفت.')));
+  }
+
+  Future<void> _likeAll(BuildContext context, List<Track> tracks,
+      {required bool like}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final favorites = widget.player.favorites;
+    var failed = 0;
+    var needsAccount = false;
+    for (final track in tracks) {
+      if (favorites.contains(track.id) == like) continue;
+      switch (await favorites.toggleTrack(track)) {
+        case TrackLikeResult.failed:
+          failed++;
+        case TrackLikeResult.needsAccount:
+          needsAccount = true;
+        case TrackLikeResult.done:
+          break;
+      }
+    }
+    if (failed == 0 && !needsAccount) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+          content: Text(failed > 0
+              ? 'پسندیدن ${persianDigits(failed)} آهنگ ثبت نشد. دوباره تلاش کن.'
+              : 'برای پسندیدن آهنگ‌های گنجینه وارد حسابت شو.')));
   }
 
   /// Kept for the whole session, whichever screen shows the list.
@@ -1742,13 +2110,29 @@ class _TrackListState extends State<_TrackList> {
   @override
   Widget build(BuildContext context) {
     final tracks = _sortedTracks;
+    // Back clears the selection first instead of leaving the screen, or the
+    // app when this is its first screen.
+    return PopScope(
+      canPop: _selectedIds.isEmpty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _selectedIds.isNotEmpty) setState(_selectedIds.clear);
+      },
+      child: _buildList(context, tracks),
+    );
+  }
+
+  Widget _buildList(BuildContext context, List<Track> tracks) {
     return _TabScrollView(
       nested: widget.nested,
       slivers: [
+        if (_selectedIds.isNotEmpty)
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _SelectionBarDelegate(_selectionBar(tracks)),
+          ),
         SliverToBoxAdapter(
           child: Column(
             children: [
-              if (_selectedIds.isNotEmpty) _selectionBar(tracks),
               if (widget.top case final top?) top,
               if (widget.deviceNotice case final notice?)
                 _DeviceStatusBanner(notice: notice),
@@ -1799,6 +2183,29 @@ class _TrackListState extends State<_TrackList> {
       ],
     );
   }
+}
+
+/// Keeps the selection bar pinned while the list scrolls under it.
+class _SelectionBarDelegate extends SliverPersistentHeaderDelegate {
+  _SelectionBarDelegate(this.child);
+
+  static const double height = 56;
+  final Widget child;
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(
+          BuildContext context, double shrinkOffset, bool overlapsContent) =>
+      child;
+
+  @override
+  bool shouldRebuild(_SelectionBarDelegate oldDelegate) =>
+      child != oldDelegate.child;
 }
 
 /// The scrolling body of a library tab: below the pinned header's overlap,
