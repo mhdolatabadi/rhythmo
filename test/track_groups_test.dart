@@ -38,4 +38,26 @@ void main() {
   test('no tracks, no groups', () {
     expect(groupByAlbum(const []), isEmpty);
   });
+
+  test('lectures group by topic in session order', () {
+    Track lecture(String id, String topic, int? session) => Track(
+        id: id,
+        title: 'جلسه $id',
+        album: topic,
+        trackNumber: session,
+        source: 'bale_archive',
+        contentType: 'audio/mpeg',
+        sizeBytes: 1);
+    final lectures = [
+      lecture('c', 'فاطمیه', 3),
+      lecture('a', 'فاطمیه', 1),
+      lecture('x', 'ولایت', null),
+      lecture('b', 'فاطمیه', 2),
+    ];
+    expect(lectures.every(isLecture), isTrue);
+    expect(isLecture(track('1')), isFalse);
+    final topics = lectureTopics(lectures);
+    expect([for (final t in topics) t.name], ['فاطمیه', 'ولایت']);
+    expect([for (final t in topics.first.tracks) t.id], ['a', 'b', 'c']);
+  });
 }

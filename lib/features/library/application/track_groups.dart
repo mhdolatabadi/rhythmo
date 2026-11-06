@@ -82,3 +82,24 @@ TrackGroup? groupWithKey(List<TrackGroup> groups, String key) {
   }
   return null;
 }
+
+/// Whether [track] is a talk imported from the lecture archive in Bale
+///, which the library folds away from the music.
+bool isLecture(Track track) => track.source == 'bale_archive';
+
+/// [lectures] by topic (their album), in name order, each in session
+/// order.
+List<TrackGroup> lectureTopics(List<Track> lectures) => [
+      for (final group in groupByAlbum(lectures))
+        TrackGroup(
+          key: group.key,
+          name: group.name,
+          artist: group.artist,
+          unknown: group.unknown,
+          tracks: [...group.tracks]..sort((a, b) {
+              final bySession = (a.trackNumber ?? 1 << 30)
+                  .compareTo(b.trackNumber ?? 1 << 30);
+              return bySession != 0 ? bySession : a.title.compareTo(b.title);
+            }),
+        ),
+    ];

@@ -1123,8 +1123,10 @@ class _LibraryScreenState extends State<LibraryScreen>
     _DeviceNotice? deviceNotice,
     bool filterable = true,
     bool nested = true,
+    bool collapseLectures = false,
   }) =>
       _TrackList(
+        collapseLectures: collapseLectures,
         top: top,
         tracks: tracks,
         player: widget.player,
@@ -1223,7 +1225,8 @@ class _LibraryScreenState extends State<LibraryScreen>
             onRefresh: _refreshLibrary,
             child: tracks.isEmpty
                 ? state(_EmptyLibrary(deviceNotice: notice))
-                : _trackList(tracks, top: top, deviceNotice: notice),
+                : _trackList(tracks,
+                    top: top, deviceNotice: notice, collapseLectures: true),
           );
         },
       );
@@ -1598,6 +1601,7 @@ class _TrackList extends StatefulWidget {
     this.deviceNotice,
     this.filterable = true,
     this.nested = true,
+    this.collapseLectures = false,
   });
 
   /// Shown above the search, scrolling with the list.
@@ -1635,6 +1639,10 @@ class _TrackList extends StatefulWidget {
 
   /// Whether it is a tab under the library's collapsing header.
   final bool nested;
+
+  /// Whether archive lectures fold into their own section, by topic,
+  /// instead of mixing with the songs.
+  final bool collapseLectures;
 
   @override
   State<_TrackList> createState() => _TrackListState();
@@ -2107,6 +2115,36 @@ class _TrackListState extends State<_TrackList> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
+  /// Whether the lecture section, and which of its topics, are open; kept
+  /// for the session like the sort.
+  static bool _sessionLecturesOpen = false;
+  static final Set<String> _sessionOpenTopics = {};
+
+  void _toggleLectures() =>
+      setState(() => _sessionLecturesOpen = !_sessionLecturesOpen);
+
+  void _toggleTopic(String key) => setState(() {
+        if (!_sessionOpenTopics.remove(key)) _sessionOpenTopics.add(key);
+      });
+
+  Widget _row(BuildContext context, List<Track> list, int index) {
+    final track = list[index];
+    return _TrackRow(
+      track: track,
+      current: widget.player.track?.id == track.id,
+      selected: _selectedIds.contains(track.id),
+      selecting: _selectedIds.isNotEmpty,
+      onLongPress: () => _toggleSelection(track),
+      onTap: () => _selectedIds.isNotEmpty
+          ? _toggleSelection(track)
+          : widget.player.playTapped(list, index),
+      actions: _actionsFor(context, track),
+      sync: widget.sync?.operationFor(track.id),
+      liked: widget.player.favorites.contains(track.id),
+      likeCount: widget.player.favorites.countFor(track),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tracks = _sortedTracks;
@@ -2121,7 +2159,16 @@ class _TrackListState extends State<_TrackList> {
     );
   }
 
-  Widget _buildList(BuildContext context, List<Track> tracks) {
+  Widget _buildList(BuildContext context, List<Track> sorted) {
+    // Lectures imported from the archive come by the hundred, so in the
+    // library they fold into one section, by topic, instead of burying the
+    // music.
+    final collapse = widget.collapseLectures;
+    final tracks =
+        collapse ? sorted.where((t) => !isLecture(t)).toList() : sorted;
+    final topics = collapse
+        ? lectureTopics(sorted.where(isLecture).toList())
+        : const <TrackGroup>[];
     return _TabScrollView(
       nested: widget.nested,
       slivers: [
@@ -2144,7 +2191,7 @@ class _TrackListState extends State<_TrackList> {
                 )
               else ...[
                 _TrackListHeader(
-                  total: widget.tracks.length,
+                  total: collapse ? tracks.length : widget.tracks.length,
                   sort: _sort,
                   onSort: _setSort,
                   onShuffle: tracks.isEmpty
@@ -2155,34 +2202,160 @@ class _TrackListState extends State<_TrackList> {
             ],
           ),
         ),
+        if (topics.isNotEmpty) ...[
+          SliverToBoxAdapter(
+            child: _LecturesHeader(
+              sessions: topics.fold(0, (n, t) => n + t.tracks.length),
+              topics: topics.length,
+              open: _sessionLecturesOpen,
+              onToggle: _toggleLectures,
+            ),
+          ),
+          if (_sessionLecturesOpen)
+            for (final topic in topics) ...[
+              SliverToBoxAdapter(
+                child: _LectureTopicHeader(
+                  topic: topic,
+                  open: _sessionOpenTopics.contains(topic.key),
+                  onToggle: () => _toggleTopic(topic.key),
+                ),
+              ),
+              if (_sessionOpenTopics.contains(topic.key))
+                ListenableBuilder(
+                  listenable: Listenable.merge(
+                      [widget.player, widget.player.favorites]),
+                  builder: (context, _) => SliverPadding(
+                    padding: const EdgeInsetsDirectional.only(start: 16),
+                    sliver: SliverList.separated(
+                      itemCount: topic.tracks.length,
+                      separatorBuilder: (_, __) => const _RowHairline(),
+                      itemBuilder: (context, index) =>
+                          _row(context, topic.tracks, index),
+                    ),
+                  ),
+                ),
+            ],
+          if (tracks.isNotEmpty)
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+        ],
         ListenableBuilder(
           listenable:
               Listenable.merge([widget.player, widget.player.favorites]),
           builder: (context, _) => SliverList.separated(
             itemCount: tracks.length,
             separatorBuilder: (_, __) => const _RowHairline(),
-            itemBuilder: (context, index) {
-              final track = tracks[index];
-              return _TrackRow(
-                track: track,
-                current: widget.player.track?.id == track.id,
-                selected: _selectedIds.contains(track.id),
-                selecting: _selectedIds.isNotEmpty,
-                onLongPress: () => _toggleSelection(track),
-                onTap: () => _selectedIds.isNotEmpty
-                    ? _toggleSelection(track)
-                    : widget.player.playTapped(tracks, index),
-                actions: _actionsFor(context, track),
-                sync: widget.sync?.operationFor(track.id),
-                liked: widget.player.favorites.contains(track.id),
-                likeCount: widget.player.favorites.countFor(track),
-              );
-            },
+            itemBuilder: (context, index) => _row(context, tracks, index),
           ),
         ),
       ],
     );
   }
+}
+
+/// The folded lecture section's title: how many sessions in how many
+/// topics, opened and closed with a tap.
+class _LecturesHeader extends StatelessWidget {
+  const _LecturesHeader({
+    required this.sessions,
+    required this.topics,
+    required this.open,
+    required this.onToggle,
+  });
+
+  final int sessions;
+  final int topics;
+  final bool open;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Semantics(
+      button: true,
+      expanded: open,
+      child: ListTile(
+        onTap: onToggle,
+        minTileHeight: 56,
+        contentPadding: const EdgeInsetsDirectional.only(start: 8, end: 12),
+        horizontalTitleGap: 12,
+        leading: SizedBox.square(
+          dimension: 48,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.secondaryContainer,
+              borderRadius: RhythmoRadii.control,
+            ),
+            child: Icon(RhythmoIcons.microphoneStage,
+                color: colors.onSecondaryContainer),
+          ),
+        ),
+        title: const Text('سخنرانی‌ها', maxLines: 1),
+        subtitle: Text(
+          '${persianDigits(sessions)} جلسه در ${persianDigits(topics)} موضوع',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: colors.onSurfaceVariant),
+        ),
+        trailing: _Caret(open: open),
+      ),
+    );
+  }
+}
+
+/// One lecture topic inside the open section, folded until tapped.
+class _LectureTopicHeader extends StatelessWidget {
+  const _LectureTopicHeader({
+    required this.topic,
+    required this.open,
+    required this.onToggle,
+  });
+
+  final TrackGroup topic;
+  final bool open;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      button: true,
+      expanded: open,
+      child: ListTile(
+        onTap: onToggle,
+        dense: true,
+        contentPadding: const EdgeInsetsDirectional.only(start: 24, end: 12),
+        title: Text(
+          topic.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleSmall,
+        ),
+        subtitle: Text(
+          '${persianDigits(topic.tracks.length)} جلسه',
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+        trailing: _Caret(open: open),
+      ),
+    );
+  }
+}
+
+/// Points down while folded and up while open.
+class _Caret extends StatelessWidget {
+  const _Caret({required this.open});
+
+  final bool open;
+
+  @override
+  Widget build(BuildContext context) => AnimatedRotation(
+        turns: open ? 0.5 : 0,
+        duration: RhythmoMotion.of(context, RhythmoMotion.quick),
+        child: Icon(RhythmoIcons.caretDown,
+            size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
+      );
 }
 
 /// Keeps the selection bar pinned while the list scrolls under it.
