@@ -395,6 +395,27 @@ void main() {
       expect(tracks.calls, contains('shared:$token:s1'));
     });
 
+    testWidgets(
+        'the header is a 132 px cover beside the name, with one coral play '
+        '(#448)', (tester) async {
+      final (tracks, _) = await pump(tester, token);
+
+      expect(tester.getSize(find.byKey(const ValueKey('channel-cover'))),
+          const Size(132, 132));
+      final cover = tester.getRect(find.byKey(const ValueKey('channel-cover')));
+      final name = tester.getRect(find.text('Friend mix'));
+      expect(name.top, greaterThanOrEqualTo(cover.top));
+      expect(name.bottom, lessThanOrEqualTo(cover.bottom));
+      final play = find.byKey(const ValueKey('channel-play'));
+      expect(tester.getSize(play).height, greaterThanOrEqualTo(48));
+      final button = tester.widget<IconButton>(play);
+      expect(button.style?.backgroundColor?.resolve({}),
+          Theme.of(tester.element(play)).colorScheme.primary);
+      await tester.tap(play);
+      await tester.pumpAndSettle();
+      expect(tracks.calls, contains('shared:$token:s1'));
+    });
+
     testWidgets('a recipient saves the playlist to their account',
         (tester) async {
       final (_, playlists) = await pump(tester, token);

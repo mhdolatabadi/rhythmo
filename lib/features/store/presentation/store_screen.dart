@@ -310,11 +310,30 @@ class _StoreScreenState extends State<StoreScreen>
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          // One muted line on what گنجینه is (#448).
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(RhythmoSpace.lg,
+                                RhythmoSpace.sm, RhythmoSpace.lg, 0),
+                            child: Text(
+                              'آهنگ‌های فهرست‌های عمومی ریتمو، با کیفیت '
+                              'فایل اصلی.',
+                              key: const ValueKey('store-explainer'),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant),
+                            ),
+                          ),
                           for (final ranking in StoreRanking.values.reversed)
                             StoreCarousel(
                               controller: controller,
                               ranking: ranking,
                               player: widget.player,
+                              // The hot ones are ranked, with big numerals.
+                              numbered: ranking == StoreRanking.trending,
                             ),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(

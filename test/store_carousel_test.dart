@@ -97,6 +97,46 @@ void main() {
     expect(tester.getTopLeft(find.text('همه‌ی آهنگ‌ها')), before);
   });
 
+  testWidgets(
+      'the hot rail ranks with big thin numerals, and «همه» opens the rest '
+      '(#448)', (tester) async {
+    setUpStore(tester);
+    api.ranked = ranked();
+    var all = 0;
+    await tester.pumpWidget(_app(Scaffold(
+      body: StoreCarousel(
+        controller: store,
+        ranking: StoreRanking.trending,
+        player: player,
+        title: 'داغ در گنجینه',
+        numbered: true,
+        onAll: () => all++,
+      ),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('داغ در گنجینه'), findsOneWidget);
+    final first = tester.widget<Text>(find.byKey(const ValueKey('rank-1')));
+    expect(first.data, '۱');
+    expect(first.style?.fontWeight, FontWeight.w200);
+    expect(find.byKey(const ValueKey('rank-2')), findsOneWidget);
+    await tester.tap(find.text('همه'));
+    expect(all, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a carousel without numbers has no rank numerals',
+      (tester) async {
+    setUpStore(tester);
+    api.ranked = ranked();
+    await tester.pumpWidget(_app(Scaffold(
+      body: StoreCarousel(
+          controller: store, ranking: StoreRanking.popular, player: player),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rank-1')), findsNothing);
+    expect(find.text('همه'), findsNothing);
+  });
+
   testWidgets('popular and trending carousels fit a narrow phone and play',
       (tester) async {
     setUpStore(tester);

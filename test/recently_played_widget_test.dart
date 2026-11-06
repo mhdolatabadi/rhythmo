@@ -315,7 +315,9 @@ void main() {
         'and ZWNJ, on a 360 px phone', (tester) async {
       _phone(tester);
       await openSearch(tester);
-      expect(find.text('در همهٔ موسیقی‌ات بگرد'), findsOneWidget);
+      // An empty field offers the public playlists as a rail (#448).
+      expect(find.text('فهرست‌های عمومی'), findsOneWidget);
+      expect(find.byKey(const ValueKey('search-public')), findsOneWidget);
 
       // «کلاسیک» with Persian letters finds «كلاسيك» spelled the Arabic way,
       // and «کلاسیکهای» without ZWNJ the popular «کلاسیک‌های».

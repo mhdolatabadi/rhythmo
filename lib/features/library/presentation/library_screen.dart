@@ -41,6 +41,8 @@ import 'package:rhythmo/features/playlists/presentation/add_to_playlist.dart';
 import 'package:rhythmo/features/playlists/presentation/playlists_screen.dart';
 import 'package:rhythmo/features/playlists/presentation/popular_playlists_screen.dart';
 import 'package:rhythmo/features/store/presentation/store_screen.dart';
+import 'package:rhythmo/features/store/presentation/store_carousel.dart';
+import 'package:rhythmo/features/store/data/store_catalog.dart';
 import 'package:rhythmo/features/bots/application/bot_link_controller.dart';
 import 'package:rhythmo/features/bots/data/messenger_bot.dart';
 import 'package:rhythmo/features/identify/application/identify_controller.dart';
@@ -999,6 +1001,8 @@ class _LibraryScreenState extends State<LibraryScreen>
         player: widget.player,
         onSharedSaved: widget.library.load,
         recentSearches: _recentSearches,
+        store: widget.store,
+        onOpenStore: widget.store == null ? null : _openStore,
       ),
     ));
   }
@@ -2653,7 +2657,15 @@ class LibrarySearchScreen extends StatefulWidget {
     this.playlists,
     this.onSharedSaved,
     this.recentSearches,
+    this.store,
+    this.onOpenStore,
   });
+
+  /// گنجینه, for «داغ در گنجینه» while the field is empty; null hides it.
+  final StoreController? store;
+
+  /// Opens گنجینه, from «همه».
+  final VoidCallback? onOpenStore;
 
   /// Changes to the tracks, which the results follow.
   final Listenable changes;
@@ -2808,13 +2820,42 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
         );
     if (normalizeForSearch(_query).isEmpty) {
       final recent = widget.recentSearches?.items ?? const <String>[];
-      if (recent.isNotEmpty) {
-        return _RecentSearches(
-          searches: recent,
-          side: side,
-          onRun: _runRecent,
-          onRemove: widget.recentSearches!.remove,
-          onClear: widget.recentSearches!.clear,
+      // Something to find while nothing is typed: what is hot in گنجینه
+      // and the public playlists, both as rails (#448). No genre tiles.
+      final popular = widget.playlists?.popular ?? const <PublicPlaylist>[];
+      final browse = [
+        if (widget.store case final store?)
+          StoreCarousel(
+            key: const ValueKey('search-hot'),
+            controller: store,
+            ranking: StoreRanking.trending,
+            player: widget.player,
+            title: 'داغ در گنجینه',
+            numbered: true,
+            onAll: widget.onOpenStore,
+            padding: EdgeInsets.symmetric(horizontal: side + 8),
+          ),
+        if (popular.isNotEmpty)
+          _PublicPlaylistRail(
+            playlists: popular,
+            side: side + 8,
+            onOpen: _openPopular,
+          ),
+      ];
+      if (recent.isNotEmpty || browse.isNotEmpty) {
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 128),
+          children: [
+            if (recent.isNotEmpty)
+              _RecentSearches(
+                searches: recent,
+                side: side,
+                onRun: _runRecent,
+                onRemove: widget.recentSearches!.remove,
+                onClear: widget.recentSearches!.clear,
+              ),
+            ...browse,
+          ],
         );
       }
       return centered(const _LibraryState(
@@ -2977,48 +3018,128 @@ class _RecentSearches extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListView(
-      // Room for the mini player under the last search.
-      padding: EdgeInsets.fromLTRB(side, RhythmoSpace.xs, side, 128),
-      children: [
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(
-              RhythmoSpace.sm, RhythmoSpace.md, 0, RhythmoSpace.xs),
-          child: Row(
-            children: [
-              Expanded(
-                child: Semantics(
-                  header: true,
-                  child: Text(
-                    'جست‌وجوهای اخیر',
-                    style: theme.textTheme.titleMedium,
+    return Padding(
+      padding: EdgeInsets.fromLTRB(side, RhythmoSpace.xs, side, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(
+                RhythmoSpace.sm, RhythmoSpace.md, 0, RhythmoSpace.xs),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      'جست‌وجوهای اخیر',
+                      style: theme.textTheme.titleMedium,
+                    ),
                   ),
                 ),
-              ),
-              TextButton(
-                onPressed: onClear,
-                child: const Text('پاک کردن همه'),
-              ),
-            ],
-          ),
-        ),
-        for (final (index, search) in searches.indexed) ...[
-          if (index > 0) const _Hairline(indent: 56),
-          ListTile(
-            minTileHeight: 52,
-            contentPadding: const EdgeInsetsDirectional.only(
-                start: RhythmoSpace.lg, end: 0),
-            leading: Icon(RhythmoIcons.clockCounterClockwise,
-                color: theme.colorScheme.onSurfaceVariant),
-            title: Text(search, maxLines: 1, overflow: TextOverflow.ellipsis),
-            onTap: () => onRun(search),
-            trailing: IconButton(
-              tooltip: 'حذف از جست‌وجوهای اخیر',
-              onPressed: () => onRemove(search),
-              icon: const Icon(RhythmoIcons.x, size: 18),
+                TextButton(
+                  onPressed: onClear,
+                  child: const Text('پاک کردن همه'),
+                ),
+              ],
             ),
           ),
+          for (final (index, search) in searches.indexed) ...[
+            if (index > 0) const _Hairline(indent: 56),
+            ListTile(
+              minTileHeight: 52,
+              contentPadding: const EdgeInsetsDirectional.only(
+                  start: RhythmoSpace.lg, end: 0),
+              leading: Icon(RhythmoIcons.clockCounterClockwise,
+                  color: theme.colorScheme.onSurfaceVariant),
+              title: Text(search, maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: () => onRun(search),
+              trailing: IconButton(
+                tooltip: 'حذف از جست‌وجوهای اخیر',
+                onPressed: () => onRemove(search),
+                icon: const Icon(RhythmoIcons.x, size: 18),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// «فهرست‌های عمومی»: a rail of 148 px playlist cards (#448).
+class _PublicPlaylistRail extends StatelessWidget {
+  const _PublicPlaylistRail({
+    required this.playlists,
+    required this.side,
+    required this.onOpen,
+  });
+
+  static const double size = 148;
+
+  final List<PublicPlaylist> playlists;
+  final double side;
+  final ValueChanged<PublicPlaylist> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(side, RhythmoSpace.lg, side, 0),
+          child: Semantics(
+            header: true,
+            child: Text('فهرست‌های عمومی', style: theme.textTheme.titleMedium),
+          ),
+        ),
+        const SizedBox(height: RhythmoSpace.sm),
+        SizedBox(
+          height: size + 52,
+          child: ListView.separated(
+            key: const ValueKey('search-public'),
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: side),
+            itemCount: playlists.length,
+            separatorBuilder: (_, __) => const SizedBox(width: RhythmoSpace.md),
+            itemBuilder: (context, index) {
+              final playlist = playlists[index];
+              final likes = playlist.likes.likeCount;
+              return SizedBox(
+                width: size,
+                child: InkWell(
+                  borderRadius: RhythmoRadii.control,
+                  onTap: () => onOpen(playlist),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RhythmoArtworkTile(
+                          seed: playlist.shareToken,
+                          icon: RhythmoIcons.playlist,
+                          size: size),
+                      const SizedBox(height: RhythmoSpace.xs),
+                      Text(playlist.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall),
+                      Text(
+                        [
+                          '${persianDigits(playlist.trackCount)} آهنگ',
+                          if (likes > 0) '${persianDigits(likes)} پسند',
+                        ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
       ],
     );
   }
