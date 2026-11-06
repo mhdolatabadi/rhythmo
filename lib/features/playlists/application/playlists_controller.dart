@@ -286,8 +286,11 @@ class PlaylistsController extends ChangeNotifier {
   Future<bool> load() async {
     final token = _token();
     if (token == null) return false;
-    status = PlaylistsStatus.loading;
-    notifyListeners();
+    // A refresh keeps the playlists on screen; only a first load waits.
+    if (status != PlaylistsStatus.loaded) {
+      status = PlaylistsStatus.loading;
+      notifyListeners();
+    }
     try {
       playlists = await Future.wait(
           (await _api.listPlaylists(token)).map(_withDeviceTracks));
@@ -295,6 +298,10 @@ class PlaylistsController extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (_) {
+      if (status == PlaylistsStatus.loaded) {
+        notifyListeners();
+        return false;
+      }
       status = PlaylistsStatus.error;
       notifyListeners();
       return false;

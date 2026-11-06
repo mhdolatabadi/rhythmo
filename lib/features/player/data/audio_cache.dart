@@ -10,6 +10,10 @@ import 'audio_cache_stub.dart' if (dart.library.io) 'audio_cache_io.dart'
 abstract interface class AudioCache {
   Future<AudioSource> sourceFor(Track track, Uri url);
 
+  /// Whether all of [track]'s current bytes are kept here, so it plays
+  /// without the network and needs no stream link.
+  Future<bool> hasComplete(Track track);
+
   /// Whether the app controls this cache. On the web the browser's HTTP cache
   /// holds audio instead, and the app can neither measure nor clear it.
   bool get isManaged;

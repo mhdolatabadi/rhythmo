@@ -50,6 +50,17 @@ class FileAudioCache implements AudioCache, DisposableAudioCache {
     }
   }
 
+  @override
+  Future<bool> hasComplete(Track track) async {
+    if (track.isLocal) return false;
+    try {
+      final file = File('${(await _directory()).path}/${cacheFileName(track)}');
+      return await file.exists() && await file.length() == track.sizeBytes;
+    } on IOException {
+      return false;
+    }
+  }
+
   Future<AudioSource> _cachedSourceFor(Track track, Uri url) async {
     final directory = await _directory();
     await directory.create(recursive: true);

@@ -14,6 +14,9 @@ import 'package:rhythmo/app/app_configuration.dart';
 import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/app/backend_gate.dart';
 import 'package:rhythmo/core/api/api_client.dart';
+import 'package:rhythmo/core/network/network_status.dart';
+import 'package:rhythmo/core/network/offline_strip.dart';
+import 'package:rhythmo/core/offline/response_cache.dart';
 import 'package:rhythmo/features/auth/application/auth_controller.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
 import 'package:rhythmo/features/auth/presentation/auth_gate.dart';
@@ -84,7 +87,11 @@ class RhythmoApp extends StatefulWidget {
     this.lastPlaybackStore,
     this.mediaSession,
     this.appPreferencesStore,
+    this.offlineCache,
   });
+
+  /// Where server answers are kept for offline use; the device by default.
+  final ResponseCache? offlineCache;
 
   /// Test overrides; by default these talk to [AppConfiguration.apiBaseUri]
   /// and the real device.
@@ -121,9 +128,18 @@ class RhythmoApp extends StatefulWidget {
 }
 
 class _RhythmoAppState extends State<RhythmoApp> {
+  /// Whether the server answers; the app keeps working offline.
+  late final NetworkStatus _network = NetworkStatus(
+      // A closure: the API client is built with this status itself.
+      probe: () async {
+    await (widget.healthCheck ?? _apiClient?.checkHealth)?.call();
+  });
+
   late final ApiClient? _apiClient = AppConfiguration.apiBaseUri == null
       ? null
-      : ApiClient(AppConfiguration.apiBaseUri!);
+      : ApiClient(AppConfiguration.apiBaseUri!,
+          offlineCache: widget.offlineCache ?? createResponseCache(),
+          network: _network);
   late final AuthApi? _authApi = widget.authApi ?? _apiClient;
   late final AuthController? _auth = _authApi == null
       ? null
@@ -245,6 +261,8 @@ class _RhythmoAppState extends State<RhythmoApp> {
       : (PlayerController(
           api: _tracksApi,
           engine: widget.audioEngine ?? JustAudioEngine(cache: _audioCache),
+          // Songs kept whole on the device play without a link, offline too.
+          isCached: _audioCache.hasComplete,
           token: () => _auth?.token,
           favorites: FavoriteTracks(
             store: widget.favoritesStore ?? SecureFavoritesStore(),
@@ -295,6 +313,8 @@ class _RhythmoAppState extends State<RhythmoApp> {
   void initState() {
     super.initState();
     _auth?.addListener(_selectJourneyAccount);
+    _auth?.addListener(_forgetOfflineOnSignOut);
+    _network.addListener(_onNetworkChanged);
     _selectJourneyAccount();
     _preferences.load();
     final player = _player;
@@ -310,9 +330,38 @@ class _RhythmoAppState extends State<RhythmoApp> {
     }
   }
 
+  AuthStatus? _authStatus;
+
+  /// Nothing of an account stays on the device after it signs out.
+  void _forgetOfflineOnSignOut() {
+    final status = _auth?.status;
+    if (status == AuthStatus.signedOut && _authStatus == AuthStatus.signedIn) {
+      _apiClient?.forgetOffline();
+    }
+    _authStatus = status;
+  }
+
+  bool _wasOnline = true;
+
+  /// Back online: check the session and bring what was shown from the
+  /// device up to date.
+  void _onNetworkChanged() {
+    final online = _network.online;
+    if (online && !_wasOnline) {
+      _auth?.revalidate();
+      _library?.load();
+      _playlists?.load();
+      _player?.favorites.refresh();
+    }
+    _wasOnline = online;
+  }
+
   @override
   void dispose() {
     _auth?.removeListener(_selectJourneyAccount);
+    _auth?.removeListener(_forgetOfflineOnSignOut);
+    _network.removeListener(_onNetworkChanged);
+    _network.dispose();
     _artwork.dispose();
     _journey.dispose();
     _preferences.dispose();
@@ -344,7 +393,10 @@ class _RhythmoAppState extends State<RhythmoApp> {
           builder: (context, child) {
             final page = TrackArtworkScope(
               controller: _artwork,
-              child: child ?? const SizedBox.shrink(),
+              child: OfflineStrip(
+                network: _network,
+                child: child ?? const SizedBox.shrink(),
+              ),
             );
             // Screens pushed over everything, like the full-screen player,
             // still reach the listener's playlists.
@@ -365,6 +417,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
           themeMode: _preferences.value.themeMode,
           home: _WebEdgeInsets(
             child: BackendGate(
+              network: _network,
               healthCheck: widget.healthCheck ?? _apiClient?.checkHealth,
               child: _auth == null ||
                       _uploads == null ||

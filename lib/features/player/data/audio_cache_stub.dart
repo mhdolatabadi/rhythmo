@@ -9,6 +9,9 @@ class StreamingAudioCache implements AudioCache {
       AudioSource.uri(url, tag: track.id);
 
   @override
+  Future<bool> hasComplete(Track track) async => false;
+
+  @override
   bool get isManaged => false;
 
   @override

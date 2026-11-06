@@ -96,6 +96,9 @@ Map<String, Object?> _trackToJson(Track track) => {
       'viaPlaylist': track.viaPlaylist,
       'fromStore': track.fromStore,
       'version': track.version,
+      // The cached file's name carries it; without it a restored track
+      // would not find, and would drop, the copy kept for offline play.
+      'tagsVersion': track.embeddedTags.version,
       'replayGain': switch (track.replayGain) {
         final gain? => {
             'trackGainDb': gain.trackGainDb,
@@ -138,6 +141,11 @@ Track? _trackFromJson(Object? json) {
     viaPlaylist: text('viaPlaylist'),
     fromStore: json['fromStore'] == true,
     version: json['version'] is int ? json['version'] as int : 1,
+    embeddedTags: json['tagsVersion'] is int
+        ? EmbeddedTags(
+            status: EmbeddedTagStatus.written,
+            version: json['tagsVersion'] as int)
+        : const EmbeddedTags(),
     replayGain: replayGain is Map
         ? ReplayGain.fromJson(replayGain.cast<String, dynamic>())
         : null,

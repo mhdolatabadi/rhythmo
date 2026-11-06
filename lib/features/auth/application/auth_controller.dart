@@ -97,6 +97,23 @@ class AuthController extends ChangeNotifier {
     if (token == currentToken) _set(AuthStatus.signedIn, user);
   }
 
+  /// Checks the session again once the server can be reached after the app
+  /// ran offline: a session ended elsewhere in the meantime signs out here
+  /// too, and a restore that failed for lack of a connection is retried.
+  Future<void> revalidate() async {
+    if (_status == AuthStatus.restoreFailed) return restore();
+    if (_status != AuthStatus.signedIn) return;
+    try {
+      await refreshUser();
+    } on ApiException catch (error) {
+      if (error.isUnauthorized && _status == AuthStatus.signedIn) {
+        await logout();
+      }
+    } catch (_) {
+      // Still unreachable; the next reconnect checks again.
+    }
+  }
+
   Future<void> logout() async {
     _token = null;
     await _tokenStore.clear();

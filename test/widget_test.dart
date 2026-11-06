@@ -21,6 +21,8 @@ import 'package:rhythmo/features/playlists/presentation/popular_playlists_screen
 import 'package:rhythmo/features/store/data/store_catalog.dart' show StoreApi;
 import 'package:rhythmo/features/store/presentation/store_screen.dart';
 import 'package:rhythmo/main.dart';
+import 'package:rhythmo/core/network/offline_strip.dart';
+import 'package:rhythmo/features/library/presentation/library_screen.dart';
 
 import 'bot_link_controller_test.dart' show FakeBotsApi, linkedBale;
 import 'cache_controller_test.dart' show FakeAudioCache;
@@ -152,9 +154,10 @@ Future<void> _pumpApp(
   StoreApi? store,
   bool settle = true,
   AppPreferencesStore? appPreferencesStore,
+  Future<void> Function()? healthCheck,
 }) async {
   await tester.pumpWidget(RhythmoApp(
-    healthCheck: () async {},
+    healthCheck: healthCheck ?? () async {},
     appPreferencesStore: appPreferencesStore ?? MemoryAppPreferencesStore(),
     authApi: api ?? FakeAuthApi(),
     tokenStore: tokenStore,
@@ -262,14 +265,17 @@ void main() {
     expect(find.textContaining('API_BASE_URL'), findsOneWidget);
   });
 
-  testWidgets('shows retry when the API is unavailable', (tester) async {
-    await tester.pumpWidget(
-      RhythmoApp(healthCheck: () async => throw Exception('offline')),
+  testWidgets('offline, the app still opens and says it is offline',
+      (tester) async {
+    await _pumpApp(
+      tester,
+      tokenStore: MemoryTokenStore('valid-token'),
+      healthCheck: () async => throw Exception('offline'),
     );
-    await tester.pumpAndSettle();
 
-    expect(find.text('اتصال به سرور برقرار نشد'), findsOneWidget);
-    expect(find.text('تلاش دوباره'), findsOneWidget);
+    expect(find.text('اتصال به سرور برقرار نشد'), findsNothing);
+    expect(find.text(offlineStripText), findsOneWidget);
+    expect(find.byType(LibraryScreen), findsOneWidget);
   });
 
   testWidgets('without a saved token the sign-in screen is shown', (

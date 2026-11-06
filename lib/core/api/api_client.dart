@@ -6,7 +6,10 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:rhythmo/core/network/network_status.dart';
+import 'package:rhythmo/core/offline/response_cache.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
 import 'package:rhythmo/features/bots/data/messenger_bot.dart';
 import 'package:rhythmo/features/library/data/track.dart';
@@ -396,8 +399,44 @@ class ApiClient
         AdminQuotaApi,
         BaleArchiveApi,
         BaleTopicCatalogApi {
-  ApiClient(this.baseUri, {http.Client? httpClient})
+  ApiClient(this.baseUri,
+      {http.Client? httpClient, this.offlineCache, this.network})
       : _httpClient = httpClient ?? http.Client();
+
+  /// Where the answers the app needs offline are kept; null keeps none.
+  final ResponseCache? offlineCache;
+
+  /// Told whether each request reached the server.
+  final NetworkStatus? network;
+
+  /// The reads worth keeping for offline use: the account, its music,
+  /// playlists, likes, history, notifications and lyrics, and the public
+  /// playlists a guest browses. Never links, which expire, nor admin pages.
+  static final _offlinePaths = RegExp(r'^/api/v1/('
+      r'me|tracks|playlists(/[^/?]+)?|subscriptions|'
+      r'notifications(/unread-count)?|public-playlists|'
+      r'shared-playlists/[^/?]+|likes\?.*|history(\?.*)?|'
+      r'(tracks|playlists/[^/?]+/tracks)/[^/?]+/lyrics(\?.*)?'
+      r')$');
+
+  /// The account a request is for, without the token itself.
+  static String _scope(String? token) => token == null
+      ? 'guest'
+      : sha256.convert(utf8.encode(token)).toString().substring(0, 24);
+
+  String? _offlineKey(String method, String path, String? token) =>
+      offlineCache != null && method == 'GET' && _offlinePaths.hasMatch(path)
+          ? '${_scope(token)}|$path'
+          : null;
+
+  Future<Map<String, dynamic>?> _offlineAnswer(String? key) async {
+    if (key == null) return null;
+    final raw = await offlineCache!.read(key);
+    return raw == null ? null : _decode(raw);
+  }
+
+  /// Forgets every answer kept for offline use, for example on sign-out.
+  Future<void> forgetOffline() async => offlineCache?.clear();
 
   @override
   Future<BaleTopicCatalog> baleTopics(String token) async {
@@ -567,14 +606,28 @@ class ApiClient
                 ? '/api/v1/playlists/${Uri.encodeComponent(track.viaPlaylist!)}/tracks/$id/artwork'
                 : '/api/v1/tracks/$id/artwork';
     if (!track.playsWithoutAccount && token == null) return null;
-    final response = await _httpClient.get(
-      baseUri.resolve(path),
-      headers: {if (token != null) 'Authorization': 'Bearer $token'},
-    ).timeout(_timeout);
+    final key = offlineCache == null
+        ? null
+        : '${_scope(token)}|$path|${track.embeddedTags.version ?? 0}';
+    final http.Response response;
+    try {
+      response = await _httpClient.get(
+        baseUri.resolve(path),
+        headers: {if (token != null) 'Authorization': 'Bearer $token'},
+      ).timeout(_timeout);
+    } catch (_) {
+      network?.reportFailure();
+      // Offline, the cover seen last time.
+      if (key != null) return offlineCache!.readBytes(key);
+      rethrow;
+    }
     if (response.statusCode != 200 ||
         response.bodyBytes.length > 512 * 1024 ||
         response.headers['content-type'] != 'image/jpeg') {
       return null;
+    }
+    if (key != null) {
+      unawaited(offlineCache!.writeBytes(key, response.bodyBytes));
     }
     return response.bodyBytes;
   }
@@ -1396,18 +1449,31 @@ class ApiClient
     }
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
 
-    late http.Response response;
+    final offlineKey = _offlineKey(method, path, token);
+    final http.Response response;
     try {
       response = await _httpClient
           .send(request)
           .then(http.Response.fromStream)
           .timeout(requestTimeout ?? _timeout);
-    } on TimeoutException {
-      if (requestTimeout != null) {
+    } catch (error) {
+      network?.reportFailure();
+      // Offline: what the server said last time, if it was kept.
+      final kept = await _offlineAnswer(offlineKey);
+      if (kept != null) return kept;
+      if (error is TimeoutException && requestTimeout != null) {
         throw const ApiException('Link import request timed out.',
             code: 'import_timeout');
       }
       rethrow;
+    }
+    // The proxy answers for a server that is down or restarting.
+    if (const {502, 503, 504}.contains(response.statusCode)) {
+      network?.reportFailure();
+      final kept = await _offlineAnswer(offlineKey);
+      if (kept != null) return kept;
+    } else {
+      network?.reportSuccess();
     }
     final decoded = _decode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -1422,6 +1488,9 @@ class ApiClient
     if (!expectBody) return const {};
     if (decoded == null) {
       throw const ApiException('Server returned an invalid response.');
+    }
+    if (offlineKey != null) {
+      unawaited(offlineCache!.write(offlineKey, response.body));
     }
     return decoded;
   }

@@ -19,6 +19,10 @@ class FakeAudioCache implements AudioCache {
       AudioSource.uri(url, tag: track.id);
 
   @override
+  Future<bool> hasComplete(Track track) async =>
+      files[track.id] == track.sizeBytes;
+
+  @override
   Future<int> sizeBytes() async {
     if (error != null) throw error!;
     return files.values.fold<int>(0, (sum, bytes) => sum + bytes);
