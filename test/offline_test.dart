@@ -373,6 +373,15 @@ void main() {
       expect(songs.isSaving('b'), isFalse);
     });
   });
+
+  test('a late answer after the app closed does not reach a disposed list',
+      () async {
+    final api = _Playlists();
+    final playlists = PlaylistsController(api: api, token: () => 'tok');
+    final loading = playlists.load();
+    playlists.dispose();
+    await loading;
+  });
 }
 
 class _SongStore implements OfflineSongStore {

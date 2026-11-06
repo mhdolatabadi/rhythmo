@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/identify/data/snippet_recorder.dart';
 import 'package:rhythmo/features/library/data/track.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum IdentifyPhase {
   /// Explains what happens before the microphone is asked for.
@@ -23,7 +24,7 @@ enum IdentifyPhase {
 
 /// «این آهنگ چیه؟»: records a snippet, sends it to the server, and holds
 /// the answer. The snippet is never kept: once sent, it is dropped.
-class IdentifyController extends ChangeNotifier {
+class IdentifyController extends ChangeNotifier with QuietAfterDispose {
   IdentifyController({
     required IdentifyApi api,
     required SnippetRecorder recorder,

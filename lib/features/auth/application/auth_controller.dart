@@ -2,10 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum AuthStatus { restoring, restoreFailed, signedOut, signedIn }
 
-class AuthController extends ChangeNotifier {
+class AuthController extends ChangeNotifier with QuietAfterDispose {
   AuthController({required AuthApi api, required TokenStore tokenStore})
       : _api = api,
         _tokenStore = tokenStore;

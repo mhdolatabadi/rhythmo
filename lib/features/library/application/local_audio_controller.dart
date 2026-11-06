@@ -5,6 +5,7 @@ import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/library/data/track_metadata.dart';
 import 'package:rhythmo/features/library/data/local_track_metadata_store.dart';
 import 'package:rhythmo/features/library/data/local_audio_metadata_writer.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum DeviceDeleteResult { deleted, declined, permissionDenied, failed }
 
@@ -17,7 +18,7 @@ enum LocalAudioViewStatus {
   unsupported,
 }
 
-class LocalAudioController extends ChangeNotifier {
+class LocalAudioController extends ChangeNotifier with QuietAfterDispose {
   LocalAudioController(this._library,
       {LocalTrackMetadataStore? metadataStore,
       LocalAudioMetadataWriter? metadataWriter})

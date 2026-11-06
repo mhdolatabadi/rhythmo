@@ -7,6 +7,7 @@ import 'package:rhythmo/features/bots/data/messenger_bot.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/features/notifications/data/notifications.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum PlaylistsStatus { loading, loaded, error }
 
@@ -28,7 +29,7 @@ class SharedPlaylistUnavailable implements Exception {
   const SharedPlaylistUnavailable();
 }
 
-class PlaylistsController extends ChangeNotifier {
+class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
   PlaylistsController(
       {required PlaylistsApi api,
       required String? Function() token,

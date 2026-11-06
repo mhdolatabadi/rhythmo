@@ -4,12 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/store/data/store_catalog.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum StoreStatus { idle, loading, loaded, error }
 
 /// One store listing, loaded a page at a time as the listener scrolls. A
 /// response that arrives after the listing was reloaded is dropped.
-class StoreListing<T> extends ChangeNotifier {
+class StoreListing<T> extends ChangeNotifier with QuietAfterDispose {
   StoreListing(this._fetch);
 
   final Future<StorePage<T>> Function(int offset) _fetch;
@@ -99,7 +100,7 @@ enum StoreReportResult { sent, gone, tooMany, failed }
 /// The public store (#243): songs, artists and albums from every public
 /// playlist, searchable and playable without an account. Adding a song to
 /// the library and reporting one need an account.
-class StoreController extends ChangeNotifier {
+class StoreController extends ChangeNotifier with QuietAfterDispose {
   StoreController({
     required StoreApi api,
     required String? Function() token,

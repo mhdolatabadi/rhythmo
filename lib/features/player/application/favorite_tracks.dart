@@ -8,6 +8,7 @@ import 'package:rhythmo/core/offline/offline_outbox.dart';
 import 'package:rhythmo/features/player/application/last_playback.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/likes/data/likes.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 /// Where liked track ids are kept between launches.
 abstract interface class FavoritesStore {
@@ -57,7 +58,7 @@ enum TrackLikeResult { done, needsAccount, failed }
 /// on this device, and every like while signed out, stays on the device.
 /// Likes saved on the device before server likes existed are moved to the
 /// server once, when they are the listener's own cloud tracks.
-class FavoriteTracks extends ChangeNotifier {
+class FavoriteTracks extends ChangeNotifier with QuietAfterDispose {
   FavoriteTracks(
       {FavoritesStore? store,
       LikesApi? api,

@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:rhythmo/features/library/data/track.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 /// Songs the listener chose to keep in the browser for offline play. On
 /// Android the audio cache already keeps what was played.
@@ -14,7 +15,7 @@ abstract interface class OfflineSongStore {
 
 /// «ذخیره برای آفلاین» in the browser: which songs are kept, and keeping or
 /// letting go of one.
-class OfflineSongs extends ChangeNotifier {
+class OfflineSongs extends ChangeNotifier with QuietAfterDispose {
   OfflineSongs({
     required OfflineSongStore store,
     required Future<Uri> Function(Track track) link,

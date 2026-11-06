@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/offline/response_cache.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 /// Whether [error] means the server could not be reached, rather than that
 /// it refused: no connection, a timeout, or a proxy answering for it.
@@ -18,7 +19,7 @@ bool isUnreachable(Object error) =>
 /// server can take them: likes, and songs added to or arranged in their
 /// playlists. Each is a small JSON map with a `kind`; a newer change to the
 /// same thing replaces the older one, so only the last state is sent.
-class OfflineOutbox extends ChangeNotifier {
+class OfflineOutbox extends ChangeNotifier with QuietAfterDispose {
   OfflineOutbox(
       {required ResponseCache store, required String? Function() account})
       : _store = store,
