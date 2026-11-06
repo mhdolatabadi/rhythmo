@@ -2,10 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum AuthStatus { restoring, restoreFailed, signedOut, signedIn }
 
-class AuthController extends ChangeNotifier {
+class AuthController extends ChangeNotifier with QuietAfterDispose {
   AuthController({required AuthApi api, required TokenStore tokenStore})
       : _api = api,
         _tokenStore = tokenStore;
@@ -95,6 +96,23 @@ class AuthController extends ChangeNotifier {
     if (currentToken == null) return;
     final user = await _api.me(currentToken);
     if (token == currentToken) _set(AuthStatus.signedIn, user);
+  }
+
+  /// Checks the session again once the server can be reached after the app
+  /// ran offline: a session ended elsewhere in the meantime signs out here
+  /// too, and a restore that failed for lack of a connection is retried.
+  Future<void> revalidate() async {
+    if (_status == AuthStatus.restoreFailed) return restore();
+    if (_status != AuthStatus.signedIn) return;
+    try {
+      await refreshUser();
+    } on ApiException catch (error) {
+      if (error.isUnauthorized && _status == AuthStatus.signedIn) {
+        await logout();
+      }
+    } catch (_) {
+      // Still unreachable; the next reconnect checks again.
+    }
   }
 
   Future<void> logout() async {

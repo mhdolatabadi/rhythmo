@@ -278,6 +278,8 @@ class _DelayedCache implements AudioCache {
   }
 
   @override
+  Future<bool> hasComplete(Track track) async => false;
+  @override
   bool get isManaged => false;
   @override
   Future<int> sizeBytes() async => 0;

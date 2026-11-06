@@ -31,7 +31,7 @@ class LastPlayback {
   /// Reads a saved snapshot; null when it is missing or unreadable.
   static LastPlayback? fromJson(Object? json) {
     if (json is! Map) return null;
-    final track = _trackFromJson(json['track']);
+    final track = trackFromJson(json['track']);
     if (track == null) return null;
     final upcoming = json['upcoming'];
     final positionMs = json['positionMs'];
@@ -48,7 +48,7 @@ class LastPlayback {
       upcoming: [
         if (upcoming is List)
           for (final item in upcoming.take(lastPlaybackQueueLimit))
-            if (_trackFromJson(item) case final track?) track,
+            if (trackFromJson(item) case final track?) track,
       ],
       position: position,
       duration: duration,
@@ -61,10 +61,10 @@ class LastPlayback {
   }
 
   Map<String, Object?> toJson() => {
-        'track': _trackToJson(track),
+        'track': trackToJson(track),
         'upcoming': [
           for (final track in upcoming.take(lastPlaybackQueueLimit))
-            _trackToJson(track),
+            trackToJson(track),
         ],
         'positionMs': position.inMilliseconds,
         'durationMs': duration?.inMilliseconds,
@@ -80,7 +80,8 @@ class LastPlayback {
   }
 }
 
-Map<String, Object?> _trackToJson(Track track) => {
+/// A track as saved on the device, for [trackFromJson].
+Map<String, Object?> trackToJson(Track track) => {
       'id': track.id,
       'title': track.title,
       'artist': track.artist,
@@ -96,6 +97,9 @@ Map<String, Object?> _trackToJson(Track track) => {
       'viaPlaylist': track.viaPlaylist,
       'fromStore': track.fromStore,
       'version': track.version,
+      // The cached file's name carries it; without it a restored track
+      // would not find, and would drop, the copy kept for offline play.
+      'tagsVersion': track.embeddedTags.version,
       'replayGain': switch (track.replayGain) {
         final gain? => {
             'trackGainDb': gain.trackGainDb,
@@ -107,7 +111,8 @@ Map<String, Object?> _trackToJson(Track track) => {
       },
     };
 
-Track? _trackFromJson(Object? json) {
+/// A track saved by [trackToJson]; null when unreadable or a browser file.
+Track? trackFromJson(Object? json) {
   if (json is! Map) return null;
   final id = json['id'];
   final title = json['title'];
@@ -138,6 +143,11 @@ Track? _trackFromJson(Object? json) {
     viaPlaylist: text('viaPlaylist'),
     fromStore: json['fromStore'] == true,
     version: json['version'] is int ? json['version'] as int : 1,
+    embeddedTags: json['tagsVersion'] is int
+        ? EmbeddedTags(
+            status: EmbeddedTagStatus.written,
+            version: json['tagsVersion'] as int)
+        : const EmbeddedTags(),
     replayGain: replayGain is Map
         ? ReplayGain.fromJson(replayGain.cast<String, dynamic>())
         : null,

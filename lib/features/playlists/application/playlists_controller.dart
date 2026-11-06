@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/core/api/api_client.dart';
+import 'package:rhythmo/core/offline/offline_outbox.dart';
+import 'package:rhythmo/features/player/application/last_playback.dart';
 import 'package:rhythmo/features/bots/data/messenger_bot.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'package:rhythmo/features/notifications/data/notifications.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum PlaylistsStatus { loading, loaded, error }
 
@@ -26,7 +29,7 @@ class SharedPlaylistUnavailable implements Exception {
   const SharedPlaylistUnavailable();
 }
 
-class PlaylistsController extends ChangeNotifier {
+class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
   PlaylistsController(
       {required PlaylistsApi api,
       required String? Function() token,
@@ -34,8 +37,10 @@ class PlaylistsController extends ChangeNotifier {
       DevicePlaylistStore? deviceStore,
       NotificationsApi? subscriptions,
       BotChannelsApi? channels,
+      OfflineOutbox? outbox,
       String? Function()? accountId})
       : _api = api,
+        _outbox = outbox,
         _subscriptions = subscriptions,
         _channels = channels,
         _token = token,
@@ -63,6 +68,9 @@ class PlaylistsController extends ChangeNotifier {
   }
 
   final PlaylistsApi _api;
+
+  /// Keeps songs added or arranged offline until the server can take them.
+  final OfflineOutbox? _outbox;
   final NotificationsApi? _subscriptions;
   final BotChannelsApi? _channels;
   final String? Function() _token;
@@ -286,8 +294,11 @@ class PlaylistsController extends ChangeNotifier {
   Future<bool> load() async {
     final token = _token();
     if (token == null) return false;
-    status = PlaylistsStatus.loading;
-    notifyListeners();
+    // A refresh keeps the playlists on screen; only a first load waits.
+    if (status != PlaylistsStatus.loaded) {
+      status = PlaylistsStatus.loading;
+      notifyListeners();
+    }
     try {
       playlists = await Future.wait(
           (await _api.listPlaylists(token)).map(_withDeviceTracks));
@@ -295,6 +306,10 @@ class PlaylistsController extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (_) {
+      if (status == PlaylistsStatus.loaded) {
+        notifyListeners();
+        return false;
+      }
       status = PlaylistsStatus.error;
       notifyListeners();
       return false;
@@ -396,10 +411,60 @@ class PlaylistsController extends ChangeNotifier {
     final token = _token();
     if (token == null) return null;
     try {
-      return await _withDeviceTracks(await _api.getPlaylist(token, id));
+      return await _withDeviceTracks(
+          await _withPending(await _api.getPlaylist(token, id)));
     } catch (_) {
       return null;
     }
+  }
+
+  static const _addKind = 'playlistAdd';
+  static const _arrangeKind = 'playlistTracks';
+
+  /// [playlist] with the changes made to it offline that the server has
+  /// not taken yet.
+  Future<Playlist> _withPending(Playlist playlist) async {
+    var tracks = playlist.tracks;
+    for (final action in await _outbox?.pending() ?? const []) {
+      if (action['playlistId'] != playlist.id) continue;
+      if (action['kind'] == _addKind) {
+        final track = trackFromJson(action['track']);
+        if (track != null && !tracks.any((t) => t.id == track.id)) {
+          tracks = [...tracks, track];
+        }
+      } else if (action['kind'] == _arrangeKind && action['trackIds'] is List) {
+        final byId = {for (final track in tracks) track.id: track};
+        tracks = [
+          for (final id in action['trackIds'] as List)
+            if (byId[id] case final track?) track,
+        ];
+      }
+    }
+    return identical(tracks, playlist.tracks)
+        ? playlist
+        : playlist.withTracks(tracks);
+  }
+
+  /// Sends a playlist change kept while offline; throws when it can't be
+  /// sent now. Returns false for a change that isn't a playlist's.
+  Future<bool> sendPending(Map<String, Object?> action) async {
+    final kind = action['kind'];
+    if (kind != _addKind && kind != _arrangeKind) return false;
+    final token = _token(), id = action['playlistId'];
+    if (token == null || id is! String) return true;
+    if (kind == _addKind) {
+      final track = trackFromJson(action['track']);
+      if (track == null) return true;
+      final ids =
+          (await _api.getPlaylist(token, id)).tracks.map((t) => t.id).toList();
+      if (!ids.contains(track.id)) {
+        await _api.replacePlaylistTracks(token, id, [...ids, track.id]);
+      }
+    } else if (action['trackIds'] is List) {
+      await _api.replacePlaylistTracks(
+          token, id, (action['trackIds'] as List).whereType<String>().toList());
+    }
+    return true;
   }
 
   Future<Playlist?> replaceTracks(String id, List<String> trackIds,
@@ -425,14 +490,31 @@ class PlaylistsController extends ChangeNotifier {
           cloud.add(trackId);
         }
       }
-      final remote = await _api.getPlaylist(token, id);
-      final before = remote.tracks.map((t) => t.id).toList();
-      final playlist = listEquals(before, cloud)
-          ? remote
-          : await _api.replacePlaylistTracks(token, id, cloud);
-      await _deviceStore.write(_deviceKey(id), local);
-      await load();
-      return await _withDeviceTracks(playlist);
+      Playlist? remote;
+      try {
+        remote = await _api.getPlaylist(token, id);
+        final before = remote.tracks.map((t) => t.id).toList();
+        final playlist = listEquals(before, cloud)
+            ? remote
+            : await _api.replacePlaylistTracks(token, id, cloud);
+        await _deviceStore.write(_deviceKey(id), local);
+        await load();
+        return await _withDeviceTracks(playlist);
+      } catch (error) {
+        final outbox = _outbox;
+        if (outbox == null || remote == null || !isUnreachable(error)) {
+          rethrow;
+        }
+        // Offline: the new order shows now and is sent once back online.
+        await outbox.add({
+          'kind': _arrangeKind,
+          'key': '$_arrangeKind:$id',
+          'playlistId': id,
+          'trackIds': cloud,
+        });
+        await _deviceStore.write(_deviceKey(id), local);
+        return await _withDeviceTracks(await _withPending(remote));
+      }
     } catch (_) {
       return null;
     }
@@ -440,7 +522,7 @@ class PlaylistsController extends ChangeNotifier {
 
   Future<AddTrackResult> addDeviceTrack(String id, Track track) async {
     if (!track.id.startsWith('device:') || !track.isLocal) {
-      return addTrack(id, track.id);
+      return addTrack(id, track.id, track: track);
     }
     final playlist = await loadPlaylist(id);
     if (playlist == null) return AddTrackResult.failure;
@@ -453,11 +535,14 @@ class PlaylistsController extends ChangeNotifier {
     return updated == null ? AddTrackResult.failure : AddTrackResult.added;
   }
 
-  Future<AddTrackResult> addTrack(String id, String trackId) async {
+  /// Adds [trackId] to the playlist. Offline, with the [track] itself, the
+  /// song is added on this device at once and sent once back online.
+  Future<AddTrackResult> addTrack(String id, String trackId,
+      {Track? track}) async {
     final token = _token();
     if (token == null) return AddTrackResult.failure;
     try {
-      final playlist = await _api.getPlaylist(token, id);
+      final playlist = await _withPending(await _api.getPlaylist(token, id));
       final trackIds = playlist.tracks.map((track) => track.id).toList();
       if (trackIds.contains(trackId)) return AddTrackResult.alreadyPresent;
       final updated = await _api.replacePlaylistTracks(
@@ -471,8 +556,26 @@ class PlaylistsController extends ChangeNotifier {
           .toList(growable: false);
       notifyListeners();
       return AddTrackResult.added;
-    } catch (_) {
-      return AddTrackResult.failure;
+    } catch (error) {
+      final outbox = _outbox;
+      if (outbox == null || track == null || !isUnreachable(error)) {
+        return AddTrackResult.failure;
+      }
+      await outbox.add({
+        'kind': _addKind,
+        'key': '$_addKind:$id:${track.id}',
+        'playlistId': id,
+        'track': trackToJson(track),
+      });
+      playlists = [
+        for (final item in playlists)
+          item.id == id
+              ? item.withTracks([...item.tracks, track],
+                  trackCount: item.displayTrackCount + 1)
+              : item,
+      ];
+      notifyListeners();
+      return AddTrackResult.added;
     }
   }
 

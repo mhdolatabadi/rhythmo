@@ -7,6 +7,7 @@ import 'package:rhythmo/features/library/data/local_audio_upload.dart';
 import 'package:rhythmo/features/library/data/track_download.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/upload/application/upload_controller.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 /// Which way a track's file is being copied.
 enum SyncKind {
@@ -106,7 +107,7 @@ class SyncOperation {
 /// per-file progress and the cleanup of failed uploads are the same as for
 /// picked files. Downloads save the stored original through a short-lived
 /// link. Files are copied as they are, never transcoded.
-class LibrarySyncController extends ChangeNotifier {
+class LibrarySyncController extends ChangeNotifier with QuietAfterDispose {
   LibrarySyncController({
     required UploadController uploads,
     required LocalAudioUploadSource uploadSource,

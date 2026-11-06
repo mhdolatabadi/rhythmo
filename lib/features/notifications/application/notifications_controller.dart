@@ -3,13 +3,14 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/features/notifications/data/notifications.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum NotificationsStatus { loading, loaded, error }
 
 /// The notices of audio added to the public playlists this account
 /// subscribed to, and those playlists, like a messenger's channels. The
 /// unread count is checked every [pollEvery] while [startPolling] runs.
-class NotificationsController extends ChangeNotifier {
+class NotificationsController extends ChangeNotifier with QuietAfterDispose {
   NotificationsController({
     required NotificationsApi api,
     required String? Function() token,

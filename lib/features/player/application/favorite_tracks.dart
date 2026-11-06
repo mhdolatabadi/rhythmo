@@ -4,8 +4,11 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rhythmo/core/api/api_client.dart';
+import 'package:rhythmo/core/offline/offline_outbox.dart';
+import 'package:rhythmo/features/player/application/last_playback.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/likes/data/likes.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 /// Where liked track ids are kept between launches.
 abstract interface class FavoritesStore {
@@ -55,12 +58,19 @@ enum TrackLikeResult { done, needsAccount, failed }
 /// on this device, and every like while signed out, stays on the device.
 /// Likes saved on the device before server likes existed are moved to the
 /// server once, when they are the listener's own cloud tracks.
-class FavoriteTracks extends ChangeNotifier {
+class FavoriteTracks extends ChangeNotifier with QuietAfterDispose {
   FavoriteTracks(
-      {FavoritesStore? store, LikesApi? api, String? Function()? token})
+      {FavoritesStore? store,
+      LikesApi? api,
+      String? Function()? token,
+      OfflineOutbox? outbox})
       : _store = store ?? MemoryFavoritesStore(),
         _api = api,
+        _outbox = outbox,
         _token = token ?? (() => null);
+
+  /// Keeps likes made offline until the server can take them.
+  final OfflineOutbox? _outbox;
 
   final FavoritesStore _store;
   final LikesApi? _api;
@@ -155,6 +165,13 @@ class FavoriteTracks extends ChangeNotifier {
       _remote = {
         for (final song in liked) ...{song.track.id, ...song.trackIds}
       };
+      // Likes made offline and not sent yet still show.
+      for (final action in await _outbox?.pending() ?? const []) {
+        final track = trackFromJson(action['track']);
+        if (action['kind'] == _likeKind && track != null) {
+          _setRemote(track, action['liked'] == true);
+        }
+      }
       notifyListeners();
     } catch (error) {
       debugPrint('Server likes unavailable: $error');
@@ -199,6 +216,18 @@ class FavoriteTracks extends ChangeNotifier {
       await api.setLike(token, track, liked);
       return TrackLikeResult.done;
     } catch (error) {
+      final outbox = _outbox;
+      if (outbox != null && isUnreachable(error)) {
+        // Offline: the heart stays as tapped, and the server hears of it
+        // once it can be reached.
+        await outbox.add({
+          'kind': _likeKind,
+          'key': '$_likeKind:${track.id}',
+          'liked': liked,
+          'track': trackToJson(track),
+        });
+        return TrackLikeResult.done;
+      }
       debugPrint('Could not change like: $error');
       _remote = before.$1;
       _songs = before.$2;
@@ -208,6 +237,19 @@ class FavoriteTracks extends ChangeNotifier {
       _busy.remove(track.id);
       notifyListeners();
     }
+  }
+
+  static const _likeKind = 'like';
+
+  /// Sends a like kept while offline; throws when it can't be sent now.
+  /// Returns false for a change that isn't a like.
+  Future<bool> sendPending(Map<String, Object?> action) async {
+    if (action['kind'] != _likeKind) return false;
+    final api = _api, token = _token();
+    final track = trackFromJson(action['track']);
+    if (api == null || token == null || track == null) return true;
+    await api.setLike(token, track, action['liked'] == true);
+    return true;
   }
 
   void _setRemote(Track track, bool liked) {

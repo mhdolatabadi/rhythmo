@@ -47,6 +47,9 @@ Duration listenThreshold(Duration? duration) {
   return half < meaningfulListen ? half : meaningfulListen;
 }
 
+/// Stands in for a stream link for a track the audio cache holds whole.
+Uri cachedTrackUri(Track track) => Uri(scheme: 'rhythmo-cache', path: track.id);
+
 /// Plays a queue of tracks, one at a time, from short-lived stream URLs.
 class PlayerController extends ChangeNotifier {
   PlayerController({
@@ -61,7 +64,9 @@ class PlayerController extends ChangeNotifier {
     this.onListened,
     this.journey,
     this.lyrics,
+    Future<bool> Function(Track track)? isCached,
   })  : _api = api,
+        _isCached = isCached,
         _engine = engine,
         _token = token,
         _random = random ?? Random(),
@@ -98,6 +103,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   final TracksApi _api;
+
+  /// Whether a track is fully kept on this device; it then plays from there
+  /// without asking the server for a link, also offline.
+  final Future<bool> Function(Track track)? _isCached;
   final AudioEngine _engine;
   final String? Function() _token;
   final Random _random;
@@ -566,7 +575,7 @@ class PlayerController extends ChangeNotifier {
         // A link can fail during initial loading too, before the engine
         // starts playing. Keep the same sharing authorization on retry.
         _retriedLink = true;
-        final fresh = await _link(token, track);
+        final fresh = await _link(token, track, fresh: true);
         if (request != _request) return;
         await _engine.load(track, fresh.url, start: start ?? Duration.zero);
       }
@@ -841,8 +850,19 @@ class PlayerController extends ChangeNotifier {
   /// Someone else's track is played through the shared link or the
   /// collaborative playlist it was opened from, a store song through the
   /// store; the user's own directly.
-  Future<StreamLink> _link(String? token, Track track) async {
+  /// A fresh link to [track]'s file, for keeping it in the browser.
+  Future<Uri> linkFor(Track track) async =>
+      (await _link(_token(), track, fresh: true)).url;
+
+  /// [fresh] always asks the server, for when the kept file failed.
+  Future<StreamLink> _link(String? token, Track track,
+      {bool fresh = false}) async {
     final request = _request;
+    if (!fresh && (await _isCached?.call(track) ?? false)) {
+      // The engine's cache plays the kept file; this address is never
+      // fetched.
+      return StreamLink(cachedTrackUri(track), DateTime(9999));
+    }
     try {
       return await _requestLink(token, track);
     } catch (error) {
@@ -900,7 +920,7 @@ class PlayerController extends ChangeNotifier {
     _loading = true;
     _setStatus(PlayerStatus.loading);
     try {
-      final link = await _link(token, track);
+      final link = await _link(token, track, fresh: true);
       if (request != _request) return;
       // Reloading drops the preloaded track; it is fetched again later.
       _preloadedId = null;

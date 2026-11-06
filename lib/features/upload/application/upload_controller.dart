@@ -6,6 +6,7 @@ import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/upload/data/audio_formats.dart';
 import 'package:rhythmo/features/upload/data/storage_uploader.dart';
 import 'package:rhythmo/features/upload/data/upload_models.dart';
+import 'package:rhythmo/core/quiet_after_dispose.dart';
 
 enum UploadPhase {
   idle,
@@ -36,7 +37,7 @@ enum UploadError {
 /// Uploads one file at a time: reserve a track, send the file straight to
 /// storage, then ask the API to verify it. A failed upload leaves nothing
 /// behind on the server.
-class UploadController extends ChangeNotifier {
+class UploadController extends ChangeNotifier with QuietAfterDispose {
   UploadController({
     required TracksApi api,
     required StorageUploader uploader,
