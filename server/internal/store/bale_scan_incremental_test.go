@@ -81,3 +81,33 @@ func TestBaleScanRefreshOnlyReadsPostsNewerThanTheLastCompletePass(t *testing.T)
 		t.Fatal("no-op refresh kept scanning")
 	}
 }
+
+func TestRetopicBalePostRegroupsCatalog(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	b := NewBaleImports(pool)
+	claim, _, _ := b.ClaimBaleScan(ctx)
+	_ = b.EnsureBaleScan(ctx)
+	claim, _, _ = b.ClaimBaleScan(ctx)
+	old := []BaleLecture{
+		{MessageID: "1", Date: 1, Title: "الف؛ قسمت اول", Topic: "الف؛ قسمت اول", TopicKey: "الف؛ قسمت اول", FileName: "1.mp3", SizeBytes: 1, Caption: "📋 الف؛ قسمت اول"},
+		{MessageID: "2", Date: 2, Title: "الف؛ قسمت دوم", Topic: "الف؛ قسمت دوم", TopicKey: "الف؛ قسمت دوم", FileName: "2.mp3", SizeBytes: 1, Caption: "📋 الف؛ قسمت دوم"},
+	}
+	if err := b.SaveBalePage(ctx, claim, old, 1, false, 2); err != nil {
+		t.Fatal(err)
+	}
+	posts, err := b.BaleCatalogPosts(ctx)
+	if err != nil || len(posts) != 2 {
+		t.Fatal(posts, err)
+	}
+	for i, p := range posts {
+		p.Topic, p.TopicKey, p.Session = "الف", "الف", i+1
+		if err := b.RetopicBalePost(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	catalog, err := b.BaleCatalog(ctx, "00000000-0000-0000-0000-000000000000")
+	if err != nil || len(catalog.Topics) != 1 || catalog.Topics[0].Total != 2 {
+		t.Fatalf("%+v %v", catalog.Topics, err)
+	}
+}

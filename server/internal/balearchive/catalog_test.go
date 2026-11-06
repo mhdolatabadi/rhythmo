@@ -87,3 +87,34 @@ func TestWholeTopicWaitsForQueueCapacityInsteadOfFailing(t *testing.T) {
 		t.Fatal("capacity wait lost durable request")
 	}
 }
+
+type retopicDB struct {
+	CatalogStore
+	posts   []store.BaleCatalogPost
+	updated []store.BaleCatalogPost
+}
+
+func (d *retopicDB) BaleCatalogPosts(context.Context) ([]store.BaleCatalogPost, error) {
+	return d.posts, nil
+}
+func (d *retopicDB) RetopicBalePost(_ context.Context, p store.BaleCatalogPost) error {
+	d.updated = append(d.updated, p)
+	return nil
+}
+func TestRetopicGroupsPartsIndexedUnderOldRules(t *testing.T) {
+	caption := "🎙 #سخنرانی_کامل\n📋 ماجرای یک جنایت قانونی؛ قسمت دوم"
+	ok := store.BaleCatalogPost{MessageID: "1", Caption: "📋 موضوع؛ جلسه اول", Title: "موضوع؛ جلسه اول", Topic: "موضوع", TopicKey: "موضوع", Session: 1}
+	db := &retopicDB{posts: []store.BaleCatalogPost{
+		ok,
+		{MessageID: "2", Caption: caption, Title: "ماجرای یک جنایت قانونی؛ قسمت دوم", Topic: "ماجرای یک جنایت قانونی؛ قسمت دوم", TopicKey: "ماجرای یک جنایت قانونی؛ قسمت دوم"},
+		{MessageID: "3", Caption: "", Topic: "seeded", TopicKey: "seeded", Session: 4},
+	}}
+	(&Service{}).retopic(context.Background(), db)
+	if len(db.updated) != 1 {
+		t.Fatalf("updated %+v", db.updated)
+	}
+	got := db.updated[0]
+	if got.MessageID != "2" || got.TopicKey != "ماجرای یک جنایت قانونی" || got.Session != 2 {
+		t.Fatalf("bad retopic %+v", got)
+	}
+}
