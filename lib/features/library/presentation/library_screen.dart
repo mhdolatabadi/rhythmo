@@ -335,6 +335,8 @@ class _LibraryScreenState extends State<LibraryScreen>
     widget.botLinks?.load();
     widget.recent?.load();
     widget.notifications?.startPolling();
+    // «خانه» shows the newest of them (#447).
+    widget.notifications?.load();
     _recentSearches.load();
     widget.library.addListener(_onLibraryChanged);
     widget.localAudio.addListener(_onLocalAudioChanged);
@@ -601,6 +603,20 @@ class _LibraryScreenState extends State<LibraryScreen>
     if (mounted) playlists.load();
   }
 
+  Future<void> _openChannel(String shareToken) async {
+    final playlists = widget.playlists;
+    if (playlists == null) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => SharedPlaylistScreen(
+        shareToken: shareToken,
+        controller: playlists,
+        player: widget.player,
+        onSaved: widget.library.load,
+      ),
+    ));
+    if (mounted) widget.notifications?.load();
+  }
+
   Future<void> _openNotifications() async {
     final notifications = widget.notifications;
     final playlists = widget.playlists;
@@ -787,6 +803,10 @@ class _LibraryScreenState extends State<LibraryScreen>
             changes: _libraryChanges,
             tracks: _unifiedTracks,
             recent: widget.recent,
+            notifications:
+                widget.playlists == null ? null : widget.notifications,
+            onOpenNotifications: _openNotifications,
+            onOpenChannel: _openChannel,
             onAddMusic: _showAddMenu,
             onPopular: widget.playlists == null ? null : _openPopular,
             onStore: widget.store == null ? null : _openStore,

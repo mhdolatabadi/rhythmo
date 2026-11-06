@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rhythmo/app/app_theme.dart';
+import 'package:rhythmo/core/design/design.dart';
+import 'package:rhythmo/features/history/application/recently_played_controller.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/library/presentation/home_view.dart';
 import 'package:rhythmo/features/library/presentation/rhythmo_dock.dart';
+import 'package:rhythmo/features/notifications/application/notifications_controller.dart';
+import 'package:rhythmo/features/notifications/data/notifications.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 
 import 'player_controller_test.dart' show FakeAudioEngine;
+import 'playlist_subscriptions_test.dart' show FakeNotificationsApi;
+import 'recently_played_test.dart' show FakeHistoryApi;
 import 'upload_controller_test.dart' show FakeTracksApi;
 
 Track _track(String id, {DateTime? addedAt}) => Track(
@@ -17,14 +23,6 @@ Track _track(String id, {DateTime? addedAt}) => Track(
     addedAt: addedAt);
 
 void main() {
-  test('the greeting follows the hour', () {
-    expect(homeGreeting(DateTime(2026, 1, 1, 8)), 'صبح بخیر');
-    expect(homeGreeting(DateTime(2026, 1, 1, 13)), 'روز بخیر');
-    expect(homeGreeting(DateTime(2026, 1, 1, 18)), 'عصر بخیر');
-    expect(homeGreeting(DateTime(2026, 1, 1, 23)), 'شب بخیر');
-    expect(homeGreeting(DateTime(2026, 1, 1, 2)), 'شب بخیر');
-  });
-
   test('the shelf puts the newest first and undated tracks last', () {
     final shelf = newestTracks([
       _track('old', addedAt: DateTime(2026, 1, 1)),
@@ -47,7 +45,11 @@ void main() {
         {VoidCallback? onAddMusic,
         VoidCallback? onPopular,
         VoidCallback? onStore,
-        VoidCallback? onIdentify}) async {
+        VoidCallback? onIdentify,
+        NotificationsController? notifications,
+        VoidCallback? onOpenNotifications,
+        ValueChanged<String>? onOpenChannel,
+        RecentlyPlayedController? recent}) async {
       tester.view.physicalSize = const Size(360, 740);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -63,22 +65,79 @@ void main() {
             onPopular: onPopular,
             onStore: onStore,
             onIdentify: onIdentify,
-            now: () => DateTime(2026, 10, 29, 22),
+            notifications: notifications,
+            recent: recent,
+            onOpenNotifications: onOpenNotifications,
+            onOpenChannel: onOpenChannel,
           ),
         ),
       ));
     }
 
+    testWidgets(
+        'new songs from followed channels show, with «همه» for the rest '
+        '(#447)', (tester) async {
+      final api = FakeNotificationsApi()
+        ..notices = [
+          for (var i = 0; i < 5; i++)
+            PlaylistNotification(
+                id: 'n$i',
+                shareToken: 'ch$i',
+                playlistName: 'Channel $i',
+                trackTitle: 'Song $i',
+                trackCount: 1,
+                read: i > 0,
+                updatedAt: DateTime(2026, 11, 1)),
+        ];
+      final notifications = NotificationsController(api: api, token: () => 't');
+      await notifications.load();
+      var all = 0;
+      final opened = <String>[];
+      await pump(tester, [_track('a')],
+          notifications: notifications,
+          onOpenNotifications: () => all++,
+          onOpenChannel: opened.add);
+
+      expect(find.text('تازه از کانال‌هایت'), findsOneWidget);
+      // Three at most, the unread one with a coral dot.
+      expect(find.text('Song 0'), findsOneWidget);
+      expect(find.text('Song 2'), findsOneWidget);
+      expect(find.text('Song 3'), findsNothing);
+      expect(find.byKey(const ValueKey('unread-dot')), findsOneWidget);
+      await tester.tap(find.text('همه'));
+      expect(all, 1);
+      await tester.tap(find.text('Song 1'));
+      expect(opened, ['ch1']);
+    });
+
+    testWidgets('what was heard lately is a rail of 148 px covers (#447)',
+        (tester) async {
+      final history = FakeHistoryApi()..history = [_track('x'), _track('y')];
+      final recent = RecentlyPlayedController(api: history, token: () => 't');
+      addTearDown(recent.dispose);
+      await recent.load();
+      await pump(tester, [_track('a')], recent: recent);
+
+      expect(find.text('اخیرا شنیدی'), findsOneWidget);
+      final rail = find.byKey(const ValueKey('home-recent'));
+      expect(tester.widget<ListView>(rail).scrollDirection, Axis.horizontal);
+      final cover =
+          find.descendant(of: rail, matching: find.byType(RhythmoArtworkTile));
+      expect(tester.getSize(cover.first).width, 148);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('an empty library offers to add music', (tester) async {
       var asked = false;
       await pump(tester, const [], onAddMusic: () => asked = true);
 
-      expect(find.text('شب بخیر'), findsOneWidget);
+      // No greeting any more (#447).
+      expect(find.text('شب بخیر'), findsNothing);
       await tester.tap(find.text('افزودن موسیقی'));
       expect(asked, isTrue);
     });
 
-    testWidgets('discovery is three small chips right under the greeting',
+    testWidgets('discovery is three small chips above the music',
         (tester) async {
       final opened = <String>[];
       await pump(tester, [_track('a')],
@@ -86,14 +145,12 @@ void main() {
           onStore: () => opened.add('store'),
           onIdentify: () => opened.add('identify'));
 
-      final greeting = tester.getRect(find.text('شب بخیر'));
       final shelf = tester.getRect(find.text('Track a'));
       for (final label in ['محبوب‌ها', 'گنجینه', 'این آهنگ چیه؟']) {
         final chip = tester.getRect(find.ancestor(
             of: find.text(label), matching: find.byType(InkWell)));
-        // Between the greeting and the music, and a full touch target
-        // without being a big card.
-        expect(chip.top, greaterThan(greeting.bottom));
+        // Above the music, and a full touch target without being a big
+        // card.
         expect(chip.bottom, lessThan(shelf.top));
         expect(chip.height, inInclusiveRange(48, 56));
         await tester.tap(find.text(label));

@@ -308,6 +308,11 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Channel mix'), findsOneWidget);
     expect(find.text('«New song» اضافه شد'), findsOneWidget);
+    // One muted line explains the inbox; unread notices sit under «تازه»
+    // and read ones under «قبلی» (#447).
+    expect(find.textContaining('از صفحهٔ خودش بی‌صدا کن'), findsOneWidget);
+    expect(find.text('تازه'), findsOneWidget);
+    expect(find.text('قبلی'), findsNothing);
 
     await tester.tap(find.text('کانال‌های من'));
     await tester.pumpAndSettle();
@@ -320,6 +325,8 @@ void main() {
     expect(api.readCalls, [<String>[]]);
     expect(notifications.unreadCount, 0);
     expect(find.byTooltip('خواندن همه'), findsNothing);
+    expect(find.text('تازه'), findsNothing);
+    expect(find.text('قبلی'), findsOneWidget);
 
     // Opening a notice opens its playlist.
     await tester.tap(find.text('Channel mix'));

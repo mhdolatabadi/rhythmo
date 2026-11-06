@@ -164,24 +164,42 @@ class _NoticeList extends StatelessWidget {
       _ => RefreshIndicator(
           onRefresh: controller.load,
           child: _Rows(
-            count: notices.length,
-            builder: (context, index) {
-              final notice = notices[index];
-              return _Row(
-                key: ValueKey(notice.id),
-                title: notice.playlistName,
-                subtitle: _describe(notice),
-                trailing: _ago(notice.updatedAt),
-                unread: !notice.read,
-                onTap: () {
-                  controller.markOpened(notice);
-                  onOpen(notice.shareToken);
-                },
-              );
+            count: _entries(notices).length,
+            builder: (context, index) => switch (_entries(notices)[index]) {
+              final String heading => _SectionLabel(heading),
+              final PlaylistNotification notice => _Row(
+                  key: ValueKey(notice.id),
+                  title: notice.playlistName,
+                  subtitle: _describe(notice),
+                  trailing: _ago(notice.updatedAt),
+                  unread: !notice.read,
+                  onTap: () {
+                    controller.markOpened(notice);
+                    onOpen(notice.shareToken);
+                  },
+                ),
+              _ => const _Explainer(),
             },
           ),
         ),
     };
+  }
+
+  /// The explainer, then «تازه» (unread) and «قبلی» (read) (#447).
+  static List<Object?> _entries(List<PlaylistNotification> notices) {
+    final fresh = [
+      for (final n in notices)
+        if (!n.read) n
+    ];
+    final older = [
+      for (final n in notices)
+        if (n.read) n
+    ];
+    return [
+      null,
+      if (fresh.isNotEmpty) ...['تازه', ...fresh],
+      if (older.isNotEmpty) ...['قبلی', ...older],
+    ];
   }
 
   static String _describe(PlaylistNotification notice) =>
@@ -253,6 +271,41 @@ class _ChannelList extends StatelessWidget {
         ),
     };
   }
+}
+
+/// One muted line on what shows here, and where a channel is muted.
+class _Explainer extends StatelessWidget {
+  const _Explainer();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Text(
+        'آهنگ‌های تازهٔ کانال‌هایی که دنبال می‌کنی اینجا و در اعلان‌های '
+        'گوشی می‌آیند. هر کانال را از صفحهٔ خودش بی‌صدا کن.',
+        style: theme.textTheme.bodySmall
+            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+        child: Text(title,
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontSize: 18, fontWeight: FontWeight.w600)),
+      );
 }
 
 /// The rows in a centred column that clears the mini player.
