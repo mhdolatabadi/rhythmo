@@ -227,26 +227,32 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
             behavior: HitTestBehavior.opaque,
             onVerticalDragUpdate: _onDragUpdate,
             onVerticalDragEnd: _onDragEnd,
-            child: RhythmoBackdrop(
-              child: Material(
-                type: MaterialType.transparency,
-                child: SafeArea(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints:
-                          const BoxConstraints(maxWidth: nowPlayingMaxWidth),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(RhythmoSpace.lg, 0,
-                            RhythmoSpace.lg, RhythmoSpace.sm),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) =>
-                              _layout(context, constraints, track, tint),
+            // The song's own cover fills the screen; a dark wash over its
+            // lower part keeps the title and controls readable.
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _CoverBackdrop(track: track, tint: tint),
+                Material(
+                  type: MaterialType.transparency,
+                  child: SafeArea(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(maxWidth: nowPlayingMaxWidth),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(RhythmoSpace.lg, 0,
+                              RhythmoSpace.lg, RhythmoSpace.sm),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) =>
+                                _layout(context, constraints, track, tint),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         );
@@ -306,26 +312,60 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
     return Column(
       children: [
         header,
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(
-                top: RhythmoSpace.xs, bottom: RhythmoSpace.md),
-            child: LayoutBuilder(
-              builder: (context, box) => Center(
-                child: NowPlayingArtwork(
-                  track: track,
-                  status: _player.status,
-                  tint: tint,
-                  // A little narrower than the column, as on the design.
-                  size: min(box.maxWidth * 0.8, box.maxHeight),
-                ),
+        // The cover behind is the artwork; every control sits low, in
+        // reach of the thumb.
+        const Spacer(),
+        title,
+        const SizedBox(height: RhythmoSpace.lg),
+        ...details,
+      ],
+    );
+  }
+}
+
+/// The song's cover across the whole screen, or its tint while there is no
+/// cover, under a dark wash that deepens towards the bottom.
+class _CoverBackdrop extends StatelessWidget {
+  const _CoverBackdrop({required this.track, required this.tint});
+
+  final Track track;
+  final Color tint;
+
+  @override
+  Widget build(BuildContext context) {
+    final night = RhythmoColors.background;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        TrackCover(
+          track: track,
+          radius: 0,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color.lerp(tint, night, 0.45)!, night],
               ),
             ),
           ),
         ),
-        title,
-        const SizedBox(height: RhythmoSpace.lg),
-        ...details,
+        DecoratedBox(
+          key: const ValueKey('cover-wash'),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                night.withValues(alpha: 0.25),
+                night.withValues(alpha: 0.1),
+                night.withValues(alpha: 0.72),
+                night.withValues(alpha: 0.95),
+              ],
+              stops: const [0, 0.3, 0.6, 1],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -679,25 +719,21 @@ class _BottomRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // Gives way first on a narrow phone, so speed and details still fit.
-        Expanded(
-          child: Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton.icon(
-              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: onQueue,
-              icon: const Icon(RhythmoIcons.queue),
-              label: Text(
-                upcoming == 0
-                    ? 'صف پخش'
-                    // Not «·»: beside Persian digits it reads as a zero.
-                    : 'صف پخش (${persianDigits(upcoming)})',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+        // Icons only: their names are in the tooltips and for screen
+        // readers. A small count says how many songs wait in the queue.
+        IconButton(
+          tooltip: upcoming == 0
+              ? 'صف پخش'
+              // Not «·»: beside Persian digits it reads as a zero.
+              : 'صف پخش (${persianDigits(upcoming)})',
+          onPressed: onQueue,
+          icon: Badge(
+            isLabelVisible: upcoming > 0,
+            label: Text(persianDigits(upcoming)),
+            child: const Icon(RhythmoIcons.queue),
           ),
         ),
+        const Spacer(),
         SpeedButton(player: player),
         if (onLyrics != null)
           IconButton(

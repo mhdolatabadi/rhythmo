@@ -160,7 +160,7 @@ void main() {
       (tester) async {
     await open(tester);
 
-    await tester.tap(find.text('صف پخش (۲)'));
+    await tester.tap(find.byTooltip('صف پخش (۲)'));
     await advanceUi(tester);
 
     final sheet = find.byType(QueueSheet);
@@ -322,7 +322,7 @@ void main() {
           screen.contains(rect.topLeft) && rect.right <= screen.right, isTrue,
           reason: '$tooltip is on screen');
     }
-    final queue = tester.getRect(find.text('صف پخش (۲)'));
+    final queue = tester.getRect(find.byTooltip('صف پخش (۲)'));
     expect(queue.bottom, lessThanOrEqualTo(640 - 34),
         reason: 'the bottom row clears the gesture bar');
     final title = tester.getRect(find.text(_tracks[0].title));
@@ -330,7 +330,7 @@ void main() {
     expect(title.left, greaterThanOrEqualTo(0));
 
     // The queue sheet also fits, and its last row clears the inset.
-    await tester.tap(find.text('صف پخش (۲)'));
+    await tester.tap(find.byTooltip('صف پخش (۲)'));
     await advanceUi(tester);
     expect(tester.takeException(), isNull);
     expect(
@@ -367,5 +367,25 @@ void main() {
     const track =
         Track(id: 'x', title: '', contentType: 'audio/mpeg', sizeBytes: 1);
     expect(trackTint(track), trackTint(track));
+  });
+
+  testWidgets(
+      'the cover fills the screen and the controls sit low, as icons (#446)',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await open(tester);
+
+    expect(find.byKey(const ValueKey('cover-wash')), findsOneWidget);
+    // No text on the bottom buttons; names are tooltips.
+    expect(find.text('صف پخش (۲)'), findsNothing);
+    expect(find.byTooltip('صف پخش (۲)'), findsOneWidget);
+    // Every control is in the lower part of the screen, in thumb reach.
+    for (final tooltip in ['قبلی', 'بعدی', 'صف پخش (۲)']) {
+      expect(tester.getCenter(find.byTooltip(tooltip)).dy, greaterThan(844 / 2),
+          reason: tooltip);
+    }
+    expect(tester.takeException(), isNull);
   });
 }
