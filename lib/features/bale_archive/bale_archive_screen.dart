@@ -212,8 +212,10 @@ class _BaleArchiveScreenState extends State<BaleArchiveScreen> {
                 const SizedBox(height: 16),
                 Text(data.complete
                     ? 'بررسی کل تاریخچه کامل شد · ${persianDigits(data.topics.length)} موضوع'
-                    : 'در حال بررسی کل تاریخچه · ${persianDigits(data.scannedPosts)} پست · ${persianDigits(data.topics.length)} موضوع پیدا شده'),
-                if (!data.complete)
+                    : data.incremental
+                        ? 'در حال بررسی پست‌های جدید · ${persianDigits(data.scannedPosts)} پست'
+                        : 'در حال بررسی کل تاریخچه · ${persianDigits(data.scannedPosts)} پست · ${persianDigits(data.topics.length)} موضوع پیدا شده'),
+                if (!data.complete && !data.incremental)
                   const Padding(
                       padding: EdgeInsets.only(top: 4),
                       child: Text(

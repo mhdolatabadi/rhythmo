@@ -122,11 +122,15 @@ class BaleTopicCatalog {
       required this.scanState,
       required this.scannedPosts,
       required this.unclassified,
+      this.incremental = false,
       this.scanError});
   final List<BaleTopic> topics;
   final String scanState;
   final int scannedPosts, unclassified;
   final String? scanError;
+
+  /// A refresh that only reads posts newer than the last complete scan.
+  final bool incremental;
   bool get complete => scanState == 'done';
   factory BaleTopicCatalog.fromJson(Map<String, dynamic> json) {
     final scan = json['scan'] as Map<String, dynamic>;
@@ -138,6 +142,7 @@ class BaleTopicCatalog {
         scanState: scan['state'] as String,
         scannedPosts: (scan['scannedPosts'] as num).toInt(),
         unclassified: (scan['unclassified'] as num).toInt(),
+        incremental: scan['incremental'] as bool? ?? false,
         scanError: scan['error'] as String?);
   }
 }

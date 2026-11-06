@@ -8,12 +8,15 @@ import (
 )
 
 type BaleScan struct {
-	State        string    `json:"state"`
-	Before       int64     `json:"before"`
-	Scanned      int64     `json:"scannedPosts"`
-	Unclassified int       `json:"unclassified"`
-	Error        *string   `json:"error,omitempty"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	State        string `json:"state"`
+	Before       int64  `json:"before"`
+	Scanned      int64  `json:"scannedPosts"`
+	Unclassified int    `json:"unclassified"`
+	// Incremental is true while a refresh only looks for posts newer than the
+	// last completed pass; earlier history is not read again.
+	Incremental bool      `json:"incremental"`
+	Error       *string   `json:"error,omitempty"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 type BaleTopic struct {
 	Key      string  `json:"key"`
@@ -32,6 +35,9 @@ type BaleCatalog struct {
 type BaleScanClaim struct {
 	Token  string
 	Before int64
+	// Floor is where this pass stops: everything at or before it was already
+	// indexed by an earlier complete pass. 0 means read to the channel start.
+	Floor int64
 }
 
 // EnsureBaleScan starts the initial scan; polling never restarts a completed scan.
@@ -39,13 +45,22 @@ func (b *BaleImports) EnsureBaleScan(ctx context.Context) error {
 	_, err := b.pool.Exec(ctx, `UPDATE bale_catalog_scan SET state='scanning',updated_at=now() WHERE id AND state='idle'`)
 	return err
 }
+
+// RefreshBaleScan resumes an unfinished pass from its saved cursor. After a
+// complete pass it starts a new one from the newest post that stops at the
+// newest date the previous pass covered, so only new posts are fetched.
 func (b *BaleImports) RefreshBaleScan(ctx context.Context) error {
-	_, err := b.pool.Exec(ctx, `UPDATE bale_catalog_scan SET before_date=CASE WHEN state='done' THEN 0 ELSE before_date END,scanned_posts=CASE WHEN state='done' THEN 0 ELSE scanned_posts END,state='scanning',error=NULL,lease_until=CASE WHEN lease_token IS NULL THEN NULL ELSE lease_until END,updated_at=now() WHERE id`)
+	_, err := b.pool.Exec(ctx, `UPDATE bale_catalog_scan SET
+ before_date=CASE WHEN state='done' THEN 0 ELSE before_date END,
+ floor_date=CASE WHEN state='done' THEN synced_until ELSE floor_date END,
+ pass_newest=CASE WHEN state='done' THEN 0 ELSE pass_newest END,
+ scanned_posts=CASE WHEN state='done' THEN 0 ELSE scanned_posts END,
+ state='scanning',error=NULL,lease_until=CASE WHEN lease_token IS NULL THEN NULL ELSE lease_until END,updated_at=now() WHERE id`)
 	return err
 }
 func (b *BaleImports) ClaimBaleScan(ctx context.Context) (BaleScanClaim, bool, error) {
 	var c BaleScanClaim
-	err := b.pool.QueryRow(ctx, `UPDATE bale_catalog_scan SET lease_token=gen_random_uuid(),lease_until=now()+interval '2 minutes' WHERE id AND state='scanning' AND (lease_until IS NULL OR lease_until<now()) RETURNING lease_token::text,before_date`).Scan(&c.Token, &c.Before)
+	err := b.pool.QueryRow(ctx, `UPDATE bale_catalog_scan SET lease_token=gen_random_uuid(),lease_until=now()+interval '2 minutes' WHERE id AND state='scanning' AND (lease_until IS NULL OR lease_until<now()) RETURNING lease_token::text,before_date,floor_date`).Scan(&c.Token, &c.Before, &c.Floor)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, false, nil
 	}
@@ -71,18 +86,32 @@ func (b *BaleImports) SaveBalePage(ctx context.Context, c BaleScanClaim, posts [
 				return err
 			}
 		}
+		var newest int64
+		for _, p := range posts {
+			if p.Date > newest {
+				newest = p.Date
+			}
+		}
+		// Reaching the floor means the rest of the history is already indexed.
+		if !done && c.Floor > 0 && next <= c.Floor {
+			done = true
+		}
 		state := "scanning"
 		if done {
 			state = "done"
 			next = c.Before
 		}
-		_, err := tx.Exec(ctx, `UPDATE bale_catalog_scan SET state=$1,before_date=$2,scanned_posts=scanned_posts+$3,lease_token=NULL,lease_until=NULL,error=NULL,updated_at=now() WHERE id`, state, next, scanned)
+		_, err := tx.Exec(ctx, `UPDATE bale_catalog_scan SET state=$1,before_date=$2,scanned_posts=scanned_posts+$3,
+ pass_newest=GREATEST(pass_newest,$4),
+ synced_until=CASE WHEN $1='done' THEN GREATEST(synced_until,pass_newest,$4) ELSE synced_until END,
+ floor_date=CASE WHEN $1='done' THEN 0 ELSE floor_date END,
+ lease_token=NULL,lease_until=NULL,error=NULL,updated_at=now() WHERE id`, state, next, scanned, newest)
 		return err
 	})
 }
 func (b *BaleImports) BaleCatalog(ctx context.Context, userID string) (BaleCatalog, error) {
 	out := BaleCatalog{Topics: []BaleTopic{}}
-	err := b.pool.QueryRow(ctx, `SELECT state,before_date,scanned_posts,error,updated_at,(SELECT count(*)::int FROM bale_catalog_posts WHERE topic_key='') FROM bale_catalog_scan WHERE id`).Scan(&out.Scan.State, &out.Scan.Before, &out.Scan.Scanned, &out.Scan.Error, &out.Scan.UpdatedAt, &out.Scan.Unclassified)
+	err := b.pool.QueryRow(ctx, `SELECT state,before_date,scanned_posts,error,updated_at,(SELECT count(*)::int FROM bale_catalog_posts WHERE topic_key=''),state='scanning' AND floor_date>0 FROM bale_catalog_scan WHERE id`).Scan(&out.Scan.State, &out.Scan.Before, &out.Scan.Scanned, &out.Scan.Error, &out.Scan.UpdatedAt, &out.Scan.Unclassified, &out.Scan.Incremental)
 	if err != nil {
 		return out, err
 	}
