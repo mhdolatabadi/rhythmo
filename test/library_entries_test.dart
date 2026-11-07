@@ -43,6 +43,22 @@ void main() {
     expect(locationOf(entry.track), TrackLocation.synced);
   });
 
+  for (final name in ['آهنگ من', 'My Song', 'اجرای زنده 🎵']) {
+    test('display filename $name merges despite a different title', () {
+      final server = cloud('uploaded', title: name, fileName: '$name.mp3');
+      final local = device(1, title: 'Embedded title', fileName: '$name.MP3');
+
+      // Both immediately after upload and on subsequent library refreshes.
+      for (var refresh = 0; refresh < 2; refresh++) {
+        final entries = mergeLibrary([server], [local]);
+        expect(entries, hasLength(1));
+        expect(entries.single.location, TrackLocation.synced);
+        expect(entries.single.track.id, server.id);
+        expect(entries.single.track.sourceUri, local.sourceUri);
+      }
+    });
+  }
+
   test('a Persian filename matches by title when sizes are equal', () {
     final entries = mergeLibrary(
       [cloud('t1', title: 'آهنگ من', fileName: 'track.mp3')],
