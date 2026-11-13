@@ -350,7 +350,9 @@ func run() error {
 	}
 	adminHandlers := httpapi.NewAdminHandlers(authHandlers, users).WithQuota(ownerQuotaBytes).WithPlaylists(playlists).
 		WithPublications(store.NewPublications(pool), objects).WithBaleArchive(baleArchive, archiveRate)
-	storeHandlers := httpapi.NewCatalogHandlers(storeCatalog, tokens, objects,
+	// Stream links for browsers skip large cover tags in MP3s (#375).
+	webMedia := httpapi.NewMediaStreams(objects)
+	storeHandlers := httpapi.NewCatalogHandlers(storeCatalog, tokens, webMedia,
 		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 		WithSave(store.NewFingerprints(pool), httpapi.SavePolicy{
 			Objects: objects, MaxOwnerBytes: ownerQuotaBytes, Enabled: uploadsEnabled,
@@ -370,7 +372,7 @@ func run() error {
 		}
 		ops = httpapi.NewOpsHandlers(opsToken, reporter)
 	}
-	publicPages := httpapi.NewPublicPages(playlists, objects,
+	publicPages := httpapi.NewPublicPages(playlists, webMedia,
 		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 		WithContact(os.Getenv("PRIVACY_CONTACT_EMAIL")).
 		WithQuota(ownerQuotaBytes).
@@ -391,9 +393,9 @@ func run() error {
 				MaxPending: maxPending, Enabled: uploadsEnabled,
 				ReservationUserRate: reservationUserRate, ReservationIPRate: reservationIPRate,
 				CompletionUserRate: completionUserRate, CompletionIPRate: completionIPRate,
-			}).WithImports(bots).WithTagRewrites(retags).WithEmailGate(emailGate).WithFingerprints(readyTracks).
+			}).WithStreams(webMedia).WithImports(bots).WithTagRewrites(retags).WithEmailGate(emailGate).WithFingerprints(readyTracks).
 				WithLikes(trackLikes),
-			Playlists: httpapi.NewPlaylistHandlers(playlists, tokens).WithSharing(playlists, objects, httpapi.SavePolicy{
+			Playlists: httpapi.NewPlaylistHandlers(playlists, tokens).WithSharing(playlists, webMedia, httpapi.SavePolicy{
 				Objects: objects, MaxOwnerBytes: ownerQuotaBytes, Enabled: uploadsEnabled,
 			}).WithAnonymous(httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 				WithEmailGate(emailGate).WithPublishGate(publishGate).WithSubscriptions(playlists, notifications),
@@ -407,6 +409,7 @@ func run() error {
 			Store:    storeHandlers,
 			Likes:    httpapi.NewLikeHandlers(trackLikes, tracks, tokens, likeRate).WithPublishGate(publishGate),
 			Ops:      ops,
+			Media:    webMedia,
 			Webhooks: webhooks,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
