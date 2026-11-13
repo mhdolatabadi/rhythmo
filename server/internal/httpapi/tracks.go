@@ -156,6 +156,9 @@ type trackResponse struct {
 	// ReplayGain is the loudness the file's tags carry, or null when they
 	// carry none or have not been read yet (#253).
 	ReplayGain *replayGainResponse `json:"replayGain"`
+	// Audio is the stored file's format, or null until it has been read or
+	// when it is not recognised (#383).
+	Audio *audioResponse `json:"audio"`
 	// Published, LikeCount and Liked are only filled in the owner's own
 	// library (#284): whether they published the track to the store, how
 	// many listeners like the song, and whether they do.
@@ -186,6 +189,22 @@ func toReplayGain(l store.Loudness) *replayGainResponse {
 	}
 }
 
+// audioResponse is the format of the file as stored and streamed; a value
+// that is not known is omitted.
+type audioResponse struct {
+	Codec       string `json:"codec"`
+	BitrateKbps *int32 `json:"bitrateKbps,omitempty"`
+	SampleRate  *int32 `json:"sampleRate,omitempty"`
+	BitDepth    *int32 `json:"bitDepth,omitempty"`
+}
+
+func toAudio(a store.AudioInfo) *audioResponse {
+	if a.Codec == nil || *a.Codec == "" {
+		return nil
+	}
+	return &audioResponse{Codec: *a.Codec, BitrateKbps: a.BitrateKbps, SampleRate: a.SampleRate, BitDepth: a.BitDepth}
+}
+
 // embeddedTagsResponse reports the stored file's tags. Status is original,
 // pending, written, failed or unsupported; UnsupportedFields lists the fields
 // this file's format cannot embed, so the app can say so honestly.
@@ -207,7 +226,7 @@ func toTrackResponse(t store.Track) trackResponse {
 			Status: t.TagStatus, Version: t.TagVersion, Error: t.TagError,
 			UnsupportedFields: tags.UnsupportedFields(t.FileName),
 		},
-		ReplayGain: toReplayGain(t.Loudness),
+		ReplayGain: toReplayGain(t.Loudness), Audio: toAudio(t.Audio),
 	}
 }
 

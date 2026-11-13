@@ -172,6 +172,7 @@ type storeTrackResponse struct {
 	ContentType string              `json:"contentType"`
 	SizeBytes   int64               `json:"sizeBytes"`
 	ReplayGain  *replayGainResponse `json:"replayGain"`
+	Audio       *audioResponse      `json:"audio"`
 	// Hidden is only ever true in admin views.
 	Hidden bool `json:"hidden,omitempty"`
 	// LikeCount is how many listeners like the song; Liked whether the
@@ -186,7 +187,8 @@ func toStoreTrackResponse(entry store.StoreEntry) storeTrackResponse {
 		ID: entry.ID, Title: t.Title, Artist: t.Artist, Album: t.Album, AlbumArtist: t.AlbumArtist,
 		Composer: t.Composer, Genre: t.Genre, Year: t.Year, TrackNumber: t.TrackNumber,
 		DiscNumber: t.DiscNumber, DurationMS: t.DurationMS, ContentType: t.ContentType,
-		SizeBytes: t.SizeBytes, ReplayGain: toReplayGain(t.Loudness), Hidden: entry.Hidden,
+		SizeBytes: t.SizeBytes, ReplayGain: toReplayGain(t.Loudness), Audio: toAudio(t.Audio),
+		Hidden: entry.Hidden,
 	}
 }
 

@@ -64,6 +64,49 @@ class ReplayGain {
   final double? albumPeak;
 }
 
+/// A cloud file's format as stored and streamed, read once by the server
+/// (#383). Null fields are unknown.
+class AudioFormat {
+  const AudioFormat(
+      {required this.codec, this.bitrateKbps, this.sampleRate, this.bitDepth});
+
+  static AudioFormat? fromJson(Map<String, dynamic>? json) {
+    final codec = json?['codec'];
+    if (json == null || codec is! String || codec.isEmpty) return null;
+    int? number(String key) => (json[key] as num?)?.toInt();
+    return AudioFormat(
+      codec: codec,
+      bitrateKbps: number('bitrateKbps'),
+      sampleRate: number('sampleRate'),
+      bitDepth: number('bitDepth'),
+    );
+  }
+
+  final String codec;
+  final int? bitrateKbps;
+  final int? sampleRate;
+  final int? bitDepth;
+
+  static const _lossless = {'FLAC', 'WAV', 'ALAC'};
+
+  /// Whether every sample of the recording is kept.
+  bool get lossless => _lossless.contains(codec);
+
+  /// Short and technical, as music apps show it: `FLAC · 24/48`, or
+  /// `MP3 · 320` for a lossy file; digits stay Latin like the codec.
+  String get label {
+    if (lossless && bitDepth != null && sampleRate != null) {
+      final khz = sampleRate! / 1000;
+      final rate = khz == khz.roundToDouble()
+          ? khz.round().toString()
+          : khz.toStringAsFixed(1);
+      return '$codec · $bitDepth/$rate';
+    }
+    if (!lossless && bitrateKbps != null) return '$codec · $bitrateKbps';
+    return codec;
+  }
+}
+
 class Track {
   const Track({
     required this.id,
@@ -93,6 +136,8 @@ class Track {
     this.version = 1,
     this.embeddedTags = const EmbeddedTags(),
     this.replayGain,
+    this.audio,
+    this.duration,
     this.addedAt,
   });
 
@@ -114,6 +159,8 @@ class Track {
         fromStore: true,
         replayGain:
             ReplayGain.fromJson(json['replayGain'] as Map<String, dynamic>?),
+        audio: AudioFormat.fromJson(json['audio'] as Map<String, dynamic>?),
+        duration: _duration(json['durationMs']),
         published: json['published'] == true,
         likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
         liked: json['liked'] == true,
@@ -147,6 +194,8 @@ class Track {
             json['embeddedTags'] as Map<String, dynamic>?),
         replayGain:
             ReplayGain.fromJson(json['replayGain'] as Map<String, dynamic>?),
+        audio: AudioFormat.fromJson(json['audio'] as Map<String, dynamic>?),
+        duration: _duration(json['durationMs']),
         published: json['published'] == true,
         publishReview: json['publishReview'] as String?,
         likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
@@ -177,6 +226,15 @@ class Track {
 
   /// Loudness from the file's tags, for normalization; null when unknown.
   final ReplayGain? replayGain;
+
+  /// The cloud file's format; null until the server has read it.
+  final AudioFormat? audio;
+
+  /// The song's length as the server knows it; null when unknown.
+  final Duration? duration;
+
+  static Duration? _duration(Object? ms) =>
+      ms is num && ms > 0 ? Duration(milliseconds: ms.toInt()) : null;
 
   /// When it was added: uploaded to the account, or, for a device file,
   /// added to the device's music. Null when unknown.
@@ -212,6 +270,8 @@ class Track {
         version: version,
         embeddedTags: embeddedTags,
         replayGain: replayGain,
+        audio: audio,
+        duration: duration,
         addedAt: addedAt ?? other.addedAt,
       );
 
@@ -298,8 +358,10 @@ class Track {
         likeCount: likeCount,
         liked: liked,
         version: version,
-        // The same file, so the same loudness.
+        // The same file, so the same loudness and format.
         replayGain: replayGain,
+        audio: audio,
+        duration: duration,
         addedAt: switch ((addedAt, deviceAddedAt)) {
           (final cloud?, final device?) =>
             device.isBefore(cloud) ? device : cloud,
