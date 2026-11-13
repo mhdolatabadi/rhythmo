@@ -47,6 +47,9 @@ type EmailVerification struct {
 	ConfirmIPRate   *RateLimiter
 	TTL             time.Duration
 	MaxAttempts     int
+	// syncMail makes sign-up and reset mail go out before the request
+	// returns, for tests.
+	syncMail bool
 }
 
 // WithEmailVerification turns email verification on. Without it, every
