@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	defaultTokenTTL     = 30 * 24 * time.Hour
+	defaultTokenTTL     = 365 * 24 * time.Hour
 	defaultStreamURLTTL = time.Hour
 	defaultMaxUpload    = 200 << 20
 	defaultOwnerQuota   = 1 << 30
@@ -65,13 +65,9 @@ func run() error {
 	if databaseURL == "" {
 		return errors.New("DATABASE_URL is required")
 	}
-	tokenTTL := defaultTokenTTL
-	if raw := os.Getenv("AUTH_TOKEN_TTL"); raw != "" {
-		parsed, err := time.ParseDuration(raw)
-		if err != nil {
-			return fmt.Errorf("AUTH_TOKEN_TTL: %w", err)
-		}
-		tokenTTL = parsed
+	tokenTTL, err := tokenTTLFromEnv(os.Getenv("AUTH_TOKEN_TTL"))
+	if err != nil {
+		return fmt.Errorf("AUTH_TOKEN_TTL: %w", err)
 	}
 	tokens, err := auth.NewTokens([]byte(os.Getenv("AUTH_TOKEN_SECRET")), tokenTTL)
 	if err != nil {
@@ -770,4 +766,22 @@ func purgeAccountsOnce(ctx context.Context, accounts accountPurgeQueue, objects 
 			slog.Error("deleted account purge not recorded", "account", deletion.UserID, "error", err)
 		}
 	}
+}
+
+// tokenTTLFromEnv is how long a login lasts: AUTH_TOKEN_TTL when set, or a
+// year, so people are rarely asked to sign in again (#398). Signing out
+// everywhere, a password change and account deletion still end a session
+// early.
+func tokenTTLFromEnv(raw string) (time.Duration, error) {
+	if raw = strings.TrimSpace(raw); raw == "" {
+		return defaultTokenTTL, nil
+	}
+	ttl, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, err
+	}
+	if ttl <= 0 {
+		return 0, errors.New("must be positive")
+	}
+	return ttl, nil
 }
