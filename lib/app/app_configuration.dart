@@ -57,6 +57,7 @@ abstract final class AppConfiguration {
     _shareTokenTaken = false;
     _collabTokenTaken = false;
     _storeSongTaken = false;
+    _shortcutTaken = false;
     linkOpened.value++;
   }
 
@@ -118,4 +119,35 @@ abstract final class AppConfiguration {
   }
 
   static bool _storeSongTaken = false;
+
+  /// The Android app shortcut the app was opened with (#227):
+  /// `rhythmo://shortcut/shuffle`, `/resume` or `/search`. Taken only once.
+  static AppShortcut? takeShortcut() {
+    if (_shortcutTaken) return null;
+    _shortcutTaken = true;
+    final uri = _launchUri;
+    if (uri == null || uri.scheme != 'rhythmo' || uri.host != 'shortcut') {
+      return null;
+    }
+    return switch (uri.pathSegments.firstOrNull) {
+      'shuffle' => AppShortcut.shuffle,
+      'resume' => AppShortcut.resume,
+      'search' => AppShortcut.search,
+      _ => null,
+    };
+  }
+
+  static bool _shortcutTaken = false;
+}
+
+/// The app shortcuts on Android's launcher (#227).
+enum AppShortcut {
+  /// «پخش تصادفی کتابخانه»
+  shuffle,
+
+  /// «ادامه‌ی پخش»
+  resume,
+
+  /// «جست‌وجو»
+  search,
 }

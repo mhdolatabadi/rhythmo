@@ -59,6 +59,10 @@
             <meta-data
                 android:name="flutter_deeplinking_enabled"
                 android:value="false"/>
+            <!-- Launcher shortcuts (#227). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts"/>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -82,6 +86,25 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <!-- Android Auto (#227): the car browses the media tree the
+             MediaBrowserService above serves. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc"/>
+
+        <!-- The home-screen player (#227). -->
+        <receiver
+            android:name=".RhythmoWidget"
+            android:exported="false"
+            android:label="ریتمو">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/rhythmo_widget_info"/>
+        </receiver>
 
         <receiver android:name="com.ryanheise.audioservice.MediaButtonReceiver"
             android:exported="true" tools:ignore="Instantiatable">

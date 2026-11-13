@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The home-screen player (#227): small (cover, track, play) and medium
+     (with previous and next); it can be resized between them. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description"
+    android:initialLayout="@layout/widget_player"
+    android:minWidth="180dp"
+    android:minHeight="56dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="56dp"
+    android:maxResizeHeight="120dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:previewLayout="@layout/widget_player"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen"/>
