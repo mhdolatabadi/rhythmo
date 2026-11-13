@@ -398,8 +398,12 @@ func run() error {
 			}).WithAnonymous(httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 				WithEmailGate(emailGate).WithPublishGate(publishGate).WithSubscriptions(playlists, notifications),
 			History: httpapi.NewHistoryHandlers(store.NewHistory(pool), tokens, historyRate),
-			Public:  publicPages,
-			Bots:    botHandlers.WithEmailGate(emailGate),
+			ForYou: httpapi.NewForYouHandlers(struct {
+				*store.Tracks
+				*store.History
+			}{tracks, store.NewHistory(pool)}, tokens, httpapi.NewRateLimiter(httpapi.RateLimit{Requests: 120, Window: 10 * time.Minute}, 10000)),
+			Public: publicPages,
+			Bots:   botHandlers.WithEmailGate(emailGate),
 			LinkImports: httpapi.NewLinkImportHandlers(linkImports, tokens, linkImportRate).WithEmailGate(emailGate).WithSpotify(
 				linkimport.NewSpotifyImporter(linkimport.NewSpotifyReader(linkFetcher), tracks, playlists)),
 			Lyrics:   lyricsHandlers,

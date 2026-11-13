@@ -18,7 +18,9 @@ type Config struct {
 	Playlists     *PlaylistHandlers
 	// History is each user's recently played tracks.
 	History *HistoryHandlers
-	Bots    *BotHandlers
+	// ForYou is «برای تو»: smart playlists, daily mixes and radio (#226).
+	ForYou *ForYouHandlers
+	Bots   *BotHandlers
 	// LinkImports adds music from song pages and audio links.
 	LinkImports *LinkImportHandlers
 	// Lyrics serves song lyrics looked up from LRCLIB.
@@ -72,6 +74,9 @@ func NewHandler(config Config) http.Handler {
 	}
 	if config.Store != nil {
 		config.Store.register(mux)
+	}
+	if config.ForYou != nil {
+		config.ForYou.register(mux)
 	}
 	if config.Likes != nil {
 		config.Likes.register(mux)

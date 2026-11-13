@@ -120,6 +120,37 @@ func (h *History) Recent(ctx context.Context, userID string, limit int) ([]Histo
 	return entries, rows.Err()
 }
 
+// PlayRecord is one play of one of the user's own tracks.
+type PlayRecord struct {
+	TrackID  string
+	PlayedAt time.Time
+}
+
+// OwnPlays lists userID's plays of their own ready tracks, the signal «برای
+// تو» is built from (#226). Plays through someone else's playlist are left
+// out.
+func (h *History) OwnPlays(ctx context.Context, userID string) ([]PlayRecord, error) {
+	rows, err := h.pool.Query(ctx, `
+		SELECT h.track_id::text, h.played_at FROM play_history h
+		JOIN tracks t ON t.id = h.track_id
+		WHERE h.user_id = $1::text::uuid AND t.owner_id = h.user_id AND t.status = 'ready'
+		ORDER BY h.played_at, h.id
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	plays := []PlayRecord{}
+	for rows.Next() {
+		var p PlayRecord
+		if err := rows.Scan(&p.TrackID, &p.PlayedAt); err != nil {
+			return nil, err
+		}
+		plays = append(plays, p)
+	}
+	return plays, rows.Err()
+}
+
 // Clear forgets everything the user played.
 func (h *History) Clear(ctx context.Context, userID string) error {
 	_, err := h.pool.Exec(ctx, `DELETE FROM play_history WHERE user_id = $1::text::uuid`, userID)

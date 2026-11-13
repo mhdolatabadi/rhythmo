@@ -189,6 +189,75 @@ class PlayerController extends ChangeNotifier {
   bool get playOnlySelected => _settings.playOnlySelected;
   bool get preventDuplicates => _settings.preventDuplicates;
 
+  /// Finds tracks like [seeds], leaving out [exclude], for radio (#226);
+  /// null where there is no server. Set by the app once it is signed in.
+  Future<List<Track>> Function(List<Track> seeds, List<Track> exclude)?
+      radioSource;
+
+  /// «ادامه با پخش مشابه»: whether similar tracks follow when the queue
+  /// runs out.
+  bool get radio => _settings.radio;
+  bool _radioChanged = false;
+
+  Future<void> setRadio(bool value) async {
+    _radioChanged = true;
+    _settings = _settings.copyWith(radio: value);
+    notifyListeners();
+    await _saveSettings();
+    if (value) _maybeRadio();
+  }
+
+  /// The track radio last topped the queue up after, so one track asks
+  /// once.
+  String? _radioAfter;
+
+  /// With radio on and nothing left to play next, asks for similar tracks
+  /// and queues them, while the last track still plays, so the music goes
+  /// on without a gap. Repeat and device-only tracks leave the queue alone.
+  void _maybeRadio() {
+    final queue = _queue, source = radioSource, track = _track;
+    if (!_settings.radio ||
+        source == null ||
+        queue == null ||
+        track == null ||
+        _repeat != QueueRepeat.off ||
+        queue.upcoming.isNotEmpty ||
+        _radioAfter == track.id) {
+      return;
+    }
+    _radioAfter = track.id;
+    final seeds = [
+      ...queue.played.reversed.take(4).toList().reversed,
+      track,
+    ]
+        .where((t) =>
+            !t.isLocal &&
+            !t.fromStore &&
+            t.sharedVia == null &&
+            !t.id.startsWith('device:'))
+        .toList();
+    if (seeds.isEmpty) return;
+    unawaited(() async {
+      try {
+        final more = await source(seeds, queue.all);
+        if (!identical(queue, _queue) || more.isEmpty) return;
+        for (final t in more) {
+          queue.enqueue(t, next: false);
+        }
+        notifyListeners();
+        _remember();
+        if (_status == PlayerStatus.completed && _track?.id == track.id) {
+          final next = queue.next(auto: true);
+          if (next != null) await _start(next);
+        } else {
+          unawaited(_replanPreload());
+        }
+      } catch (error) {
+        debugPrint('Radio unavailable: $error');
+      }
+    }());
+  }
+
   Future<void> setQueuePreferences({
     bool? playOnlySelected,
     bool? preventDuplicates,
@@ -281,6 +350,7 @@ class PlayerController extends ChangeNotifier {
           preventDuplicates: saved.preventDuplicates,
         );
       }
+      if (!_radioChanged) _settings = _settings.copyWith(radio: saved.radio);
       notifyListeners();
     } catch (error) {
       debugPrint('Playback settings unavailable: $error');
@@ -555,6 +625,7 @@ class PlayerController extends ChangeNotifier {
     _advancing = false;
     _loading = true;
     _remember();
+    _maybeRadio();
     if (_fadeTimer != null && _sleepAtTrackEnd) {
       // A new track restarts the wait for a track's end at full volume.
       _fadeTimer!.cancel();
@@ -634,6 +705,7 @@ class PlayerController extends ChangeNotifier {
     _heard = Duration.zero;
     _advancing = false;
     _remember();
+    _maybeRadio();
     metrics.started(next.id, _now(), preloaded: true);
     _refreshStatus();
   }
