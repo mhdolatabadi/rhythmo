@@ -13,6 +13,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # 3.50 deprecates package:flutter/material.dart, which fails analyze;
+          # move to material_ui in its own change before unpinning.
+          flutter-version: 3.47.9
           cache: true
       - run: flutter pub get
       - name: Check Dart formatting
@@ -49,6 +52,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # 3.50 deprecates package:flutter/material.dart, which fails analyze;
+          # move to material_ui in its own change before unpinning.
+          flutter-version: 3.47.9
           cache: true
       - name: Enable KVM
         run: |
@@ -259,6 +265,10 @@ jobs:
           for header in ("Strict-Transport-Security", "X-Content-Type-Options", "X-Frame-Options",
                          "frame-ancestors 'none'", "Referrer-Policy", "Permissions-Policy"):
               assert nginx.count(header) == 2, header
+          # The app's full Content-Security-Policy, on both blocks (#218).
+          assert nginx.count("script-src 'self' 'wasm-unsafe-eval';") == 2
+          assert nginx.count("object-src 'none'") == 2 and nginx.count("base-uri 'self'") == 2
+          assert "<script>" not in Path("web/index.html").read_text(), "inline scripts break the CSP"
           assert "rm -f /usr/share/nginx/html/index.html" in docker
 
           # The shared front nginx routes like the Caddyfile (#153).
