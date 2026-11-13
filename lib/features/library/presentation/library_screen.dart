@@ -3726,7 +3726,10 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
                     // Owners stay private: no email, even masked.
                     subtitle: [
                       '${persianDigits(playlist.trackCount)} آهنگ',
-                      '${persianDigits(playlist.likes.likeCount)} پسند',
+                      if (playlist.subscriberCount case final followers?)
+                        '${persianDigits(followers)} دنبال‌کننده'
+                      else
+                        '${persianDigits(playlist.likes.likeCount)} پسند',
                     ].join(' · '),
                     onTap: () => _openPopular(playlist),
                   );
@@ -3867,7 +3870,12 @@ class _PublicPlaylistRail extends StatelessWidget {
                       Text(
                         [
                           '${persianDigits(playlist.trackCount)} آهنگ',
-                          if (likes > 0) '${persianDigits(likes)} پسند',
+                          // Followers, as the design asks, where the server
+                          // counts them; likes otherwise.
+                          if (playlist.subscriberCount case final followers?)
+                            '${persianDigits(followers)} دنبال‌کننده'
+                          else if (likes > 0)
+                            '${persianDigits(likes)} پسند',
                         ].join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

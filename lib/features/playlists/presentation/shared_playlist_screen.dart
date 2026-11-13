@@ -290,6 +290,28 @@ class _Contents extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
+            if (channelSyncLine(playlist.syncedFrom) case final line?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Row(
+                  children: [
+                    Icon(RhythmoIcons.paperPlaneTilt,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        line,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Row(
@@ -827,4 +849,20 @@ class _ShareSheetState extends State<_ShareSheet> {
       ),
     );
   }
+}
+
+/// The muted line under a channel whose posts come from a messenger
+/// channel through the bot, e.g. «پست‌ها از کانال تلگرام همگام می‌شوند»;
+/// null when nothing syncs into it.
+String? channelSyncLine(List<String> providers) {
+  final names = [
+    for (final provider in providers)
+      switch (provider) {
+        'telegram' => 'تلگرام',
+        'bale' => 'بله',
+        _ => null,
+      },
+  ].whereType<String>().toList();
+  if (names.isEmpty) return null;
+  return 'پست‌ها از کانال ${names.join(' و ')} همگام می‌شوند';
 }

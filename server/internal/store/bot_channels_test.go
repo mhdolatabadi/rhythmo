@@ -59,6 +59,14 @@ func TestSyncingAMessengerChannel(t *testing.T) {
 	if got, err := bots.ChannelFor(ctx, "bale", "-1001"); err != nil || got.PlaylistID != playlist.ID {
 		t.Fatalf("ChannelFor = %+v, %v", got, err)
 	}
+	// The channel page says where its posts come from (#451).
+	if shared, err := playlists.ForShareToken(ctx, "link-1"); err != nil || len(shared.SyncedFrom) != 1 || shared.SyncedFrom[0] != "bale" {
+		t.Fatalf("SyncedFrom = %v, %v", shared.SyncedFrom, err)
+	}
+	// Public cards carry the follower count (#451).
+	if listed, err := playlists.Popular(ctx, "", 10); err != nil || len(listed) != 1 || listed[0].SubscriberCount != 1 {
+		t.Fatalf("Popular = %+v, %v", listed, err)
+	}
 	if listed, err := bots.PlaylistChannels(ctx, owner.ID, playlist.ID); err != nil || len(listed) != 1 || listed[0].ChatID != "-1001" {
 		t.Fatalf("owner's list = %+v, %v", listed, err)
 	}
