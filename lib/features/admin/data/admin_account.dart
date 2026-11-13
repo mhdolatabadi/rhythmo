@@ -74,8 +74,11 @@ abstract interface class AdminApi {
 
   /// Approves or rejects a request. Throws [ApiException] 409 when it is
   /// no longer pending (withdrawn, or decided by another admin).
+  /// Approves or rejects a request. [reason] is shown to a playlist's owner
+  /// when it is rejected (#207).
   Future<void> reviewPublication(
-      String token, PendingPublication publication, bool approved);
+      String token, PendingPublication publication, bool approved,
+      {String reason = ''});
 }
 
 abstract interface class AdminQuotaApi {

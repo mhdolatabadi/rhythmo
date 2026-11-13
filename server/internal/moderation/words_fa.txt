@@ -1,0 +1,29 @@
+# Persian words that reject a public playlist name, description or track
+# title outright (#207). One per line, written plainly; matching ignores
+# ی/ي, ک/ك, ZWNJ, diacritics, repeated letters and inserted dots.
+# A leading = matches whole words only, for short words that are also part
+# of ordinary ones (کس in کسی, کون in اکنون).
+=کس
+=کون
+=کیر
+=کص
+=گوه
+=جاکش
+کیری
+کسکش
+کسخل
+کسشر
+کصکش
+کونی
+جنده
+جندہ
+مادرجنده
+ننه‌جنده
+خارکسده
+خارکصده
+حرومزاده
+حرامزاده
+پدرسگ
+لاشی
+بیناموس
+دیوث

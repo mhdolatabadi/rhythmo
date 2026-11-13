@@ -103,15 +103,16 @@ func (p *Publications) PendingTrack(ctx context.Context, trackID string) (Track,
 // ReviewPlaylist approves a pending request to list the playlist publicly,
 // which lists it, or rejects it, which the owner then sees. The decision
 // and its admin actorID are audited in the same transaction.
-func (p *Publications) ReviewPlaylist(ctx context.Context, playlistID, actorID string, approve bool) error {
+func (p *Publications) ReviewPlaylist(ctx context.Context, playlistID, actorID string, approve bool, reason string) error {
 	return p.review(ctx, PublicationPlaylist, `
 		UPDATE playlists SET
 			is_public = $2,
 			public_review = CASE WHEN $2 THEN NULL ELSE 'rejected' END,
-			public_review_at = CASE WHEN $2 THEN NULL ELSE now() END
+			public_review_at = CASE WHEN $2 THEN NULL ELSE now() END,
+			public_review_reason = CASE WHEN $2 THEN NULL ELSE NULLIF($3, '') END
 		WHERE id::text = $1 AND public_review = 'pending' AND share_token IS NOT NULL
 		RETURNING id::text
-	`, playlistID, actorID, approve)
+	`, playlistID, actorID, approve, reason)
 }
 
 // ReviewTrack approves a pending request to publish the track, which lists
@@ -127,10 +128,10 @@ func (p *Publications) ReviewTrack(ctx context.Context, trackID, actorID string,
 	`, trackID, actorID, approve)
 }
 
-func (p *Publications) review(ctx context.Context, kind, update, id, actorID string, approve bool) error {
+func (p *Publications) review(ctx context.Context, kind, update, id, actorID string, approve bool, extra ...any) error {
 	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error {
 		var subjectID string
-		err := tx.QueryRow(ctx, update, id, approve).Scan(&subjectID)
+		err := tx.QueryRow(ctx, update, append([]any{id, approve}, extra...)...).Scan(&subjectID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotPending
 		}

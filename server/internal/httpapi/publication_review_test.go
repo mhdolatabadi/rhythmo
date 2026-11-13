@@ -123,7 +123,7 @@ func (f *fakePublications) review(kind, id, actor string, approve bool) error {
 	return nil
 }
 
-func (f *fakePublications) ReviewPlaylist(_ context.Context, id, actor string, approve bool) error {
+func (f *fakePublications) ReviewPlaylist(_ context.Context, id, actor string, approve bool, _ string) error {
 	return f.review(store.PublicationPlaylist, id, actor, approve)
 }
 
