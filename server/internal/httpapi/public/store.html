@@ -19,8 +19,9 @@
 <h2 class="section">آهنگ‌ها</h2>
 {{end}}
 {{if .Tracks}}
+<p class="cta"><button class="button primary" type="button" data-play-all hidden>{{template "play"}} پخش همه</button></p>
 <ol class="list">
-{{range .Tracks}}<li><div class="row track">
+{{range .Tracks}}<li><div class="row track" data-track data-title="{{.Title}}" data-artist="{{.Artist}}" data-art="/api/v1/store/tracks/{{.ID}}/artwork">
 <span class="art">{{template "note"}}</span>
 <a class="grow" href="{{.Link}}"><span class="title" dir="auto">{{.Title}}</span><span class="sub"><bdi>{{.Artist}}</bdi></span></a>
 <audio controls preload="none" src="/store/t/{{.ID}}/stream" aria-label="پخش {{.Title}}"></audio>
@@ -31,3 +32,4 @@
 {{end}}
 {{template "pager" .}}
 {{end}}
+{{define "scripts"}}<script src="/player.js" defer></script>{{end}}

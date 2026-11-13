@@ -19,7 +19,7 @@ import (
 	"github.com/mhdolatabadi/rhythmo/server/internal/store"
 )
 
-//go:embed public/*.html public/rhythmo.png public/social.png public/fonts/*.woff2
+//go:embed public/*.html public/player.js public/rhythmo.png public/social.png public/fonts/*.woff2
 var publicFiles embed.FS
 
 var publicTemplates = map[string]*template.Template{
@@ -162,6 +162,7 @@ func (p *PublicPages) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /nafir.png", p.handleIcon)
 	mux.HandleFunc("GET /social.png", p.handleSocialImage)
 	mux.HandleFunc("GET /fonts/{name}", p.handleFont)
+	mux.HandleFunc("GET /player.js", p.handlePlayerScript)
 	mux.HandleFunc("GET /privacy", p.handlePrivacy)
 	mux.HandleFunc("GET /delete-account", p.handleDeleteAccount)
 	p.registerStore(mux)
@@ -219,6 +220,8 @@ type publicTrack struct {
 	Title  string
 	Artist string
 	Stream string
+	// Art is the song's cover, which the list player shows when it has one.
+	Art string
 	// Link and ArtistLink are the song's and its artist's store pages,
 	// when the song is in the store.
 	Link       string
@@ -475,7 +478,8 @@ func (p *PublicPages) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 		if t.Artist != nil {
 			artist = strings.TrimSpace(*t.Artist)
 		}
-		track := publicTrack{Title: t.Title, Artist: artist, Stream: "/p/" + token + "/t/" + t.ID}
+		track := publicTrack{Title: t.Title, Artist: artist, Stream: "/p/" + token + "/t/" + t.ID,
+			Art: "/api/v1/shared-playlists/" + token + "/tracks/" + t.ID + "/artwork"}
 		recording := map[string]any{"@type": "MusicRecording", "name": t.Title}
 		if entry, ok := inStore[t.ID]; ok {
 			track.Link = storeTrackLink(entry)
@@ -683,4 +687,11 @@ func (p *PublicPages) handleFont(w http.ResponseWriter, r *http.Request) {
 func (p *PublicPages) handleIcon(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeFileFS(w, r, publicFiles, "public/rhythmo.png")
+}
+
+// handlePlayerScript serves the list player the public song lists load.
+func (p *PublicPages) handlePlayerScript(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	http.ServeFileFS(w, r, publicFiles, "public/player.js")
 }
