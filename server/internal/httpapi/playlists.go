@@ -82,6 +82,7 @@ func (h *PlaylistHandlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/playlists/{id}", h.handleRename)
 	mux.HandleFunc("DELETE /api/v1/playlists/{id}", h.handleDelete)
 	mux.HandleFunc("PUT /api/v1/playlists/{id}/tracks", h.handleReplaceTracks)
+	h.registerGoals(mux)
 	h.registerCollaboration(mux)
 	if h.shared != nil {
 		h.registerSharing(mux)
@@ -109,6 +110,16 @@ type playlistResponse struct {
 	PublicReview *string `json:"publicReview,omitempty"`
 	// CollabToken is set while people can join; only its owner sees it.
 	CollabToken *string `json:"collabToken,omitempty"`
+	// Goal is how many songs the members aim to fill it up to together
+	// (#276); progress is TrackCount.
+	Goal *int `json:"goal,omitempty"`
+	// Occasion is the viewer's own collection they filed it under.
+	Occasion string `json:"occasion,omitempty"`
+	// Contributors is how many people's songs it holds, and
+	// ViewerContribution how many are the viewer's; loaded with the tracks.
+	// Nobody is ranked: the app shows the total and the viewer's share.
+	Contributors       *int `json:"contributors,omitempty"`
+	ViewerContribution *int `json:"viewerContribution,omitempty"`
 	// Owner and Members are loaded with the tracks.
 	Owner     string                   `json:"owner,omitempty"`
 	Members   []playlistMemberResponse `json:"members,omitempty"`
@@ -143,6 +154,7 @@ func toPlaylistResponse(playlist store.Playlist, viewerID string, includeTracks 
 		ID: playlist.ID, Name: playlist.Name, Description: playlist.Description, TrackCount: trackCount,
 		IsOwner: isOwner, IsAdmin: playlist.ViewerAdmin,
 		Public: playlist.IsPublic, CreatedAt: playlist.CreatedAt.UTC(), UpdatedAt: playlist.UpdatedAt.UTC(),
+		Goal: playlist.GoalTracks, Occasion: playlist.Occasion,
 	}
 	if isOwner {
 		response.ShareToken, response.CollabToken = playlist.ShareToken, playlist.CollabToken
@@ -158,6 +170,15 @@ func toPlaylistResponse(playlist store.Playlist, viewerID string, includeTracks 
 		names[m.UserID] = bot.MaskEmail(m.Email)
 		response.Members = append(response.Members, playlistMemberResponse{ID: m.UserID, Name: names[m.UserID], Role: m.Role, JoinedAt: m.JoinedAt.UTC()})
 	}
+	contributors, mine := map[string]bool{}, 0
+	for _, track := range playlist.Tracks {
+		contributors[track.OwnerID] = true
+		if track.OwnerID == viewerID {
+			mine++
+		}
+	}
+	count := len(contributors)
+	response.Contributors, response.ViewerContribution = &count, &mine
 	response.Tracks = make([]playlistTrackResponse, 0, len(playlist.Tracks))
 	for _, track := range playlist.Tracks {
 		item := playlistTrackResponse{trackResponse: toTrackResponse(track)}

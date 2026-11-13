@@ -168,6 +168,18 @@ abstract interface class TracksApi {
   Future<StreamLink> storeStreamLink(String? token, String id);
 }
 
+/// Shared goals and occasion collections for playlists (#276).
+abstract interface class PlaylistGoalsApi {
+  /// Sets the playlist's shared goal, or with null clears it; owner and
+  /// admins only.
+  Future<void> setPlaylistGoal(String token, String playlistId, int? goal);
+
+  /// Files the playlist under the listener's own [occasion]; "" takes it
+  /// out.
+  Future<void> setPlaylistOccasion(
+      String token, String playlistId, String occasion);
+}
+
 abstract interface class PlaylistsApi {
   Future<List<Playlist>> listPlaylists(String token);
   Future<Playlist> getPlaylist(String token, String playlistId);
