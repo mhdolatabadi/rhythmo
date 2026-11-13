@@ -5,6 +5,7 @@ class AuthUser {
     this.verified = false,
     this.emailVerified = true,
     this.isAdmin = false,
+    this.displayName = '',
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
@@ -14,6 +15,7 @@ class AuthUser {
         // Servers from before email verification don't send it.
         emailVerified: json['emailVerified'] != false,
         isAdmin: json['isAdmin'] == true,
+        displayName: json['displayName'] as String? ?? '',
       );
 
   final String id;
@@ -26,6 +28,10 @@ class AuthUser {
   /// but not upload, share publicly or use the bots.
   final bool emailVerified;
   final bool isAdmin;
+
+  /// The public name shown on this account's public playlists instead of
+  /// its email; empty until the user picks one.
+  final String displayName;
 }
 
 class AuthSession {

@@ -30,16 +30,19 @@ type User struct {
 	EmailVerifiedAt *time.Time
 	// SessionEpoch is the epoch new access tokens are issued in (#216).
 	SessionEpoch int64
+	// DisplayName is the public name shown on the owner's public playlists
+	// instead of their email (#378); "" until they pick one.
+	DisplayName string
 }
 
 // userColumns are the columns scanUser reads, in order.
-const userColumns = `id::text, email, created_at, verified, verified_at, email_verified_at, session_epoch, storage_quota_bytes`
+const userColumns = `id::text, email, created_at, verified, verified_at, email_verified_at, session_epoch, storage_quota_bytes, COALESCE(display_name, '')`
 
 // scanUser reads userColumns, then any extra columns into extra.
 func scanUser(row pgx.Row, user *User, extra ...any) error {
 	return row.Scan(append([]any{
 		&user.ID, &user.Email, &user.CreatedAt, &user.Verified, &user.VerifiedAt, &user.EmailVerifiedAt,
-		&user.SessionEpoch, &user.StorageQuotaBytes,
+		&user.SessionEpoch, &user.StorageQuotaBytes, &user.DisplayName,
 	}, extra...)...)
 }
 
@@ -107,6 +110,19 @@ func (u *Users) RevokeSessions(ctx context.Context, id string) (User, error) {
 	err := scanUser(u.pool.QueryRow(ctx,
 		`UPDATE users SET session_epoch = session_epoch + 1 WHERE id::text = $1
 		 RETURNING `+userColumns, id,
+	), &user)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrNotFound
+	}
+	return user, err
+}
+
+// SetDisplayName sets the public name of the account id; "" clears it.
+func (u *Users) SetDisplayName(ctx context.Context, id, name string) (User, error) {
+	var user User
+	err := scanUser(u.pool.QueryRow(ctx,
+		`UPDATE users SET display_name = NULLIF($2, '') WHERE id::text = $1 RETURNING `+userColumns,
+		id, name,
 	), &user)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrNotFound

@@ -104,3 +104,34 @@ func TestRevokeSessionsMovesTheEpochOn(t *testing.T) {
 		}
 	}
 }
+
+func TestDisplayNameIsWhatSharedViewsShow(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	users := NewUsers(pool)
+	owner, _ := users.Create(ctx, "named@example.com", "hash")
+	named, err := users.SetDisplayName(ctx, owner.ID, "نیما")
+	if err != nil || named.DisplayName != "نیما" {
+		t.Fatalf("set name = %+v, %v", named, err)
+	}
+	if again, _ := users.ByID(ctx, owner.ID); again.DisplayName != "نیما" {
+		t.Fatalf("stored name = %q", again.DisplayName)
+	}
+	playlists := NewPlaylists(pool)
+	playlist, err := playlists.Create(ctx, owner.ID, "named mix")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := playlists.Share(ctx, owner.ID, playlist.ID, "named-token", nil, true); err != nil {
+		t.Fatal(err)
+	}
+	if view, err := playlists.ForShareToken(ctx, "named-token"); err != nil || view.OwnerName != "نیما" {
+		t.Fatalf("shared view owner = %q, %v", view.OwnerName, err)
+	}
+	if cleared, err := users.SetDisplayName(ctx, owner.ID, ""); err != nil || cleared.DisplayName != "" {
+		t.Fatalf("clear name = %+v, %v", cleared, err)
+	}
+	if _, err := users.SetDisplayName(ctx, "00000000-0000-0000-0000-000000000000", "x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown user = %v", err)
+	}
+}

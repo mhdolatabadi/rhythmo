@@ -46,6 +46,10 @@ abstract interface class AuthApi {
   Future<AuthSession> login(String email, String password);
   Future<AuthUser> me(String token);
 
+  /// Sets the public name shown on the account's public playlists; an
+  /// empty name clears it.
+  Future<AuthUser> setDisplayName(String token, String name);
+
   /// Deletes the signed-in account and everything in it for good. The
   /// password is checked again; a wrong one fails with `invalid_password`.
   Future<void> deleteAccount(String token, String password);
@@ -656,6 +660,13 @@ class ApiClient
   @override
   Future<AuthUser> me(String token) async {
     final body = await _send('GET', '/api/v1/me', token: token);
+    return AuthUser.fromJson(body);
+  }
+
+  @override
+  Future<AuthUser> setDisplayName(String token, String name) async {
+    final body = await _send('PATCH', '/api/v1/me',
+        token: token, body: {'displayName': name});
     return AuthUser.fromJson(body);
   }
 

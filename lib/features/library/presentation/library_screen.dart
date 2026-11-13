@@ -62,6 +62,8 @@ class LibraryScreen extends StatefulWidget {
     super.key,
     this.onFeedback,
     required this.email,
+    this.displayName = '',
+    this.onSetDisplayName,
     this.verified = false,
     this.onVerifyEmail,
     this.onAdmin,
@@ -89,6 +91,12 @@ class LibraryScreen extends StatefulWidget {
 
   final VoidCallback? onFeedback;
   final String email;
+
+  /// The public name shown on public playlists; empty when none is set.
+  final String displayName;
+
+  /// Saves a new public name; null hides the option.
+  final Future<void> Function(String name)? onSetDisplayName;
   final bool verified;
 
   /// Opens email verification; set while the account's email is not
@@ -800,6 +808,8 @@ class _LibraryScreenState extends State<LibraryScreen>
         .push(MaterialPageRoute<void>(
           builder: (_) => SettingsScreen(
             email: widget.email,
+            displayName: widget.displayName,
+            onSetDisplayName: widget.onSetDisplayName,
             verified: widget.verified,
             onAdmin: widget.onAdmin,
             onLogout: widget.onLogout,

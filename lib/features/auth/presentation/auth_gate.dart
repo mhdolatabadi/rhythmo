@@ -232,6 +232,8 @@ class _AuthGateState extends State<AuthGate> {
           AuthStatus.signedIn => LibraryScreen(
               key: ValueKey(_linkGeneration),
               email: controller.user!.email,
+              displayName: controller.user!.displayName,
+              onSetDisplayName: controller.setDisplayName,
               onFeedback: widget.adminApi is FeedbackApi
                   ? () => Navigator.of(context).push(MaterialPageRoute<void>(
                       builder: (_) => FeedbackScreen(

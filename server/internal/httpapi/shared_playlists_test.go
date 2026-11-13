@@ -92,7 +92,7 @@ func (s *sharingStore) ForShareToken(_ context.Context, token string) (store.Sha
 		Playlist: store.Playlist{
 			ID: "p1", OwnerID: "alice", Name: s.displayName(), Tracks: s.tracks, IsPublic: s.public, ShareToken: s.token,
 		},
-		OwnerEmail: "alice@example.com",
+		OwnerName: "آلیس",
 	}, nil
 }
 
@@ -146,7 +146,7 @@ func (s *sharingStore) Popular(_ context.Context, userID string, limit int) ([]s
 		return nil, nil
 	}
 	return []store.PublicPlaylist{{
-		ShareToken: *s.token, Name: s.displayName(), OwnerID: "alice", OwnerEmail: "alice@example.com",
+		ShareToken: *s.token, Name: s.displayName(), OwnerID: "alice", OwnerName: "آلیس",
 		TrackCount: len(s.tracks), Likes: store.Likes{Count: len(s.likers), Liked: s.likers[userID]},
 	}}, nil
 }
@@ -205,7 +205,7 @@ func TestSharingAPlaylistEndToEnd(t *testing.T) {
 	response = call(http.MethodGet, link, bob)
 	var view sharedPlaylistResponse
 	json.NewDecoder(response.Body).Decode(&view)
-	if response.Code != http.StatusOK || view.Name != "mix" || view.Owner != "a***@example.com" ||
+	if response.Code != http.StatusOK || view.Name != "mix" || view.Owner != "آلیس" ||
 		view.IsOwner || view.TrackCount != 1 || strings.Contains(response.Body.String(), "users/alice") {
 		t.Fatalf("bob's view = %d %+v", response.Code, view)
 	}
@@ -336,7 +336,7 @@ func TestLikingAndListingPublicPlaylists(t *testing.T) {
 	if response.Code != http.StatusOK || len(list.Playlists) != 1 || data.limit != maxPublicPlaylists {
 		t.Fatalf("public list = %d %+v (limit %d)", response.Code, list, data.limit)
 	}
-	if got := list.Playlists[0]; got.ShareToken != shared.ShareToken || got.Owner != "a***@example.com" ||
+	if got := list.Playlists[0]; got.ShareToken != shared.ShareToken || got.Owner != "آلیس" ||
 		got.IsOwner || got.LikeCount != 1 || !got.Liked || got.TrackCount != 1 {
 		t.Fatalf("listed = %+v", got)
 	}
