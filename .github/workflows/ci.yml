@@ -13,6 +13,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # 3.50 deprecates package:flutter/material.dart, which fails analyze;
+          # move to material_ui in its own change before unpinning.
+          flutter-version: 3.47.9
           cache: true
       - run: flutter pub get
       - name: Check Dart formatting
@@ -49,6 +52,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # 3.50 deprecates package:flutter/material.dart, which fails analyze;
+          # move to material_ui in its own change before unpinning.
+          flutter-version: 3.47.9
           cache: true
       - name: Enable KVM
         run: |
@@ -260,6 +266,11 @@ jobs:
                          "frame-ancestors 'none'", "Referrer-Policy", "Permissions-Policy"):
               assert nginx.count(header) == 2, header
           assert "rm -f /usr/share/nginx/html/index.html" in docker
+          # #209: nginx without root, and no Android backups of the session.
+          assert "FROM nginxinc/nginx-unprivileged:" in docker and "\nUSER 101\n" in docker
+          assert "net.ipv4.ip_unprivileged_port_start: 0" in compose
+          manifest = Path("android/app/src/main/AndroidManifest.xml").read_text()
+          assert 'android:allowBackup="false"' in manifest
 
           # The shared front nginx routes like the Caddyfile (#153).
           front = Path("deploy/front-proxy.nginx.conf").read_text()

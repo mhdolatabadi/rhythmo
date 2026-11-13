@@ -140,6 +140,9 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.web
     restart: unless-stopped
+    # nginx runs without root and still listens on 80 (#209).
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
     networks: [edge]
 
   postgres:

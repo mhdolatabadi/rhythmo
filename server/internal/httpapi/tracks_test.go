@@ -629,6 +629,10 @@ func TestCreateUploadValidation(t *testing.T) {
 		{"empty file", `{"fileName":"a.mp3","sizeBytes":0}`, http.StatusRequestEntityTooLarge, "invalid_size"},
 		{"too large", `{"fileName":"a.mp3","sizeBytes":1001}`, http.StatusRequestEntityTooLarge, "invalid_size"},
 		{"long title", `{"fileName":"a.mp3","sizeBytes":1,"title":"` + strings.Repeat("x", 201) + `"}`, http.StatusBadRequest, "invalid_metadata"},
+		{"newline in title", `{"fileName":"a.mp3","sizeBytes":1,"title":"a\nb"}`, http.StatusBadRequest, "invalid_metadata"},
+		{"escape in artist", `{"fileName":"a.mp3","sizeBytes":1,"artist":"a\u001b[31mb"}`, http.StatusBadRequest, "invalid_metadata"},
+		{"control in album", `{"fileName":"a.mp3","sizeBytes":1,"album":"a\u0000"}`, http.StatusBadRequest, "invalid_metadata"},
+		{"newline in file name", `{"fileName":"a\nb.mp3","sizeBytes":1}`, http.StatusBadRequest, "invalid_metadata"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
