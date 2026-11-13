@@ -2,6 +2,16 @@
 
 Cross-platform personal cloud music player. Music is stored on the user's self-hosted server and streamed to Android and the web with a bounded, disposable device cache.
 
+## Screenshots
+
+| موسیقی من | در حال پخش |
+|---|---|
+| ![موسیقی من on desktop](docs/screenshots/desktop-my-music.png) | ![Playing on desktop](docs/screenshots/desktop-playing.png) |
+| **جست‌وجو** | **خانه** |
+| ![Search on desktop](docs/screenshots/desktop-search.png) | ![Home on desktop](docs/screenshots/desktop-home.png) |
+
+Phone screenshots and the teaser are in [`store/listing/`](store/listing/). All of them are rendered from the app with made-up data; see [`store/README.md`](store/README.md) to regenerate them.
+
 ## Stack
 
 - Flutter client for Android and Web/PWA
