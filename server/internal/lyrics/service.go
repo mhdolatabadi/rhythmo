@@ -27,6 +27,9 @@ const (
 	// durationSlack is how far a record's length may be from the track's
 	// and still be the same recording.
 	durationSlack = 5 * time.Second
+	// exactLookupBudget bounds LRCLIB's exact lookup, so a lookup that
+	// falls back to search still finishes well inside the app's timeout.
+	exactLookupBudget = 4 * time.Second
 )
 
 // Song is one track to find lyrics for.
@@ -187,13 +190,22 @@ func (s *Service) lookup(ctx context.Context, q Query) (Record, error) {
 		return Record{}, ErrNotFound
 	}
 	if q.Artist != "" && q.Duration > 0 {
-		record, err := s.source.Get(ctx, q)
-		if err == nil {
+		// LRCLIB's exact lookup can hang while it asks other providers; it
+		// gets a short budget so the search below still answers in time.
+		getCtx, cancel := context.WithTimeout(ctx, exactLookupBudget)
+		record, err := s.source.Get(getCtx, q)
+		cancel()
+		switch {
+		case err == nil:
 			if record = clean(record); record.HasLyrics() {
 				return record, nil
 			}
-		} else if !errors.Is(err, ErrNotFound) {
+		case errors.Is(err, ErrNotFound):
+		case ctx.Err() != nil:
 			return Record{}, err
+		default:
+			// A failed exact lookup is not a failed lookup: try the search.
+			slog.Warn("exact lyrics lookup failed, searching instead", "error", err)
 		}
 	}
 	records, err := s.source.Search(ctx, q)

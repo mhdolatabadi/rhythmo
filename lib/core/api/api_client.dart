@@ -548,6 +548,9 @@ class ApiClient
 
   static const _timeout = Duration(seconds: 15);
 
+  /// How long the app waits for lyrics; see [trackLyrics].
+  static const lyricsTimeout = Duration(seconds: 30);
+
   final Uri baseUri;
   final http.Client _httpClient;
 
@@ -1366,7 +1369,10 @@ class ApiClient
     final query = duration == null || duration <= Duration.zero
         ? ''
         : '?durationMs=${duration.inMilliseconds}';
-    final body = await _send('GET', '$path$query', token: token);
+    // The server may try LRCLIB's exact lookup and then its search, which
+    // together can take longer than an ordinary request (#233).
+    final body = await _send('GET', '$path$query',
+        token: token, requestTimeout: lyricsTimeout);
     return TrackLyrics.fromJson(body);
   }
 
