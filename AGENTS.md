@@ -7,7 +7,7 @@ This file defines the standing rules for every contributor and coding agent work
 - The product name is **rhythmo** (ریتمو). Do not introduce the old name `sot` in code, copy, package names, artifacts, infrastructure, or documentation.
 - The supported clients are **Web and Android**. Do not add, restore, build, test, or maintain iOS-specific code or workflows unless the owner explicitly changes this rule.
 - Code, packages, docs, artifacts and user-facing copy use **rhythmo**; do not introduce `nafir` in new code or copy.
-- Remaining `nafir` names are compatibility identifiers only and stay until a dedicated migration: the Android application ID and namespace `ir.mhdolatabadi.nafir` (changing it would orphan installs), platform channel names, on-device storage keys, the `nafir-music` bucket, the `nafir/*` image path, database names, `NAFIR_*` server variables and the `NafirBot` account.
+- Remaining `nafir` names are compatibility identifiers only and stay until a dedicated migration: the Android application ID and namespace `ir.mhdolatabadi.nafir` (changing it would orphan installs), platform channel names, on-device storage keys, the `nafir-music` bucket, database names, `NAFIR_*` server variables and the `NafirBot` account.
 - Keep Web and Android behavior consistent where platform capabilities allow it.
 - User-facing copy is Persian and the primary layout direction is RTL.
 
