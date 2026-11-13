@@ -302,7 +302,11 @@ class _PopularPlaylistsScreenState extends State<PopularPlaylistsScreen> {
                       onPressed: widget.onSignIn,
                       style: FilledButton.styleFrom(
                           minimumSize: const Size(48, 48)),
-                      child: const Text('ورود / ثبت‌نام'),
+                      // On a phone the short label keeps the title whole
+                      // (#382).
+                      child: Text(MediaQuery.sizeOf(context).width < 600
+                          ? 'ورود'
+                          : 'ورود / ثبت‌نام'),
                     ),
                   ),
               ],

@@ -2574,6 +2574,7 @@ class _TrackRow extends StatelessWidget {
     final artist = track.artist?.trim();
     final secondary = theme.textTheme.bodySmall
         ?.copyWith(color: colors.onSurfaceVariant, height: 1.3);
+    final wide = MediaQuery.sizeOf(context).width >= trackTableMinWidth + 200;
     return CallbackShortcuts(
       bindings: {
         if (onLongPress != null)
@@ -2602,7 +2603,11 @@ class _TrackRow extends StatelessWidget {
                     child: Checkbox(
                         value: selected, onChanged: (_) => onLongPress?.call()),
                   )
-                : _TrackArtwork(track: track, current: current, sync: sync),
+                : _HoverPlay(
+                    enabled: wide && !current,
+                    child: _TrackArtwork(
+                        track: track, current: current, sync: sync),
+                  ),
             title: Row(
               children: [
                 if (current) ...[
@@ -2674,9 +2679,103 @@ class _TrackRow extends StatelessWidget {
                   ],
                 ),
             },
-            trailing: actions,
+            // On a wide window the row reads like a table: album and
+            // format sit in their own columns, right before the menu, so
+            // the menu stays next to what it belongs to (#382).
+            trailing: wide
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: trackAlbumColumnWidth,
+                        child: Text(
+                          track.album?.trim() ?? '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: secondary,
+                        ),
+                      ),
+                      SizedBox(
+                        width: trackFormatColumnWidth,
+                        child: Text(
+                          trackFormatLabel(track),
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          style: secondary,
+                        ),
+                      ),
+                      if (actions case final menu?) menu,
+                    ],
+                  )
+                : actions,
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Track rows at least this wide show the album and format columns.
+const trackTableMinWidth = 720.0;
+const trackAlbumColumnWidth = 320.0;
+const trackFormatColumnWidth = 64.0;
+
+/// The file's format in capitals, e.g. «FLAC», from its name or MIME type.
+String trackFormatLabel(Track track) {
+  final name = track.fileName ?? '';
+  final dot = name.lastIndexOf('.');
+  if (dot > 0 && dot < name.length - 1) {
+    return name.substring(dot + 1).toUpperCase();
+  }
+  final subtype = track.contentType.split('/').last.split(';').first;
+  return switch (subtype) {
+    'mpeg' || 'mp3' => 'MP3',
+    'mp4' || 'x-m4a' || 'm4a' => 'M4A',
+    'x-flac' => 'FLAC',
+    'x-wav' || 'wave' => 'WAV',
+    final other => other.toUpperCase(),
+  };
+}
+
+/// On a pointer device, a play mark over the cover while the row is hovered.
+class _HoverPlay extends StatefulWidget {
+  const _HoverPlay({required this.enabled, required this.child});
+
+  final bool enabled;
+  final Widget child;
+
+  @override
+  State<_HoverPlay> createState() => _HoverPlayState();
+}
+
+class _HoverPlayState extends State<_HoverPlay> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          widget.child,
+          if (_hover)
+            IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(RhythmoRadii.sm),
+                ),
+                child: const SizedBox.square(
+                  dimension: 48,
+                  child: Icon(RhythmoIcons.playFill,
+                      size: 20, color: Colors.white),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
