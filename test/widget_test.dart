@@ -385,6 +385,9 @@ void main() {
     await _submit(tester, 'listener@example.com', 'correct horse');
 
     expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
+    // The empty state names a real button instead of the corner «+».
+    expect(find.widgetWithText(FilledButton, 'آپلود آهنگ'), findsOneWidget);
+    expect(find.textContaining('اجازه بده ریتمو'), findsNothing);
     expect(await tokens.read(), 'valid-token');
     // The address lives on «حساب», not in the header.
     expect(find.text('listener@example.com'), findsNothing);
@@ -618,7 +621,10 @@ void main() {
     await tester.tap(find.text('افزودن از فایل'));
     await tester.pump();
     await tester.pump();
-    expect(find.textContaining('در حال آپلود «song.mp3»'), findsOneWidget);
+    expect(find.textContaining('در حال آپلود «\u2068song.mp3\u2069»'),
+        findsOneWidget);
+    // The percentage sits in its own widget so bidi cannot reorder it.
+    expect(find.textContaining(RegExp(r'^[۰-۹]+٪$')), findsOneWidget);
 
     await tester.tap(find.text('لغو'));
     await tester.pumpAndSettle();

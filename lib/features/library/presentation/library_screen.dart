@@ -1225,7 +1225,11 @@ class _LibraryScreenState extends State<LibraryScreen>
           return RefreshIndicator(
             onRefresh: _refreshLibrary,
             child: tracks.isEmpty
-                ? state(_EmptyLibrary(deviceNotice: notice))
+                ? state(_EmptyLibrary(
+                    deviceNotice: notice,
+                    showsDeviceMusic: widget.localAudio.supported,
+                    onUpload: _pickAndUpload,
+                  ))
                 : _trackList(tracks,
                     top: top, deviceNotice: notice, collapseLectures: true),
           );
@@ -3050,9 +3054,18 @@ class _LibraryState extends StatelessWidget {
 }
 
 class _EmptyLibrary extends StatelessWidget {
-  const _EmptyLibrary({this.deviceNotice});
+  const _EmptyLibrary({
+    this.deviceNotice,
+    required this.showsDeviceMusic,
+    required this.onUpload,
+  });
 
   final _DeviceNotice? deviceNotice;
+
+  /// Whether this platform can list the device's own music (Android); the
+  /// web has no device library, so it only talks about uploading.
+  final bool showsDeviceMusic;
+  final VoidCallback onUpload;
 
   @override
   Widget build(BuildContext context) {
@@ -3062,11 +3075,17 @@ class _EmptyLibrary extends StatelessWidget {
           _DeviceStatusBanner(notice: notice),
           const SizedBox(height: 16),
         ],
-        const _LibraryState(
+        _LibraryState(
           icon: RhythmoIcons.musicNotes,
           title: '«موسیقی من» خالی است',
-          message:
-              'با «افزودن موسیقی» آهنگ آپلود کن یا اجازه بده ریتمو آهنگ‌های دستگاه را هم همین‌جا نشان بدهد.',
+          message: showsDeviceMusic
+              ? 'آهنگ‌هایت را آپلود کن تا همه‌جا در دسترس باشند؛ آهنگ‌های گوشی هم بعد از دادن اجازه همین‌جا می‌آیند.'
+              : 'آهنگ‌هایت را آپلود کن تا روی وب و گوشی در دسترس باشند.',
+          action: FilledButton.icon(
+            onPressed: onUpload,
+            icon: const Icon(RhythmoIcons.uploadSimple),
+            label: const Text('آپلود آهنگ'),
+          ),
         ),
       ],
     );
