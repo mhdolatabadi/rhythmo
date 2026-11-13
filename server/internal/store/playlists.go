@@ -40,6 +40,12 @@ type Playlist struct {
 	OwnerEmail string
 	// ViewerAdmin is whether the member viewing it is one of its admins.
 	ViewerAdmin bool
+	// GoalTracks is the number of songs its members aim to fill it up to
+	// together (#276); nil for none.
+	GoalTracks *int
+	// Occasion is the viewer's own collection they filed it under, such as
+	// «سفر»; empty for none. Only loaded for the viewer's own lists.
+	Occasion string
 }
 
 // Member is someone who joined a playlist by its collaboration link.
@@ -65,7 +71,7 @@ var ErrForbidden = errors.New("not allowed")
 var ErrShareTokenTaken = errors.New("share token is already in use")
 
 // playlistColumnNames is the one list of columns scanPlaylist reads, in order.
-var playlistColumnNames = []string{"id::text", "owner_id::text", "name", "description", "share_token", "is_public", "public_review", "collab_token", "created_at", "updated_at"}
+var playlistColumnNames = []string{"id::text", "owner_id::text", "name", "description", "share_token", "is_public", "public_review", "collab_token", "created_at", "updated_at", "goal_tracks"}
 
 var (
 	playlistColumns          = strings.Join(playlistColumnNames, ", ")
@@ -74,7 +80,7 @@ var (
 
 func scanPlaylist(row pgx.Row) (Playlist, error) {
 	var p Playlist
-	err := row.Scan(&p.ID, &p.OwnerID, &p.Name, &p.Description, &p.ShareToken, &p.IsPublic, &p.PublicReview, &p.CollabToken, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.OwnerID, &p.Name, &p.Description, &p.ShareToken, &p.IsPublic, &p.PublicReview, &p.CollabToken, &p.CreatedAt, &p.UpdatedAt, &p.GoalTracks)
 	return p, err
 }
 
@@ -124,7 +130,9 @@ func (p *Playlists) ListForUser(ctx context.Context, userID string) ([]Playlist,
 			 WHERE pt.playlist_id = playlists.id
 			   AND tracks.status = 'ready'
 			   AND `+trackBelongs("tracks", "playlists")+`),
-			`+isAdmin("playlists", "$1")+`
+			`+isAdmin("playlists", "$1")+`,
+			COALESCE((SELECT o.occasion FROM playlist_occasions o
+			          WHERE o.playlist_id = playlists.id AND o.user_id::text = $1), '')
 		FROM playlists
 		WHERE `+canEdit("playlists", "$1")+`
 		ORDER BY updated_at DESC, id
@@ -148,8 +156,10 @@ func (p *Playlists) ListForUser(ctx context.Context, userID string) ([]Playlist,
 			&playlist.CollabToken,
 			&playlist.CreatedAt,
 			&playlist.UpdatedAt,
+			&playlist.GoalTracks,
 			&playlist.TrackCount,
 			&playlist.ViewerAdmin,
+			&playlist.Occasion,
 		); err != nil {
 			return nil, err
 		}
@@ -179,6 +189,11 @@ func (p *Playlists) ForUser(ctx context.Context, userID, playlistID string) (Pla
 		return Playlist{}, err
 	}
 	if playlist.Members, err = p.members(ctx, playlist.ID); err != nil {
+		return Playlist{}, err
+	}
+	if err := p.pool.QueryRow(ctx, `
+		SELECT COALESCE((SELECT occasion FROM playlist_occasions WHERE playlist_id::text = $1 AND user_id::text = $2), '')
+	`, playlist.ID, userID).Scan(&playlist.Occasion); err != nil {
 		return Playlist{}, err
 	}
 	for _, m := range playlist.Members {
@@ -257,6 +272,57 @@ func (p *Playlists) Rename(ctx context.Context, actorID, playlistID, name string
 	// Only the owner and admins get this far.
 	playlist.ViewerAdmin = err == nil && playlist.OwnerID != actorID
 	return playlist, err
+}
+
+// MaxGoalTracks is the largest shared goal a playlist may have.
+const MaxGoalTracks = 1000
+
+// SetGoal sets or, with nil, clears a collaborative playlist's shared goal
+// (#276). Only its owner and admins may, like its name. ErrNotFound for a
+// playlist the actor can't manage.
+func (p *Playlists) SetGoal(ctx context.Context, actorID, playlistID string, goal *int) (Playlist, error) {
+	playlist, err := scanPlaylist(p.pool.QueryRow(ctx, `
+		UPDATE playlists SET goal_tracks = $3, updated_at = now()
+		WHERE id::text = $1 AND `+canManage("playlists", "$2")+`
+		RETURNING `+playlistColumns, playlistID, actorID, goal))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Playlist{}, ErrNotFound
+	}
+	return playlist, err
+}
+
+// SetOccasion files a playlist the user owns or joined under their own
+// occasion collection, or with "" takes it out. It changes nothing for the
+// other members. ErrNotFound for a playlist the user can't see.
+func (p *Playlists) SetOccasion(ctx context.Context, userID, playlistID, occasion string) error {
+	var tag pgconn.CommandTag
+	var err error
+	if occasion == "" {
+		tag, err = p.pool.Exec(ctx, `
+			DELETE FROM playlist_occasions o USING playlists
+			WHERE o.playlist_id = playlists.id AND playlists.id::text = $1 AND o.user_id::text = $2
+		`, playlistID, userID)
+		if err == nil && tag.RowsAffected() == 0 {
+			// Nothing to take out is fine, if the playlist is theirs to see.
+			var visible bool
+			err = p.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM playlists WHERE id::text = $1 AND `+canEdit("playlists", "$2")+`)`,
+				playlistID, userID).Scan(&visible)
+			if err == nil && !visible {
+				return ErrNotFound
+			}
+		}
+		return err
+	}
+	tag, err = p.pool.Exec(ctx, `
+		INSERT INTO playlist_occasions (user_id, playlist_id, occasion)
+		SELECT $2::text::uuid, playlists.id, $3 FROM playlists
+		WHERE playlists.id::text = $1 AND `+canEdit("playlists", "$2")+`
+		ON CONFLICT (user_id, playlist_id) DO UPDATE SET occasion = EXCLUDED.occasion
+	`, playlistID, userID, occasion)
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
 }
 
 // ReplaceTracks sets the playlist's tracks, in order. The owner and members
@@ -439,7 +505,7 @@ func (p *Playlists) ForShareToken(ctx context.Context, token string) (SharedPlay
 		FROM playlists JOIN users ON users.id = playlists.owner_id
 		WHERE playlists.share_token = $1
 	`, token).Scan(&shared.ID, &shared.OwnerID, &shared.Name, &shared.Description, &shared.ShareToken,
-		&shared.IsPublic, &shared.PublicReview, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.OwnerEmail)
+		&shared.IsPublic, &shared.PublicReview, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.GoalTracks, &shared.OwnerEmail)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SharedPlaylist{}, ErrNotFound
 	}

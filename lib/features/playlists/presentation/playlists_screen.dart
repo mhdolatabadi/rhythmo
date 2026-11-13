@@ -319,7 +319,7 @@ class PopularPlaylistsButton extends StatelessWidget {
   }
 }
 
-class _PlaylistsOverview extends StatelessWidget {
+class _PlaylistsOverview extends StatefulWidget {
   const _PlaylistsOverview({
     required this.playlists,
     required this.onOpen,
@@ -329,10 +329,32 @@ class _PlaylistsOverview extends StatelessWidget {
   final void Function(Playlist playlist) onOpen;
 
   @override
+  State<_PlaylistsOverview> createState() => _PlaylistsOverviewState();
+}
+
+/// The playlists, with the listener's own occasion collections (#276) as
+/// filters once they have filed any; nothing shows until they do.
+class _PlaylistsOverviewState extends State<_PlaylistsOverview> {
+  String? _occasion;
+
+  @override
   Widget build(BuildContext context) {
+    final occasions = <String>{
+      for (final p in widget.playlists)
+        if (p.occasion.isNotEmpty) p.occasion
+    }.toList()
+      ..sort();
+    final selected = occasions.contains(_occasion) ? _occasion : null;
+    final playlists = selected == null
+        ? widget.playlists
+        : [
+            for (final p in widget.playlists)
+              if (p.occasion == selected) p
+          ];
+    final onOpen = widget.onOpen;
     // A shelf of the first few only when there are more below it; with a
     // handful it would just show the same playlists twice.
-    final featured = playlists.length > 4
+    final featured = selected == null && playlists.length > 4
         ? playlists.take(3).toList(growable: false)
         : const <Playlist>[];
     return SliverPadding(
@@ -340,6 +362,27 @@ class _PlaylistsOverview extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 112),
       sliver: SliverList.list(
         children: [
+          if (occasions.isNotEmpty) ...[
+            SizedBox(
+              height: RhythmoSpace.target,
+              child: ListView(
+                key: const ValueKey('occasion-filters'),
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final name in [null, ...occasions])
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 8),
+                      child: ChoiceChip(
+                        label: Text(name ?? 'همه'),
+                        selected: selected == name,
+                        onSelected: (_) => setState(() => _occasion = name),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (featured.isNotEmpty) ...[
             SizedBox(
               // The 148 px cover plus a title and a count line.
@@ -596,6 +639,40 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     }
   }
 
+  Future<void> _setGoal() async {
+    final current = playlist;
+    if (current == null) return;
+    final result = await showDialog<_GoalChoice>(
+      context: context,
+      builder: (_) => _GoalDialog(goal: current.goal),
+    );
+    if (result == null || !mounted) return;
+    setState(() => playlist =
+        current.withGoal(goal: result.goal, clearGoal: result.goal == null));
+    if (!await widget.controller.setGoal(current.id, result.goal)) {
+      if (!mounted) return;
+      setState(() => playlist = current);
+      _message('ذخیره‌ی هدف ناموفق بود. دوباره تلاش کن.');
+    }
+  }
+
+  Future<void> _setOccasion() async {
+    final current = playlist;
+    if (current == null) return;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => _OccasionDialog(
+          occasion: current.occasion, occasions: widget.controller.occasions),
+    );
+    if (name == null || !mounted) return;
+    setState(() => playlist = current.withGoal(occasion: name));
+    if (!await widget.controller.setOccasion(current.id, name)) {
+      if (!mounted) return;
+      setState(() => playlist = current);
+      _message('ذخیره‌ی مجموعه ناموفق بود. دوباره تلاش کن.');
+    }
+  }
+
   Future<void> _delete() async {
     final current = playlist;
     if (current == null) return;
@@ -639,6 +716,8 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               icon: const Icon(RhythmoIcons.dotsThreeVertical),
               onSelected: (action) => switch (action) {
                 _PlaylistAction.rename => _rename(),
+                _PlaylistAction.goal => _setGoal(),
+                _PlaylistAction.occasion => _setOccasion(),
                 _PlaylistAction.syncChannel => showChannelSyncSheet(context,
                     playlist: current, controller: widget.controller),
                 _PlaylistAction.delete => _delete(),
@@ -655,6 +734,22 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       child: _MenuRow(
                         icon: RhythmoIcons.pencilSimple,
                         label: 'ویرایش نام و توضیح',
+                      ),
+                    ),
+                  if (current.canManage && widget.controller.supportsGoals)
+                    const PopupMenuItem(
+                      value: _PlaylistAction.goal,
+                      child: _MenuRow(
+                        icon: RhythmoIcons.flag,
+                        label: 'هدف مشترک',
+                      ),
+                    ),
+                  if (widget.controller.supportsGoals)
+                    const PopupMenuItem(
+                      value: _PlaylistAction.occasion,
+                      child: _MenuRow(
+                        icon: RhythmoIcons.playlist,
+                        label: 'افزودن به مجموعه',
                       ),
                     ),
                   if (current.canManage && widget.controller.canSyncChannels)
@@ -731,7 +826,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   }
 }
 
-enum _PlaylistAction { rename, syncChannel, delete, leave }
+enum _PlaylistAction { rename, goal, occasion, syncChannel, delete, leave }
 
 class _MenuRow extends StatelessWidget {
   const _MenuRow({required this.icon, required this.label, this.color});
@@ -812,6 +907,12 @@ class _PlaylistBody extends StatelessWidget {
               ),
             ),
           ),
+          if (playlist.goal != null)
+            SliverPadding(
+              padding: side.add(const EdgeInsets.only(top: RhythmoSpace.lg)),
+              sliver: SliverToBoxAdapter(
+                  child: PlaylistGoalProgress(playlist: playlist)),
+            ),
           SliverPadding(
             padding: side,
             sliver: SliverToBoxAdapter(
@@ -1514,5 +1615,210 @@ class _PlaylistEmptyState extends StatelessWidget {
           icon: const Icon(RhythmoIcons.plus),
           label: Text(action),
         ),
+      );
+}
+
+/// A shared goal's progress (#276): how full the playlist is, how many
+/// people's songs are in it and the viewer's own share. Nobody is ranked.
+class PlaylistGoalProgress extends StatelessWidget {
+  const PlaylistGoalProgress({super.key, required this.playlist});
+
+  final Playlist playlist;
+
+  @override
+  Widget build(BuildContext context) {
+    final goal = playlist.goal;
+    if (goal == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final count = playlist.displayTrackCount;
+    final done = count >= goal;
+    final parts = [
+      done
+          ? 'هدف رسید: ${persianDigits(count)} آهنگ'
+          : '${persianDigits(count)} از ${persianDigits(goal)} آهنگ',
+      if ((playlist.contributors ?? 0) > 1)
+        '${persianDigits(playlist.contributors!)} نفر',
+      if ((playlist.viewerContribution ?? 0) > 0 && playlist.isCollaborative)
+        'سهم تو ${persianDigits(playlist.viewerContribution!)}',
+    ];
+    return Semantics(
+      container: true,
+      label: 'هدف مشترک، ${parts.join('، ')}',
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(RhythmoIcons.flag,
+                  size: 16, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: RhythmoSpace.xs),
+              Expanded(
+                child: Text(
+                  parts.join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: RhythmoSpace.xs),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(RhythmoRadii.bar),
+            child: LinearProgressIndicator(
+              key: const ValueKey('goal-progress'),
+              value: (count / goal).clamp(0.0, 1.0),
+              minHeight: 4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the goal dialog decided: a new goal, or null for none.
+class _GoalChoice {
+  const _GoalChoice(this.goal);
+  final int? goal;
+}
+
+class _GoalDialog extends StatefulWidget {
+  const _GoalDialog({this.goal});
+  final int? goal;
+
+  @override
+  State<_GoalDialog> createState() => _GoalDialogState();
+}
+
+class _GoalDialogState extends State<_GoalDialog> {
+  late final _field = TextEditingController(
+      text: widget.goal == null ? '' : persianDigits(widget.goal!));
+  String? _error;
+
+  @override
+  void dispose() {
+    _field.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final latin = _field.text.trim().replaceAllMapped(
+        RegExp('[۰-۹٠-٩]'),
+        (m) => (m[0]!.codeUnitAt(0) >= 0x06F0
+                ? m[0]!.codeUnitAt(0) - 0x06F0
+                : m[0]!.codeUnitAt(0) - 0x0660)
+            .toString());
+    final goal = int.tryParse(latin);
+    if (goal == null || goal < 1 || goal > 1000) {
+      setState(() => _error = 'عددی از ۱ تا ۱۰۰۰ بنویس.');
+      return;
+    }
+    Navigator.pop(context, _GoalChoice(goal));
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('هدف مشترک'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('همه با هم این فهرست را تا چند آهنگ پر کنید؟'),
+            const SizedBox(height: RhythmoSpace.md),
+            TextField(
+              key: const ValueKey('goal-field'),
+              controller: _field,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration:
+                  InputDecoration(labelText: 'تعداد آهنگ', errorText: _error),
+              onSubmitted: (_) => _save(),
+            ),
+          ],
+        ),
+        actions: [
+          if (widget.goal != null)
+            TextButton(
+              onPressed: () => Navigator.pop(context, const _GoalChoice(null)),
+              child: const Text('بدون هدف'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('انصراف'),
+          ),
+          FilledButton(onPressed: _save, child: const Text('ذخیره')),
+        ],
+      );
+}
+
+/// Files a playlist under one of the listener's own occasion collections,
+/// or a new one; nothing is suggested beyond what they already made.
+class _OccasionDialog extends StatefulWidget {
+  const _OccasionDialog({required this.occasion, required this.occasions});
+  final String occasion;
+  final List<String> occasions;
+
+  @override
+  State<_OccasionDialog> createState() => _OccasionDialogState();
+}
+
+class _OccasionDialogState extends State<_OccasionDialog> {
+  late final _field = TextEditingController(text: widget.occasion);
+
+  @override
+  void dispose() {
+    _field.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('افزودن به مجموعه'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('مجموعه‌ها فقط برای خودت است؛ مثلاً «سفر» یا «ورزش».'),
+            const SizedBox(height: RhythmoSpace.md),
+            TextField(
+              key: const ValueKey('occasion-field'),
+              controller: _field,
+              autofocus: true,
+              maxLength: 40,
+              decoration: const InputDecoration(labelText: 'نام مجموعه'),
+              onSubmitted: (value) => Navigator.pop(context, value.trim()),
+            ),
+            if (widget.occasions.isNotEmpty)
+              Wrap(
+                spacing: RhythmoSpace.sm,
+                runSpacing: RhythmoSpace.sm,
+                children: [
+                  for (final name in widget.occasions)
+                    ActionChip(
+                      label: Text(name),
+                      onPressed: () => Navigator.pop(context, name),
+                    ),
+                ],
+              ),
+          ],
+        ),
+        actions: [
+          if (widget.occasion.isNotEmpty)
+            TextButton(
+              onPressed: () => Navigator.pop(context, ''),
+              child: const Text('بیرون آوردن'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('انصراف'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, _field.text.trim()),
+            child: const Text('ذخیره'),
+          ),
+        ],
       );
 }

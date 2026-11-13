@@ -592,6 +592,58 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
     }
   }
 
+  /// Whether the server keeps shared goals and occasion collections.
+  bool get supportsGoals => _api is PlaylistGoalsApi;
+
+  /// The listener's occasion collections, by name, as they filed them.
+  List<String> get occasions {
+    final names = <String>{
+      for (final p in playlists)
+        if (p.occasion.isNotEmpty) p.occasion
+    };
+    return names.toList()..sort();
+  }
+
+  void _replace(String id, Playlist Function(Playlist) change) {
+    playlists = [
+      for (final p in playlists) p.id == id ? change(p) : p,
+    ];
+    notifyListeners();
+  }
+
+  /// Sets or clears ([goal] null) the shared goal (#276). It shows at once
+  /// and goes back to what it was when the server says no.
+  Future<bool> setGoal(String id, int? goal) async {
+    final token = _token(), api = _api;
+    if (token == null || api is! PlaylistGoalsApi) return false;
+    final before = playlists.where((p) => p.id == id).firstOrNull;
+    _replace(id, (p) => p.withGoal(goal: goal, clearGoal: goal == null));
+    try {
+      await (api as PlaylistGoalsApi).setPlaylistGoal(token, id, goal);
+      return true;
+    } catch (_) {
+      if (before != null) _replace(id, (_) => before);
+      return false;
+    }
+  }
+
+  /// Files the playlist under [occasion], or "" takes it out; just for
+  /// this listener. Undone when the server says no.
+  Future<bool> setOccasion(String id, String occasion) async {
+    final token = _token(), api = _api;
+    if (token == null || api is! PlaylistGoalsApi) return false;
+    final name = occasion.trim().split(RegExp(r'\s+')).join(' ');
+    final before = playlists.where((p) => p.id == id).firstOrNull;
+    _replace(id, (p) => p.withGoal(occasion: name));
+    try {
+      await (api as PlaylistGoalsApi).setPlaylistOccasion(token, id, name);
+      return true;
+    } catch (_) {
+      if (before != null) _replace(id, (_) => before);
+      return false;
+    }
+  }
+
   Future<bool> delete(String id) async {
     final token = _token();
     if (token == null) return false;
