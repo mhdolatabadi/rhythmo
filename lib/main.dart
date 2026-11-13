@@ -11,6 +11,7 @@ import 'package:rhythmo/features/link_import/data/link_import.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rhythmo/app/app_configuration.dart';
+import 'package:rhythmo/core/accessibility/web_semantics.dart';
 import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/app/backend_gate.dart';
 import 'package:rhythmo/core/api/api_client.dart';
@@ -54,6 +55,7 @@ import 'package:rhythmo/features/notifications/application/notifications_control
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) await BrowserContextMenu.disableContextMenu();
+  keepWebSemanticsOn();
   final mediaSession = await startMediaSession();
   await AppConfiguration.loadLaunchLink();
   runApp(ProviderScope(child: RhythmoApp(mediaSession: mediaSession)));
