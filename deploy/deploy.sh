@@ -40,14 +40,37 @@ git checkout --detach "$revision"
 # Images are tagged with the exact source commit. Pull everything before
 # changing running containers, so a missing image leaves production untouched.
 export NAFIR_IMAGE_TAG="$(git rev-parse HEAD)"
+# The transcriber is tagged by the content of its folder (see images.yml), so
+# an unchanged transcriber is not downloaded again.
+export NAFIR_TRANSCRIBER_TAG="src-$(git rev-parse HEAD:server/transcriber)"
 compose_args=()
 if [[ $transcription_enabled == true ]]; then
   compose_args=(--profile transcription)
   export TRANSCRIPTION_URL=http://transcriber:8090
 fi
-docker compose "${compose_args[@]}" pull api web
-if [[ ${#compose_args[@]} -gt 0 ]]; then
-  docker compose "${compose_args[@]}" pull transcriber
+
+# The link to ghcr.io can be slow and drop connections. Docker keeps finished
+# layers, so each retry continues where the last one stopped.
+pull_with_retries() {
+  local attempt
+  for attempt in 1 2 3 4; do
+    if docker compose "${compose_args[@]}" pull "$@"; then
+      return 0
+    fi
+    echo "Pulling $* failed (attempt ${attempt}); retrying." >&2
+    sleep $((attempt * 10))
+  done
+  return 1
+}
+
+pull_with_retries api web
+start_services=()
+if [[ $transcription_enabled == true ]] && ! pull_with_retries transcriber; then
+  # Ship the new api and web anyway; the running transcriber keeps working.
+  repo="$(grep -E '^NAFIR_IMAGE_REPO=' .env | tail -n 1 | cut -d= -f2- || true)"
+  echo "WARNING: could not pull the transcriber image; the running transcriber is kept." >&2
+  echo "WARNING: fetch it with: docker pull ${repo:-ghcr.io/mhdolatabadi/rhythmo}/transcriber:${NAFIR_TRANSCRIBER_TAG}" >&2
+  mapfile -t start_services < <(docker compose "${compose_args[@]}" config --services | grep -vx transcriber)
 fi
 
 # One-time move from the old project name ("deploy", from this folder) to
@@ -62,7 +85,7 @@ if [[ -n "$old_containers" ]]; then
   docker rm -f $old_containers
 fi
 
-docker compose "${compose_args[@]}" up -d --no-build --remove-orphans
+docker compose "${compose_args[@]}" up -d --no-build --remove-orphans "${start_services[@]}"
 docker image prune -f
 
 domain="$(grep -E '^NAFIR_DOMAIN=' .env | cut -d= -f2-)"

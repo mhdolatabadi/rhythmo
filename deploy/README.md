@@ -54,8 +54,18 @@ keeps byte ranges and cached media identical to the object stored in MinIO.
 
 The **Images** workflow builds the `api` and `web` images on every push to `main`
 and publishes them to GitHub Container Registry as
-`ghcr.io/mhdolatabadi/nafir/{api,web}`, tagged with the commit SHA and `latest`.
+`ghcr.io/mhdolatabadi/rhythmo/{api,web}`, tagged with the commit SHA and `latest`.
 The server only pulls them, so it never needs the multi-gigabyte Flutter SDK.
+`NAFIR_IMAGE_REPO` in `deploy/.env` must name the same path
+(`ghcr.io/mhdolatabadi/rhythmo`); the old `nafir/*` packages no longer get new tags.
+
+The transcriber image carries a 1.5 GB speech model, so it is tagged by the
+content of `server/transcriber` (`src-<tree hash>`) instead of the commit, and is
+only rebuilt and pulled again when that folder changes. Pulls are retried; if the
+transcriber still cannot be pulled, the deployment goes ahead with the new `api`
+and `web` and leaves the running transcriber as it was, with a warning. To fetch it
+by hand over a slow link, run the `docker pull` the warning prints (it keeps
+finished layers between attempts) and deploy again.
 
 If `docker compose pull` returns `unauthorized`, open each package under the
 repository's **Packages** and set its visibility to public, or run

@@ -5,7 +5,7 @@ name: nafir
 
 services:
   api:
-    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/nafir}/api:${NAFIR_IMAGE_TAG:-latest}
+    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/rhythmo}/api:${NAFIR_IMAGE_TAG:-latest}
     build:
       context: ../server
     restart: unless-stopped
@@ -120,7 +120,7 @@ services:
 
   transcriber:
     profiles: [transcription]
-    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/nafir}/transcriber:${NAFIR_IMAGE_TAG:-latest}
+    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/rhythmo}/transcriber:${NAFIR_TRANSCRIBER_TAG:-${NAFIR_IMAGE_TAG:-latest}}
     restart: unless-stopped
     environment:
       TRANSCRIPTION_TOKEN: ${TRANSCRIPTION_TOKEN:-}
@@ -135,7 +135,7 @@ services:
     # No published ports. Only the API uses this service.
 
   web:
-    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/nafir}/web:${NAFIR_IMAGE_TAG:-latest}
+    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/rhythmo}/web:${NAFIR_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.web
