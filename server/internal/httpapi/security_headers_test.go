@@ -59,8 +59,9 @@ func TestPublicPagesCarryAStrictContentSecurityPolicy(t *testing.T) {
 	}
 }
 
-// The page policy allows no script at all, so the pages must not need any:
-// the only script element is the JSON-LD data block, which CSP leaves alone.
+// The page policy allows only the site's own list player, so the pages hold
+// no inline script: besides the player, the only script element is the
+// JSON-LD data block, which CSP leaves alone.
 func TestPublicPagesNeedNoScript(t *testing.T) {
 	token := strings.Repeat("A", 22)
 	data := &sharingStore{token: &token, public: true, name: "mix", tracks: []store.Track{{ID: "t1", Title: "song"}}}
@@ -70,7 +71,7 @@ func TestPublicPagesNeedNoScript(t *testing.T) {
 	for _, path := range []string{"/", "/p/" + token, "/privacy", "/delete-account", "/no-such-page"} {
 		page := get(site, path).Body.String()
 		for _, tag := range scriptTag.FindAllString(page, -1) {
-			if tag != `<script type="application/ld+json">` {
+			if tag != `<script type="application/ld+json">` && tag != `<script src="/player.js" defer>` {
 				t.Errorf("%s has an executable script: %s", path, tag)
 			}
 		}

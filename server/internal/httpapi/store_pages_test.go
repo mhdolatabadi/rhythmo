@@ -144,7 +144,7 @@ func TestStorePagesNeedNoScript(t *testing.T) {
 	for _, path := range []string{"/store", storeSongPath, "/store/artists", "/store/albums"} {
 		page := get(site, path).Body.String()
 		for _, tag := range scriptTag.FindAllString(page, -1) {
-			if tag != `<script type="application/ld+json">` {
+			if tag != `<script type="application/ld+json">` && tag != `<script src="/player.js" defer>` {
 				t.Errorf("%s has an executable script: %s", path, tag)
 			}
 		}
