@@ -56,9 +56,14 @@ class FakeAuthApi implements AuthApi {
   }
 
   @override
-  Future<AuthSession> register(String email, String password) async {
+  Future<AuthSession?> register(String email, String password) async {
     if (password == 'password') {
       throw const ApiException('400', statusCode: 400, code: 'weak_password');
+    }
+    if (registerWithCode) {
+      pending[email] = password;
+      mailedCodes[email] = '654321';
+      return null;
     }
     if (!registered.add(email)) {
       throw const ApiException('409', statusCode: 409, code: 'email_taken');
@@ -68,6 +73,39 @@ class FakeAuthApi implements AuthApi {
   }
 
   final revoked = <String>[];
+
+  /// Codes mailed by [forgotPassword] and [register] in code mode.
+  final mailedCodes = <String, String>{};
+
+  /// Whether [register] mails a code instead of signing in.
+  bool registerWithCode = false;
+  final pending = <String, String>{};
+
+  @override
+  Future<AuthSession> confirmRegistration(String email, String code) async {
+    if (pending[email] == null || mailedCodes[email] != code) {
+      throw const ApiException('400', statusCode: 400, code: 'invalid_code');
+    }
+    pending.remove(email);
+    return AuthSession(
+        token: validToken,
+        user: AuthUser(id: 'u3', email: email, emailVerified: true));
+  }
+
+  @override
+  Future<void> forgotPassword(String email) async {
+    if (email == _user.email) mailedCodes[email] = '123456';
+  }
+
+  @override
+  Future<AuthSession> resetPassword(
+      String email, String code, String password) async {
+    if (mailedCodes[email] != code) {
+      throw const ApiException('400', statusCode: 400, code: 'invalid_code');
+    }
+    mailedCodes.remove(email);
+    return AuthSession(token: validToken, user: _user);
+  }
 
   @override
   Future<AuthSession> revokeSessions(String token) async {
@@ -444,6 +482,73 @@ void main() {
         findsOneWidget);
     expect(tester.takeException(), isNull);
     expect(await tokens.read(), isNull);
+  });
+
+  testWidgets('registering with a mailed code signs in once it is confirmed',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = FakeAuthApi()..registerWithCode = true;
+    final tokens = MemoryTokenStore();
+    await _pumpApp(tester, tokenStore: tokens, api: api);
+    await tester.tap(find.text('حساب نداری؟ ثبت‌نام کن'));
+    await tester.pumpAndSettle();
+
+    await _submit(tester, 'new@example.com', 'long enough');
+    expect(find.text('تأیید ایمیل'), findsOneWidget);
+    expect(await tokens.read(), isNull);
+
+    await tester.enterText(find.byType(TextFormField), '111111');
+    await tester.tap(find.text('ساخت حساب'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('کد درست نیست'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField), '654321');
+    await tester.tap(find.text('ساخت حساب'));
+    await tester.pumpAndSettle();
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
+    expect(await tokens.read(), 'valid-token');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a forgotten password is reset with a mailed code', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = FakeAuthApi();
+    final tokens = MemoryTokenStore();
+    await _pumpApp(tester, tokenStore: tokens, api: api);
+
+    await tester.enterText(
+        find.byType(TextFormField).first, 'listener@example.com');
+    await tester.tap(find.text('رمز را فراموش کرده‌ای؟'));
+    await tester.pumpAndSettle();
+    expect(find.text('بازیابی رمز عبور'), findsOneWidget);
+    await tester.tap(find.text('فرستادن کد'));
+    await tester.pumpAndSettle();
+    expect(api.mailedCodes['listener@example.com'], '123456');
+
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(1), '123456');
+    await tester.enterText(fields.at(2), 'a brand new secret');
+    await tester.tap(find.text('تغییر رمز و ورود'));
+    await tester.pumpAndSettle();
+    expect(find.text('«موسیقی من» خالی است'), findsOneWidget);
+    expect(await tokens.read(), 'valid-token');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the password can be shown while typing', (tester) async {
+    await _pumpApp(tester, tokenStore: MemoryTokenStore());
+    EditableText password() =>
+        tester.widget<EditableText>(find.byType(EditableText).at(1));
+    expect(password().obscureText, isTrue);
+    await tester.tap(find.byTooltip('نمایش رمز'));
+    await tester.pump();
+    expect(password().obscureText, isFalse);
   });
 
   testWidgets('registration rejects a short password before calling the API', (

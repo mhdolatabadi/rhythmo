@@ -46,8 +46,27 @@ class AuthController extends ChangeNotifier with QuietAfterDispose {
   Future<void> login(String email, String password) =>
       _start(_api.login(email.trim(), password));
 
-  Future<void> register(String email, String password) =>
-      _start(_api.register(email.trim(), password));
+  /// Signs up. Returns true when the server mailed a code that
+  /// [confirmRegistration] needs before the account exists.
+  Future<bool> register(String email, String password) async {
+    final session = await _api.register(email.trim(), password);
+    if (session == null) return true;
+    await _start(Future.value(session));
+    return false;
+  }
+
+  /// Finishes a sign-up with the mailed code and signs in.
+  Future<void> confirmRegistration(String email, String code) =>
+      _start(_api.confirmRegistration(email.trim(), code.trim()));
+
+  /// Mails a password reset code, if the address has an account.
+  Future<void> forgotPassword(String email) =>
+      _api.forgotPassword(email.trim());
+
+  /// Sets a new password with the mailed code and signs in; every other
+  /// device is signed out.
+  Future<void> resetPassword(String email, String code, String password) =>
+      _start(_api.resetPassword(email.trim(), code.trim(), password));
 
   /// Deletes the account for good, then signs out. Throws, still signed in,
   /// when the server refuses, for example for a wrong password.

@@ -42,7 +42,21 @@ class ApiException implements Exception {
 }
 
 abstract interface class AuthApi {
-  Future<AuthSession> register(String email, String password);
+  /// Signs up. Returns the session, or null when the server mailed a code
+  /// to finish with [confirmRegistration] instead; it answers that way
+  /// whether or not the address already has an account.
+  Future<AuthSession?> register(String email, String password);
+
+  /// Creates the account waiting for [email] with the mailed [code].
+  Future<AuthSession> confirmRegistration(String email, String code);
+
+  /// Mails a password reset code if [email] has an account. It succeeds the
+  /// same way when it has none.
+  Future<void> forgotPassword(String email);
+
+  /// Sets a new password with a mailed reset code, ending every other
+  /// session.
+  Future<AuthSession> resetPassword(String email, String code, String password);
   Future<AuthSession> login(String email, String password);
   Future<AuthUser> me(String token);
 
@@ -640,9 +654,30 @@ class ApiClient
   }
 
   @override
-  Future<AuthSession> register(String email, String password) async {
+  Future<AuthSession?> register(String email, String password) async {
     final body = await _send('POST', '/api/v1/auth/register',
         body: {'email': email, 'password': password});
+    if (body['token'] == null) return null;
+    return AuthSession.fromJson(body);
+  }
+
+  @override
+  Future<AuthSession> confirmRegistration(String email, String code) async {
+    final body = await _send('POST', '/api/v1/auth/register/confirm',
+        body: {'email': email, 'code': code});
+    return AuthSession.fromJson(body);
+  }
+
+  @override
+  Future<void> forgotPassword(String email) async {
+    await _send('POST', '/api/v1/auth/password/forgot', body: {'email': email});
+  }
+
+  @override
+  Future<AuthSession> resetPassword(
+      String email, String code, String password) async {
+    final body = await _send('POST', '/api/v1/auth/password/reset',
+        body: {'email': email, 'code': code, 'password': password});
     return AuthSession.fromJson(body);
   }
 

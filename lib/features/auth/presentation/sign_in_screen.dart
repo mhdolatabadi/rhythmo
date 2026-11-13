@@ -7,8 +7,7 @@ import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/core/widgets/rhythmo_mark.dart';
 import 'package:rhythmo/features/auth/application/auth_controller.dart';
-
-const _minPasswordLength = 8;
+import 'package:rhythmo/features/auth/presentation/account_code_screens.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({
@@ -52,7 +51,17 @@ class _SignInScreenState extends State<SignInScreen> {
     });
     try {
       if (_isRegistering) {
-        await widget.controller.register(_email.text, _password.text);
+        final needsCode =
+            await widget.controller.register(_email.text, _password.text);
+        if (needsCode && mounted) {
+          await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => SignupCodeScreen(
+              controller: widget.controller,
+              email: _email.text.trim(),
+              password: _password.text,
+            ),
+          ));
+        }
       } else {
         await widget.controller.login(_email.text, _password.text);
       }
@@ -61,6 +70,15 @@ class _SignInScreenState extends State<SignInScreen> {
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }
+  }
+
+  void _forgotPassword() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => PasswordResetScreen(
+        controller: widget.controller,
+        email: _email.text.trim(),
+      ),
+    ));
   }
 
   static String _messageFor(Object error) {
@@ -132,29 +150,20 @@ class _SignInScreenState extends State<SignInScreen> {
                                       : null,
                             ),
                             const SizedBox(height: 12),
-                            TextFormField(
+                            PasswordField(
+                              key: ValueKey(_isRegistering),
                               controller: _password,
-                              decoration:
-                                  const InputDecoration(labelText: 'رمز عبور'),
-                              obscureText: true,
-                              autofillHints: [
-                                _isRegistering
-                                    ? AutofillHints.newPassword
-                                    : AutofillHints.password,
-                              ],
-                              textDirection: TextDirection.ltr,
-                              onFieldSubmitted: (_) => _submit(),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'رمز عبور را وارد کن.';
-                                }
-                                if (_isRegistering &&
-                                    value.length < _minPasswordLength) {
-                                  return 'رمز عبور باید حداقل ۸ کاراکتر باشد.';
-                                }
-                                return null;
-                              },
+                              isNew: _isRegistering,
+                              onSubmitted: (_) => _submit(),
                             ),
+                            if (!_isRegistering)
+                              Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: TextButton(
+                                  onPressed: _isBusy ? null : _forgotPassword,
+                                  child: const Text('رمز را فراموش کرده‌ای؟'),
+                                ),
+                              ),
                             if (_error != null) ...[
                               const SizedBox(height: 12),
                               Text(
