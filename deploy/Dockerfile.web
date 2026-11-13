@@ -14,9 +14,15 @@ RUN flutter pub get && \
     flutter build web --release --no-web-resources-cdn --base-href /app/ \
       --dart-define=API_BASE_URL=${API_BASE_URL}
 
-FROM nginx:1.27-alpine
+# nginx runs as an unprivileged user, master included (#209 L5). It still
+# listens on port 80: Docker lets containers bind low ports without root
+# (net.ipv4.ip_unprivileged_port_start=0, also set in compose.yaml).
+FROM nginxinc/nginx-unprivileged:1.27-alpine
+USER root
 # The stock welcome and error pages must never be what a visitor sees (#153).
 RUN rm -f /usr/share/nginx/html/index.html /usr/share/nginx/html/50x.html
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 # The app is served under /app/; / belongs to the public pages (#129).
 COPY --from=build /app/build/web /usr/share/nginx/html/app
+USER 101
+EXPOSE 80
