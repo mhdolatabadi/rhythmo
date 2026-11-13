@@ -215,6 +215,52 @@ class Track {
         addedAt: addedAt ?? other.addedAt,
       );
 
+  /// This track with the fields of a metadata edit the server has not
+  /// taken yet (#405); everything else stays as it is.
+  Track withMetadata({
+    required String title,
+    String? fileName,
+    String? artist,
+    String? album,
+    String? albumArtist,
+    String? composer,
+    String? genre,
+    int? year,
+    int? trackNumber,
+    int? discNumber,
+    String? comment,
+  }) =>
+      Track(
+        id: id,
+        title: title,
+        artist: artist,
+        album: album,
+        albumArtist: albumArtist,
+        composer: composer,
+        genre: genre,
+        year: year,
+        trackNumber: trackNumber,
+        discNumber: discNumber,
+        comment: comment,
+        contentType: contentType,
+        sizeBytes: sizeBytes,
+        fileName: fileName ?? this.fileName,
+        sourceUri: sourceUri,
+        source: source,
+        sharedVia: sharedVia,
+        addedBy: addedBy,
+        viaPlaylist: viaPlaylist,
+        fromStore: fromStore,
+        published: published,
+        publishReview: publishReview,
+        likeCount: likeCount,
+        liked: liked,
+        version: version,
+        embeddedTags: embeddedTags,
+        replayGain: replayGain,
+        addedAt: addedAt,
+      );
+
   /// Original filename when the platform exposes it. Local uploads use this
   /// to preserve the extension for format detection.
   final String? fileName;
