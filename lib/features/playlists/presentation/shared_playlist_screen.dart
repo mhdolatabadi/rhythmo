@@ -173,6 +173,7 @@ class _SharedPlaylistScreenState extends State<SharedPlaylistScreen> {
     try {
       final playlist = await widget.controller.openShared(widget.shareToken);
       if (!mounted) return;
+      if (playlist.isPublic) widget.player.favorites.knowLiked(playlist.tracks);
       setState(() {
         _playlist = playlist;
         _state = _Load.loaded;
@@ -395,6 +396,7 @@ class _Contents extends StatelessWidget {
                               ? LikeButton(
                                   track: track,
                                   favorites: player.favorites,
+                                  showCount: true,
                                   onSignIn: onSignIn)
                               : null,
                           onTap: () => player.playTapped(tracks, index),
