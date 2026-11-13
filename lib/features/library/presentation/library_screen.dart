@@ -2765,13 +2765,13 @@ class _HoverPlayState extends State<_HoverPlay> {
             IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.45),
+                  color: RhythmoColors.background.withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(RhythmoRadii.sm),
                 ),
                 child: const SizedBox.square(
                   dimension: 48,
                   child: Icon(RhythmoIcons.playFill,
-                      size: 20, color: Colors.white),
+                      size: 20, color: RhythmoColors.onBrand),
                 ),
               ),
             ),
