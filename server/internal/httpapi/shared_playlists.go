@@ -217,11 +217,14 @@ type sharedPlaylistResponse struct {
 	Liked       bool   `json:"liked"`
 	// Subscribed and SubscriberCount are left out while subscriptions are
 	// off.
-	Subscribed      *bool           `json:"subscribed,omitempty"`
-	SubscriberCount *int            `json:"subscriberCount,omitempty"`
-	Muted           *bool           `json:"muted,omitempty"`
-	Tracks          []trackResponse `json:"tracks"`
-	UpdatedAt       time.Time       `json:"updatedAt"`
+	Subscribed      *bool `json:"subscribed,omitempty"`
+	SubscriberCount *int  `json:"subscriberCount,omitempty"`
+	Muted           *bool `json:"muted,omitempty"`
+	// SyncedFrom names the messengers whose channels post into it through
+	// a bot, for the muted «synced from Telegram» line.
+	SyncedFrom []string        `json:"syncedFrom,omitempty"`
+	Tracks     []trackResponse `json:"tracks"`
+	UpdatedAt  time.Time       `json:"updatedAt"`
 }
 
 // sharedPlaylist loads the playlist for the {token} link. Malformed,
@@ -266,7 +269,8 @@ func (h *PlaylistHandlers) handleShared(w http.ResponseWriter, r *http.Request) 
 	response := sharedPlaylistResponse{
 		Name: shared.Name, Description: shared.Description, Owner: bot.MaskEmail(shared.OwnerEmail), IsOwner: shared.OwnerID == userID,
 		Public: shared.IsPublic, TrackCount: len(shared.Tracks), LikeCount: likes.Count, Liked: likes.Liked,
-		Tracks: make([]trackResponse, 0, len(shared.Tracks)), UpdatedAt: shared.UpdatedAt.UTC(),
+		SyncedFrom: shared.SyncedFrom,
+		Tracks:     make([]trackResponse, 0, len(shared.Tracks)), UpdatedAt: shared.UpdatedAt.UTC(),
 	}
 	for _, track := range shared.Tracks {
 		response.Tracks = append(response.Tracks, toTrackResponse(track))
@@ -349,14 +353,16 @@ func (h *PlaylistHandlers) handleLike(liked bool) http.HandlerFunc {
 }
 
 type publicPlaylistResponse struct {
-	ShareToken string    `json:"shareToken"`
-	Name       string    `json:"name"`
-	Owner      string    `json:"owner"`
-	IsOwner    bool      `json:"isOwner"`
-	TrackCount int       `json:"trackCount"`
-	LikeCount  int       `json:"likeCount"`
-	Liked      bool      `json:"liked"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ShareToken string `json:"shareToken"`
+	Name       string `json:"name"`
+	Owner      string `json:"owner"`
+	IsOwner    bool   `json:"isOwner"`
+	TrackCount int    `json:"trackCount"`
+	LikeCount  int    `json:"likeCount"`
+	Liked      bool   `json:"liked"`
+	// SubscriberCount is left out while subscriptions are off.
+	SubscriberCount *int      `json:"subscriberCount,omitempty"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 // handlePublic lists public playlists, most liked first. ?limit= caps how
@@ -382,11 +388,15 @@ func (h *PlaylistHandlers) handlePublic(w http.ResponseWriter, r *http.Request) 
 	}
 	response := make([]publicPlaylistResponse, 0, len(listed))
 	for _, p := range listed {
-		response = append(response, publicPlaylistResponse{
+		item := publicPlaylistResponse{
 			ShareToken: p.ShareToken, Name: p.Name, Owner: bot.MaskEmail(p.OwnerEmail),
 			IsOwner: p.OwnerID == userID, TrackCount: p.TrackCount,
 			LikeCount: p.Likes.Count, Liked: p.Likes.Liked, UpdatedAt: p.UpdatedAt.UTC(),
-		})
+		}
+		if h.subscriptions != nil {
+			item.SubscriberCount = &p.SubscriberCount
+		}
+		response = append(response, item)
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"playlists": response})

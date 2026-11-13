@@ -34,7 +34,9 @@ class UploadStatusCard extends StatelessWidget {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
-        final name = controller.fileName ?? '';
+        // First-strong isolates keep a Latin file name from reordering the
+        // Persian words, dashes and digits around it (#384).
+        final name = '\u2068${controller.fileName ?? ''}\u2069';
         final step = controller.batchTotal > 1
             ? 'فایل ${persianDigits(controller.batchIndex)} از ${persianDigits(controller.batchTotal)} — '
             : '';
@@ -44,7 +46,7 @@ class UploadStatusCard extends StatelessWidget {
           UploadPhase.reading => ('در حال خواندن فایل…', null, false),
           UploadPhase.preparing => ('$stepآماده‌سازی «$name»…', null, false),
           UploadPhase.uploading => (
-              '$stepدر حال آپلود «$name» — ${persianDigits((controller.progress * 100).round())}٪',
+              '$stepدر حال آپلود «$name»',
               controller.progress,
               false,
             ),
@@ -93,6 +95,14 @@ class UploadStatusCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(child: Text(label)),
+                  if (controller.phase == UploadPhase.uploading)
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(start: 8),
+                      child: Text(
+                        '${persianDigits((controller.progress * 100).round())}٪',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
                   if (closable)
                     IconButton(
                       tooltip: 'بستن',

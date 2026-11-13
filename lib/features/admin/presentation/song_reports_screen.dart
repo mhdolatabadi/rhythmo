@@ -63,16 +63,16 @@ class _SongReportsScreenState extends State<SongReportsScreen> {
       final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-                  title: const Text('حذف آهنگ از استور و فهرست‌ها؟'),
+                  title: const Text('حذف آهنگ از گنجینه و فهرست‌ها؟'),
                   content: Text(
-                      '«${report.track.title}» و همهٔ نسخه‌های گروه‌بندی‌شدهٔ آن از استور و تمام فهرست‌های پخش حذف می‌شوند. فایل خصوصی صاحب آهنگ باقی می‌ماند.'),
+                      '«${report.track.title}» و همهٔ نسخه‌های گروه‌بندی‌شدهٔ آن از گنجینه و تمام فهرست‌های پخش حذف می‌شوند. فایل خصوصی صاحب آهنگ باقی می‌ماند.'),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context, false),
                         child: const Text('انصراف')),
                     FilledButton(
                         onPressed: () => Navigator.pop(context, true),
-                        child: const Text('حذف از استور و فهرست‌ها'))
+                        child: const Text('حذف از گنجینه و فهرست‌ها'))
                   ]));
       if (confirmed != true || !mounted) return;
     }
@@ -178,7 +178,7 @@ class _SongReportsScreenState extends State<SongReportsScreen> {
                                                         icon: const Icon(
                                                             RhythmoIcons.trash),
                                                         label: const Text(
-                                                            'حذف از استور و فهرست‌ها'))
+                                                            'حذف از گنجینه و فهرست‌ها'))
                                                   ]),
                                               if (_saving == report.track.id)
                                                 const LinearProgressIndicator(),

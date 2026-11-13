@@ -169,6 +169,48 @@ void main() {
     expect(playlist.subscription, isNull);
   });
 
+  test('a channel synced from a messenger says so (#451)', () {
+    final playlist = SharedPlaylist.fromJson(token, {
+      'name': 'x',
+      'owner': 'o',
+      'tracks': <dynamic>[],
+      'syncedFrom': ['telegram'],
+    });
+    expect(playlist.syncedFrom, ['telegram']);
+    expect(channelSyncLine(playlist.syncedFrom),
+        'پست‌ها از کانال تلگرام همگام می‌شوند');
+    expect(channelSyncLine(const ['bale', 'telegram']),
+        'پست‌ها از کانال بله و تلگرام همگام می‌شوند');
+    expect(channelSyncLine(const []), isNull);
+    // A like or a subscription change keeps the line.
+    expect(
+        playlist
+            .withLikes(const PlaylistLikes(liked: true, likeCount: 1))
+            .syncedFrom,
+        ['telegram']);
+  });
+
+  test('public playlist cards carry the follower count when offered', () {
+    final counted = PublicPlaylist.fromJson({
+      'shareToken': token,
+      'name': 'x',
+      'owner': 'o',
+      'trackCount': 3,
+      'likeCount': 1,
+      'liked': false,
+      'subscriberCount': 12,
+    });
+    expect(counted.subscriberCount, 12);
+    expect(
+        counted
+            .withLikes(const PlaylistLikes(liked: true, likeCount: 2))
+            .subscriberCount,
+        12);
+    final plain = PublicPlaylist.fromJson(
+        {'shareToken': token, 'name': 'x', 'owner': 'o', 'likeCount': 0});
+    expect(plain.subscriberCount, isNull);
+  });
+
   Future<FakeNotificationsApi> pumpShared(WidgetTester tester,
       {SharedPlaylist? playlist, bool signedIn = true}) async {
     final subscriptions = FakeNotificationsApi();
