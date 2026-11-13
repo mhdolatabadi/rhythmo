@@ -360,6 +360,20 @@ class _LibraryScreenState extends State<LibraryScreen>
         ));
       });
     }
+    // Opened from one of the launcher's shortcuts (#227).
+    switch (AppConfiguration.takeShortcut()) {
+      case AppShortcut.shuffle:
+        _shuffleWhenLoaded();
+      case AppShortcut.resume:
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => widget.player.resume());
+      case AppShortcut.search:
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _openSearch();
+        });
+      case null:
+        break;
+    }
     // Opened from a collaboration link: join it once signed in.
     final collabToken = AppConfiguration.takeInitialCollabToken();
     if (collabToken != null && playlists != null) {
@@ -373,6 +387,14 @@ class _LibraryScreenState extends State<LibraryScreen>
       });
     }
     widget.uploads.addListener(_onUploadChanged);
+  }
+
+  /// «پخش تصادفی کتابخانه»: shuffles the library once it is loaded.
+  Future<void> _shuffleWhenLoaded() async {
+    if (widget.library.tracks.isEmpty) await widget.library.load();
+    if (!mounted) return;
+    final tracks = _unifiedTracks();
+    if (tracks.isNotEmpty) await widget.player.playShuffled(tracks);
   }
 
   @override

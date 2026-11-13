@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/player/application/media_session.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
+import 'package:rhythmo/features/player/android/media_tree.dart';
 import 'package:rhythmo/features/player/data/audio_engine.dart';
 
 import 'player_controller_test.dart' show FakeAudioEngine;
@@ -259,5 +260,22 @@ void main() {
       null,
       const Duration(minutes: 3),
     ]);
+  });
+
+  test('Android Auto browses the library and plays in list order', () async {
+    handler.library =
+        () => MediaLibrary(tracks: _tracks, recent: [_tracks[1], _tracks[0]]);
+    final root = await handler.getChildren(MediaTree.root);
+    expect(root.map((i) => i.id), contains(MediaTree.recent));
+    final recent = await handler.getChildren(MediaTree.recent);
+    expect(recent.map((i) => i.id), ['recent|b', 'recent|a']);
+    expect((await handler.getMediaItem('recent|a'))?.title, 'First');
+
+    await handler.playFromMediaId('recent|a');
+    expect(player.track?.id, 'a');
+    expect(player.upcoming, isEmpty);
+
+    await handler.playFromMediaId('recent|gone');
+    expect(player.track?.id, 'a');
   });
 }

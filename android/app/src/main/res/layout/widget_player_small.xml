@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The home-screen widget (#227), small: right to left, the
+     cover, the track, then the controls. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:gravity="center_vertical"
+    android:layoutDirection="rtl"
+    android:orientation="horizontal"
+    android:padding="12dp">
+
+    <FrameLayout
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/widget_cover_background">
+        <ImageView
+            android:id="@+id/widget_note"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_note"/>
+        <ImageView
+            android:id="@+id/widget_cover"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/widget_cover"
+            android:scaleType="centerCrop"
+            android:visibility="gone"/>
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/widget_idle_title"
+            android:textAlignment="viewStart"
+            android:textColor="@color/widget_text"
+            android:textDirection="anyRtl"
+            android:textSize="14sp"
+            android:textStyle="bold"/>
+        <TextView
+            android:id="@+id/widget_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/widget_idle_subtitle"
+            android:textAlignment="viewStart"
+            android:textColor="@color/widget_muted"
+            android:textDirection="anyRtl"
+            android:textSize="12sp"/>
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/widget_play"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/widget_play_background"
+        android:contentDescription="@string/widget_play"
+        android:padding="12dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/widget_play"/>
+
+</LinearLayout>
