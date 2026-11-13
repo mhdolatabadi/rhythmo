@@ -36,6 +36,9 @@ const sleepFade = Duration(seconds: 5);
 /// Late enough that its short-lived link is still fresh when it starts.
 const preloadLead = Duration(seconds: 30);
 
+/// How loud the music stays while a notification sound plays over it.
+const duckedVolume = 0.3;
+
 /// A play counts as a real listen, for the recently played history, after
 /// this long, or after half of a shorter track.
 const meaningfulListen = Duration(seconds: 30);
@@ -240,8 +243,22 @@ class PlayerController extends ChangeNotifier {
     return _applyOutputVolume();
   }
 
-  Future<void> _applyOutputVolume() =>
-      _engine.setVolume(_settings.muted ? 0 : _fadeLevel * _settings.volume);
+  Future<void> _applyOutputVolume() => _engine.setVolume(_settings.muted
+      ? 0
+      : _fadeLevel * _settings.volume * (_ducked ? duckedVolume : 1));
+
+  bool _ducked = false;
+
+  /// Whether a notification sound has the music turned down for a moment.
+  bool get ducked => _ducked;
+
+  /// Turns the music down while another app plays a short sound, such as a
+  /// notification, and back up after it. The listener's volume is kept.
+  Future<void> setDucked(bool ducked) async {
+    if (_ducked == ducked) return;
+    _ducked = ducked;
+    await _applyOutputVolume();
+  }
 
   /// Sets the listener's volume; moving it above zero also unmutes.
   Future<void> setVolume(double volume) async {
