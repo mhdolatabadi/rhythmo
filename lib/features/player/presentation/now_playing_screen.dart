@@ -55,11 +55,17 @@ const playbackErrorShort = 'پخش ناموفق بود. دوباره تلاش ک
 const playbackErrorMessage = 'پخش این آهنگ ناموفق بود. اتصال اینترنت را '
     'بررسی کن و دکمه‌ی وسط را برای تلاش دوباره بزن.';
 
-/// The artist, or where the track plays from when it has none.
+/// Shown in place of the artist when a song's tags have none.
+const unknownArtist = 'هنرمند ناشناس';
+
+/// The artist, else the album, else [unknownArtist]. Where the song is
+/// stored is shown by the row's badge, never in the artist's place.
 String trackSubtitle(Track track) {
-  final artist = track.artist?.trim();
-  if (artist != null && artist.isNotEmpty) return artist;
-  return track.isLocal ? 'روی دستگاه' : 'روی سرور';
+  for (final value in [track.artist, track.album]) {
+    final text = value?.trim();
+    if (text != null && text.isNotEmpty) return text;
+  }
+  return unknownArtist;
 }
 
 /// `m:ss`, as players show positions.

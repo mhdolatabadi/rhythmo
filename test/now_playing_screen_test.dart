@@ -122,8 +122,8 @@ void main() {
     await advanceUi(tester);
     expect(player.track?.id, 'b');
     expect(find.text('Second'), findsOneWidget);
-    expect(find.text('روی سرور'), findsOneWidget,
-        reason: 'no artist: say where it plays from');
+    expect(find.text(unknownArtist), findsOneWidget,
+        reason: 'no artist or album: never show where it is stored');
 
     await tester.tap(find.byTooltip('قبلی'));
     await advanceUi(tester);
