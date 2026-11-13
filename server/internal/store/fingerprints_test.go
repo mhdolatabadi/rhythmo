@@ -150,7 +150,7 @@ func TestMatchableTracksAreOnlyThoseTheUserMayPlay(t *testing.T) {
 	if s := forAlice["bob-public"].Source; s.ShareToken == nil || *s.ShareToken != "public-token" || s.PlaylistID != nil {
 		t.Fatalf("public track source = %+v", s)
 	}
-	if forAlice["bob-collab"].OwnerEmail != "bob@example.com" || len(forAlice["alice-own"].Points) != 4 {
+	if forAlice["bob-collab"].OwnerName != "" || len(forAlice["alice-own"].Points) != 4 {
 		t.Fatalf("details = %+v", forAlice["bob-collab"])
 	}
 

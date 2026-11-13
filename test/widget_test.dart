@@ -78,6 +78,17 @@ class FakeAuthApi implements AuthApi {
     return const AuthSession(token: 'rotated-token', user: _user);
   }
 
+  final displayNames = <String>[];
+
+  @override
+  Future<AuthUser> setDisplayName(String token, String name) async {
+    if (token != validToken) {
+      throw const ApiException('401', statusCode: 401, code: 'unauthorized');
+    }
+    displayNames.add(name);
+    return AuthUser(id: _user.id, email: _user.email, displayName: name);
+  }
+
   @override
   Future<AuthUser> me(String token) async {
     if (meError != null) throw meError!;

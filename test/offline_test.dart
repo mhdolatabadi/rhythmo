@@ -445,6 +445,10 @@ class _Auth implements AuthApi {
   bool unreachable = false;
 
   @override
+  Future<AuthUser> setDisplayName(String token, String name) async =>
+      AuthUser(id: 'u1', email: 'a@example.com', displayName: name);
+
+  @override
   Future<AuthUser> me(String token) async {
     if (unreachable) throw http.ClientException('offline');
     if (revoked) throw const ApiException('gone', statusCode: 401);

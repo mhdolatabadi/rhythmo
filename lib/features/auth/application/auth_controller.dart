@@ -66,6 +66,14 @@ class AuthController extends ChangeNotifier with QuietAfterDispose {
     await _start(_api.revokeSessions(token));
   }
 
+  /// Sets the public name shown on public playlists; throws, unchanged, when
+  /// the server refuses it.
+  Future<void> setDisplayName(String name) async {
+    final token = _requireToken();
+    final user = await _api.setDisplayName(token, name.trim());
+    if (this.token == token) _set(AuthStatus.signedIn, user);
+  }
+
   /// Mails a new verification code and returns when it expires.
   Future<DateTime> sendEmailCode() => _api.sendEmailCode(_requireToken());
 

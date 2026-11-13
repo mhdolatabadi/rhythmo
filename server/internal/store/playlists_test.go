@@ -63,7 +63,7 @@ func TestSharingAPlaylist(t *testing.T) {
 	}
 
 	view, err := playlists.ForShareToken(ctx, "token-1")
-	if err != nil || view.Name != "mix" || view.OwnerEmail != "owner@example.com" ||
+	if err != nil || view.Name != "mix" || view.OwnerName != "" ||
 		len(view.Tracks) != 1 || view.Tracks[0].ID != inList.ID {
 		t.Fatalf("shared view = %+v, %v", view, err)
 	}
@@ -300,7 +300,7 @@ func TestOnlyPublicPlaylistsAreListedMostLikedFirst(t *testing.T) {
 		t.Fatalf("listed = %+v", listed)
 	}
 	if first := listed[0]; first.Likes != (Likes{Count: 2, Liked: true}) || first.TrackCount != 1 ||
-		first.ShareToken != "loved" || first.OwnerEmail != owner.Email {
+		first.ShareToken != "loved" || first.OwnerName != "" {
 		t.Fatalf("most liked = %+v", first)
 	}
 	if limited, _ := playlists.Popular(ctx, fan.ID, 1); len(limited) != 1 {
