@@ -562,12 +562,17 @@ class ApiClient
 
   @override
   Future<void> reviewPublication(
-      String token, PendingPublication publication, bool approved) async {
+      String token, PendingPublication publication, bool approved,
+      {String reason = ''}) async {
     final kind =
         publication.kind == PublicationKind.playlist ? 'playlists' : 'tracks';
     await _send('PATCH',
         '/api/v1/admin/publications/$kind/${Uri.encodeComponent(publication.id)}',
-        token: token, body: {'approved': approved});
+        token: token,
+        body: {
+          'approved': approved,
+          if (reason.isNotEmpty) 'reason': reason,
+        });
   }
 
   @override

@@ -676,7 +676,9 @@ class _ShareSheetState extends State<_ShareSheet> {
     setState(() {
       _busy = false;
       if (shared == null) {
-        _error = failure;
+        _error = widget.controller.lastErrorCode == 'inappropriate_content'
+            ? inappropriatePlaylistMessage
+            : failure;
       } else {
         _token = shared.shareToken;
         _public = shared.isPublic;
@@ -773,7 +775,12 @@ class _ShareSheetState extends State<_ShareSheet> {
                   : _public
                       ? 'در «فهرست‌های پخش محبوب» به همه‌ی کاربران ریتمو نشان داده می‌شود و می‌توانند آن را بپسندند.'
                       : _rejected
-                          ? 'مدیر درخواست قبلی عمومی شدن را نپذیرفت. می‌توانی دوباره درخواست بدهی.'
+                          ? switch (widget.playlist.publicReviewReason) {
+                              final reason? =>
+                                'مدیر درخواست قبلی عمومی شدن را نپذیرفت: «$reason». می‌توانی اصلاحش کنی و دوباره درخواست بدهی.',
+                              null =>
+                                'مدیر درخواست قبلی عمومی شدن را نپذیرفت. می‌توانی دوباره درخواست بدهی.',
+                            }
                           : 'در هیچ فهرستی نمی‌آید؛ فقط کسی که لینک را دارد پیدایش می‌کند. عمومی شدن حساب‌های تأییدنشده با تأیید مدیر است.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,

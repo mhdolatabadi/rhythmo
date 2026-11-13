@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mhdolatabadi/rhythmo/server/internal/store"
 )
@@ -31,7 +32,7 @@ type AdminPlaylistStore interface {
 type AdminPublicationStore interface {
 	Pending(ctx context.Context, limit int) ([]store.PendingPublication, error)
 	PendingTrack(ctx context.Context, trackID string) (store.Track, error)
-	ReviewPlaylist(ctx context.Context, playlistID, actorID string, approve bool) error
+	ReviewPlaylist(ctx context.Context, playlistID, actorID string, approve bool, reason string) error
 	ReviewTrack(ctx context.Context, trackID, actorID string, approve bool) error
 }
 
@@ -290,6 +291,9 @@ func (h *AdminHandlers) listPublications(w http.ResponseWriter, r *http.Request)
 // reviewPublication approves ({"approved":true}) or rejects
 // ({"approved":false}) a pending request. Deciding a request that is no
 // longer pending is 409 not_pending, so two admins can't both decide it.
+// maxReviewReasonRunes matches playlists.public_review_reason.
+const maxReviewReasonRunes = 300
+
 func (h *AdminHandlers) reviewPublication(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor, ok := h.authorize(w, r)
@@ -298,6 +302,8 @@ func (h *AdminHandlers) reviewPublication(kind string) http.HandlerFunc {
 		}
 		var input struct {
 			Approved *bool `json:"approved"`
+			// Reason is shown to a playlist's owner when it is rejected.
+			Reason string `json:"reason"`
 		}
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxAuthBodyBytes))
 		decoder.DisallowUnknownFields()
@@ -309,11 +315,17 @@ func (h *AdminHandlers) reviewPublication(kind string) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "invalid_json")
 			return
 		}
-		review := h.publications.ReviewTrack
-		if kind == store.PublicationPlaylist {
-			review = h.publications.ReviewPlaylist
+		reason := strings.Join(strings.Fields(input.Reason), " ")
+		if utf8.RuneCountInString(reason) > maxReviewReasonRunes || (reason != "" && *input.Approved) {
+			writeError(w, http.StatusBadRequest, "invalid_reason")
+			return
 		}
-		err := review(r.Context(), r.PathValue("id"), actor, *input.Approved)
+		var err error
+		if kind == store.PublicationPlaylist {
+			err = h.publications.ReviewPlaylist(r.Context(), r.PathValue("id"), actor, *input.Approved, reason)
+		} else {
+			err = h.publications.ReviewTrack(r.Context(), r.PathValue("id"), actor, *input.Approved)
+		}
 		if errors.Is(err, store.ErrNotPending) {
 			writeError(w, http.StatusConflict, "not_pending")
 			return

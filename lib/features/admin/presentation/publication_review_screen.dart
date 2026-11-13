@@ -62,13 +62,22 @@ class _PublicationReviewScreenState extends State<PublicationReviewScreen> {
       (error.statusCode == 401 || error.statusCode == 403);
 
   Future<void> _review(PendingPublication item, bool approved) async {
+    var reason = '';
+    if (!approved && item.kind == PublicationKind.playlist) {
+      final asked = await showDialog<String>(
+        context: context,
+        builder: (_) => const _RejectReasonDialog(),
+      );
+      if (asked == null || !mounted) return;
+      reason = asked.trim();
+    }
     final token = widget.token();
     if (token == null) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _saving = item.id);
     String message;
     try {
-      await widget.api.reviewPublication(token, item, approved);
+      await widget.api.reviewPublication(token, item, approved, reason: reason);
       message = approved ? '«${item.title}» عمومی شد.' : 'درخواست رد شد.';
       if (mounted) {
         setState(() => _pending = [
@@ -219,6 +228,53 @@ class _PublicationReviewScreenState extends State<PublicationReviewScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Asks for an optional reason, shown to the owner, before a playlist is
+/// rejected (#207). Returns null when cancelled.
+class _RejectReasonDialog extends StatefulWidget {
+  const _RejectReasonDialog();
+
+  @override
+  State<_RejectReasonDialog> createState() => _RejectReasonDialogState();
+}
+
+class _RejectReasonDialogState extends State<_RejectReasonDialog> {
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('رد درخواست'),
+      content: TextField(
+        controller: _reason,
+        autofocus: true,
+        maxLength: 300,
+        maxLines: 3,
+        minLines: 1,
+        decoration: const InputDecoration(
+          labelText: 'دلیل (اختیاری)',
+          hintText: 'به صاحب فهرست نشان داده می‌شود',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('انصراف'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _reason.text),
+          child: const Text('رد'),
+        ),
+      ],
     );
   }
 }

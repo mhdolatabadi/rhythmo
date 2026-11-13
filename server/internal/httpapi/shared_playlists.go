@@ -162,6 +162,9 @@ func (h *PlaylistHandlers) handleShare(w http.ResponseWriter, r *http.Request) {
 	// Owners who are not verified only ask to be listed (#322).
 	direct := true
 	if request.Public != nil && *request.Public {
+		if !h.allowedInPublic(w, r, userID, r.PathValue("id"), nil, nil) {
+			return
+		}
 		if direct, ok = h.publishGate.direct(w, r, userID); !ok {
 			return
 		}

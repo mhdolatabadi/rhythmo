@@ -335,12 +335,18 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
   Future<PlaylistShare?> share(String id, {bool? public}) async {
     final token = _token();
     if (token == null) return null;
+    lastErrorCode = null;
     try {
       return await _api.sharePlaylist(token, id, public: public);
-    } catch (_) {
+    } catch (error) {
+      if (error is ApiException) lastErrorCode = error.code;
       return null;
     }
   }
+
+  /// The server's error code from the last failed [share] or [rename], such
+  /// as `inappropriate_content` (#207); null when it gave none.
+  String? lastErrorCode;
 
   /// Stops sharing; the old link stops working. Returns whether it worked.
   Future<bool> unshare(String id) async {
@@ -583,11 +589,13 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
   Future<bool> rename(String id, String name, {String? description}) async {
     final token = _token();
     if (token == null) return false;
+    lastErrorCode = null;
     try {
       await _api.renamePlaylist(token, id, name, description: description);
       await load();
       return true;
-    } catch (_) {
+    } catch (error) {
+      if (error is ApiException) lastErrorCode = error.code;
       return false;
     }
   }
