@@ -46,17 +46,7 @@
     <div class="spinner" aria-label="در حال بارگذاری"></div>
     <div class="slow">بارگذاری بیشتر از معمول طول کشیده است. اتصال اینترنت را بررسی کن یا صفحه را دوباره باز کن.</div>
   </div>
-  <script>
-    (function () {
-      var splash = document.getElementById('splash');
-      var slowTimer = setTimeout(function () { splash.classList.add('slow'); }, 20000);
-      window.addEventListener('flutter-first-frame', function () {
-        clearTimeout(slowTimer);
-        splash.classList.add('hidden');
-        setTimeout(function () { splash.remove(); }, 300);
-      }, { once: true });
-    })();
-  </script>
+  <script src="splash.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

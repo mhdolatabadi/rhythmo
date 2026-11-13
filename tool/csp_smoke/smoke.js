@@ -1,0 +1,55 @@
+const { chromium } = require('playwright');
+const fs = require('fs');
+// A short MP3; see README.md for how to make one.
+const song = fs.readFileSync(__dirname + '/song.mp3');
+const user = { id: 'u1', email: 'listener@example.com', verified: false, emailVerified: true, isAdmin: false, displayName: '' };
+const track = { id: 't1', title: 'Test song', artist: 'Tester', contentType: 'audio/mpeg', sizeBytes: song.length, fileName: 'song.mp3', source: 'upload', createdAt: '2026-11-01T00:00:00Z', version: 1, embeddedTags: { status: 'original', unsupportedFields: [] } };
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const violations = [];
+  await page.addInitScript(() => {
+    window.__csp = [];
+    document.addEventListener('securitypolicyviolation', e => window.__csp.push(`${e.effectiveDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber}`));
+  });
+  page.on('console', m => { if (/Content Security Policy|Refused/.test(m.text())) violations.push('console: ' + m.text()); });
+  const api = [];
+  await page.route('https://media.example/**', r => r.fulfill({ status: 200, contentType: 'audio/mpeg', body: song, headers: { 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': '*' } }));
+  await page.route('**/api/v1/**', async route => {
+    const url = new URL(route.request().url()); const p = url.pathname; api.push(route.request().method() + ' ' + p);
+    const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (p.endsWith('/health')) return json(200, { status: 'ok' });
+    if (p.endsWith('/auth/login')) return json(200, { token: 'tok', expiresAt: '2027-11-01T00:00:00Z', user });
+    if (p === '/api/v1/me') return json(200, user);
+    if (p === '/api/v1/tracks') return json(200, { tracks: [track], storage: { usedBytes: song.length, limitBytes: 1 << 30 } });
+    if (p.endsWith('/stream')) return json(200, { url: 'https://media.example/song.mp3', expiresAt: '2027-01-01T00:00:00Z' });
+    if (p.includes('playlists')) return json(200, { playlists: [] });
+    return json(404, { error: 'not_found' });
+  });
+  await page.goto('http://127.0.0.1:8099/app/');
+  await page.waitForTimeout(8000);
+  await page.screenshot({ path: __dirname + '/1-signin.png' });
+  await page.mouse.click(305, 197);
+  await page.waitForTimeout(2000);
+  await page.screenshot({ path: __dirname + '/1b-form.png' });
+  const coords = JSON.parse(process.env.FORM || '[[195,330],[195,400],[195,480]]');
+  await page.mouse.click(...coords[0]); await page.waitForTimeout(500);
+  await page.keyboard.type('listener@example.com');
+  await page.mouse.click(...coords[1]); await page.waitForTimeout(500);
+  await page.keyboard.type('correct horse');
+  await page.screenshot({ path: __dirname + '/1c-filled.png' });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(5000);
+  await page.screenshot({ path: __dirname + '/2-library.png' });
+  const tap = JSON.parse(process.env.ROW || '[195,300]');
+  await page.mouse.click(...tap);
+  await page.waitForTimeout(5000);
+  await page.screenshot({ path: __dirname + '/3-playing.png' });
+  const events = await page.evaluate(() => window.__csp);
+  const playing = await page.evaluate(() => Array.from(document.querySelectorAll('audio')).map(a => `${a.src} paused=${a.paused} t=${a.currentTime}`));
+  console.log('API calls', JSON.stringify(api));
+  console.log('audio', JSON.stringify(playing));
+  console.log('CSP events', JSON.stringify(events, null, 1));
+  console.log('console', JSON.stringify(violations, null, 1));
+  await browser.close();
+})();
