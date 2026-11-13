@@ -268,8 +268,23 @@ func (h *PlaylistHandlers) handleShared(w http.ResponseWriter, r *http.Request) 
 		Public: shared.IsPublic, TrackCount: len(shared.Tracks), LikeCount: likes.Count, Liked: likes.Liked,
 		Tracks: make([]trackResponse, 0, len(shared.Tracks)), UpdatedAt: shared.UpdatedAt.UTC(),
 	}
+	var trackLikes map[string]store.LikeState
+	if h.trackLikes != nil && shared.IsPublic && len(shared.Tracks) > 0 {
+		ids := make([]string, len(shared.Tracks))
+		for i, track := range shared.Tracks {
+			ids[i] = track.ID
+		}
+		if trackLikes, err = h.trackLikes.TrackStates(r.Context(), userID, ids); err != nil {
+			internalError(w, "load song likes", err)
+			return
+		}
+	}
 	for _, track := range shared.Tracks {
-		response.Tracks = append(response.Tracks, toTrackResponse(track))
+		item := toTrackResponse(track)
+		if state, ok := trackLikes[track.ID]; ok {
+			item.LikeCount, item.Liked = state.Count, state.Liked
+		}
+		response.Tracks = append(response.Tracks, item)
 	}
 	if h.subscriptions != nil {
 		s, err := h.subscriptions.SubscriptionFor(r.Context(), shared.ID, userID)

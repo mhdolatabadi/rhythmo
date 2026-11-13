@@ -461,3 +461,54 @@ func TestWithoutAnonymousAccessEverythingNeedsAnAccount(t *testing.T) {
 		}
 	}
 }
+
+type songLikes map[string]store.LikeState
+
+func (s songLikes) TrackStates(_ context.Context, viewer string, ids []string) (map[string]store.LikeState, error) {
+	states := map[string]store.LikeState{}
+	for _, id := range ids {
+		if state, ok := s[id]; ok {
+			state.Liked = state.Liked && viewer != ""
+			states[id] = state
+		}
+	}
+	return states, nil
+}
+
+// A public playlist tells each viewer how many like each song and whether
+// they do, so the app can show a heart per song (#357); a link-only one
+// shows nothing.
+func TestPublicPlaylistShowsSongLikes(t *testing.T) {
+	tokens, _ := auth.NewTokens([]byte(strings.Repeat("k", auth.MinSecretBytes)), time.Hour)
+	bob, _, _ := tokens.Issue("bob")
+	token := strings.Repeat("A", 22)
+	data := &sharingStore{token: &token, public: true, tracks: []store.Track{
+		{ID: "t1", Title: "liked", StorageKey: "k1"}, {ID: "t2", Title: "not", StorageKey: "k2"}}}
+	handler := NewHandler(Config{Playlists: NewPlaylistHandlers(data, tokens).
+		WithSharing(data, fixedPresigner{}, SavePolicy{}).WithAnonymous(AnonymousLimits{}).
+		WithTrackLikes(songLikes{"t1": {Count: 3, Liked: true}})})
+	view := func(bearer string) sharedPlaylistResponse {
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/shared-playlists/"+token, nil)
+		if bearer != "" {
+			request.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		var shown sharedPlaylistResponse
+		if response.Code != http.StatusOK || json.NewDecoder(response.Body).Decode(&shown) != nil {
+			t.Fatalf("view = %d", response.Code)
+		}
+		return shown
+	}
+	shown := view(bob)
+	if got := shown.Tracks; got[0].LikeCount != 3 || !got[0].Liked || got[1].LikeCount != 0 || got[1].Liked {
+		t.Fatalf("bob sees %+v", got)
+	}
+	if got := view("").Tracks; got[0].LikeCount != 3 || got[0].Liked {
+		t.Fatalf("a visitor sees %+v", got)
+	}
+	data.public = false
+	if got := view(bob).Tracks; got[0].LikeCount != 0 || got[0].Liked {
+		t.Fatalf("a link-only playlist shows song likes: %+v", got)
+	}
+}

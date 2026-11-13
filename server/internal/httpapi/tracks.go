@@ -156,9 +156,10 @@ type trackResponse struct {
 	// ReplayGain is the loudness the file's tags carry, or null when they
 	// carry none or have not been read yet (#253).
 	ReplayGain *replayGainResponse `json:"replayGain"`
-	// Published, LikeCount and Liked are only filled in the owner's own
-	// library (#284): whether they published the track to the store, how
-	// many listeners like the song, and whether they do.
+	// Published, LikeCount and Liked are filled in the owner's own library
+	// (#284): whether they published the track to the store, how many
+	// listeners like the song, and whether they do. A public playlist fills
+	// LikeCount and Liked for its viewer too (#357).
 	Published bool `json:"published,omitempty"`
 	// PublishReview is "pending" or "rejected" while publishing waits for
 	// or was turned down by an admin (#322); owner's library only.

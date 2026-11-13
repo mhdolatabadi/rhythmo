@@ -396,7 +396,8 @@ func run() error {
 			Playlists: httpapi.NewPlaylistHandlers(playlists, tokens).WithSharing(playlists, objects, httpapi.SavePolicy{
 				Objects: objects, MaxOwnerBytes: ownerQuotaBytes, Enabled: uploadsEnabled,
 			}).WithAnonymous(httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
-				WithEmailGate(emailGate).WithPublishGate(publishGate).WithSubscriptions(playlists, notifications),
+				WithEmailGate(emailGate).WithPublishGate(publishGate).WithSubscriptions(playlists, notifications).
+				WithTrackLikes(trackLikes),
 			History: httpapi.NewHistoryHandlers(store.NewHistory(pool), tokens, historyRate),
 			Public:  publicPages,
 			Bots:    botHandlers.WithEmailGate(emailGate),
