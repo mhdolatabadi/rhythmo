@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/persian_digits.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
+import 'package:rhythmo/features/for_you/application/for_you_controller.dart';
+import 'package:rhythmo/features/for_you/data/for_you.dart';
+import 'package:rhythmo/features/for_you/presentation/for_you_list_screen.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/notifications/application/notifications_controller.dart';
@@ -44,6 +47,7 @@ class HomeView extends StatelessWidget {
     required this.tracks,
     required this.onAddMusic,
     this.recent,
+    this.forYou,
     this.notifications,
     this.onOpenNotifications,
     this.onOpenChannel,
@@ -61,6 +65,9 @@ class HomeView extends StatelessWidget {
   final List<Track> Function() tracks;
   final VoidCallback onAddMusic;
   final RecentlyPlayedController? recent;
+
+  /// «برای تو»: smart playlists and daily mixes (#226); null hides it.
+  final ForYouController? forYou;
 
   /// Opens popular playlists, گنجینه and song identification; a null one
   /// hides its card.
@@ -84,6 +91,7 @@ class HomeView extends StatelessWidget {
         changes,
         player,
         if (recent != null) recent,
+        if (forYou != null) forYou,
         if (notifications != null) notifications,
       ]),
       builder: (context, _) {
@@ -91,6 +99,7 @@ class HomeView extends StatelessWidget {
         final played =
             (recent?.tracks ?? const <Track>[]).take(homeRecentLength).toList();
         final newest = newestTracks(library);
+        final forYouLists = forYou?.lists.all ?? const <ForYouList>[];
         final resume = player.track ?? played.firstOrNull;
         final notices =
             (notifications?.notifications ?? const <PlaylistNotification>[])
@@ -159,6 +168,28 @@ class HomeView extends StatelessWidget {
                           onOpenChannel?.call(notice.shareToken);
                         },
                       ),
+                  ],
+                  if (forYouLists.isNotEmpty) ...[
+                    const _Heading('برای تو'),
+                    SizedBox(
+                      height: _ListShelfItem.height,
+                      child: ListView.separated(
+                        key: const ValueKey('home-for-you'),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: forYouLists.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(width: RhythmoSpace.md),
+                        itemBuilder: (context, index) => _ListShelfItem(
+                          list: forYouLists[index],
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => ForYouListScreen(
+                                  list: forYouLists[index], player: player),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                   if (newest.isNotEmpty) ...[
                     const _Heading('تازه اضافه‌شده'),
@@ -415,6 +446,54 @@ class _ShelfItem extends StatelessWidget {
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A «برای تو» list on its shelf: its first song's cover, its name and
+/// how many songs it holds.
+class _ListShelfItem extends StatelessWidget {
+  const _ListShelfItem({required this.list, required this.onTap});
+
+  static const double size = 112;
+  static const double height = size + 48;
+
+  final ForYouList list;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final first = list.tracks.firstOrNull;
+    return SizedBox(
+      width: size,
+      child: InkWell(
+        borderRadius: RhythmoRadii.control,
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            RhythmoArtworkTile(
+              seed: list.key,
+              track: first,
+              size: size,
+              icon: list.smart ? RhythmoIcons.playlist : RhythmoIcons.shuffle,
+            ),
+            const SizedBox(height: RhythmoSpace.xs),
+            Text(list.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelLarge),
+            Text(
+              '${persianDigits(list.tracks.length)} آهنگ',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
         ),

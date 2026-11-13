@@ -24,6 +24,8 @@ import 'package:rhythmo/features/auth/presentation/auth_gate.dart';
 import 'package:rhythmo/features/bots/application/bot_link_controller.dart';
 import 'package:rhythmo/features/identify/application/identify_controller.dart';
 import 'package:rhythmo/features/identify/data/snippet_recorder.dart';
+import 'package:rhythmo/features/for_you/application/for_you_controller.dart';
+import 'package:rhythmo/features/for_you/data/for_you.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
 import 'package:rhythmo/features/library/application/library_controller.dart';
 import 'package:rhythmo/features/library/application/library_sync_controller.dart';
@@ -221,6 +223,15 @@ class _RhythmoAppState extends State<RhythmoApp> {
       ? null
       : RecentlyPlayedController(api: _historyApi, token: () => _auth?.token);
 
+  late final ForYouApi? _forYouApi = _apiClient;
+  late final ForYouController? _forYou = _forYouApi == null
+      ? null
+      : ForYouController(
+          api: _forYouApi,
+          token: () => _auth?.token,
+          library: () => _library?.tracks ?? const [],
+        );
+
   late final LyricsApi? _lyricsApi = widget.lyricsApi ??
       _apiClient ??
       (_tracksApi is LyricsApi ? _tracksApi as LyricsApi : null);
@@ -289,7 +300,10 @@ class _RhythmoAppState extends State<RhythmoApp> {
           journey: _journey,
           onListened: (track) => _recent?.record(track),
           lyrics: _lyrics,
-        )..loadSettings());
+        )
+        // Radio carries on from the listener's own library (#226).
+        ..radioSource = _forYou?.radio
+        ..loadSettings());
 
   late final LocalAudioController _localAudio = LocalAudioController(
     widget.localAudioLibrary ?? createLocalAudioLibrary(),
@@ -471,6 +485,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
                       library: _library,
                       playlists: _playlists,
                       recent: _recent,
+                      forYou: _forYou,
                       localAudio: _localAudio,
                       uploads: _uploads,
                       sync: _sync,

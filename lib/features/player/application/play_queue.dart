@@ -42,6 +42,13 @@ class PlayQueue {
   List<Track> get upcoming =>
       [for (final i in _order.skip(_position + 1)) _tracks[i]];
 
+  /// Tracks already played, oldest first.
+  List<Track> get played =>
+      [for (final i in _order.take(_position)) _tracks[i]];
+
+  /// Every track in the queue, in play order.
+  List<Track> get all => [for (final i in _order) _tracks[i]];
+
   /// Jumps to the upcoming track at [index] (0 is the next one), skipping
   /// those before it, and returns it.
   Track skipTo(int index) {

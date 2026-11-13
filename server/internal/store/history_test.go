@@ -219,3 +219,40 @@ func TestHistoryGoesWithTracksPlaylistsAndAccounts(t *testing.T) {
 		t.Fatalf("clear left %d rows", n)
 	}
 }
+
+// «برای تو» reads only plays of the listener's own tracks (#226).
+func TestOwnPlaysLeaveOutOtherPeoplesTracks(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	users := NewUsers(pool)
+	tracks := NewTracks(pool)
+	playlists := NewPlaylists(pool)
+	history := NewHistory(pool)
+	alice, _ := users.Create(ctx, "alice@example.com", "hash")
+	bob, _ := users.Create(ctx, "bob@example.com", "hash")
+	mine, _ := tracks.Create(ctx, alice.ID, NewTrack{Title: "mine", FileName: "m.mp3", ContentType: "audio/mpeg", SizeBytes: 1})
+	gone, _ := tracks.Create(ctx, alice.ID, NewTrack{Title: "gone", FileName: "g.mp3", ContentType: "audio/mpeg", SizeBytes: 1})
+	his, _ := tracks.Create(ctx, bob.ID, NewTrack{Title: "his", FileName: "h.mp3", ContentType: "audio/mpeg", SizeBytes: 1})
+	together, _ := playlists.Create(ctx, bob.ID, "together")
+	_ = playlists.ReplaceTracks(ctx, bob.ID, together.ID, []string{his.ID})
+	_, _ = playlists.SetCollabToken(ctx, bob.ID, together.ID, ptr("join2"))
+	_, _ = playlists.Join(ctx, alice.ID, "join2")
+	for _, id := range []string{mine.ID, mine.ID, gone.ID} {
+		if err := history.Record(ctx, alice.ID, id, nil, 100); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := history.Record(ctx, alice.ID, his.ID, &together.ID, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := tracks.Delete(ctx, alice.ID, gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	plays, err := history.OwnPlays(ctx, alice.ID)
+	if err != nil || len(plays) != 2 || plays[0].TrackID != mine.ID || plays[1].TrackID != mine.ID {
+		t.Fatalf("alice's own plays = %+v, %v", plays, err)
+	}
+	if plays, _ := history.OwnPlays(ctx, bob.ID); len(plays) != 0 {
+		t.Fatalf("bob's plays = %+v", plays)
+	}
+}

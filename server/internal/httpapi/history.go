@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	// maxHistoryEntries is how many plays are kept per user.
-	maxHistoryEntries = 200
+	// maxHistoryEntries is how many plays are kept per user: enough for
+	// «برای تو» to see a month of listening (#226).
+	maxHistoryEntries = 1000
 	// defaultHistoryLimit is how many recent tracks are listed when the
 	// request doesn't say.
 	defaultHistoryLimit = 50

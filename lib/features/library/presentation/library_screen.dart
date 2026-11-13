@@ -13,6 +13,7 @@ import 'package:rhythmo/core/widgets/rhythmo_brand.dart';
 import 'package:rhythmo/app/app_configuration.dart';
 import 'package:rhythmo/core/search_text.dart';
 import 'package:rhythmo/features/auth/presentation/email_verification_screen.dart';
+import 'package:rhythmo/features/for_you/application/for_you_controller.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
 import 'package:rhythmo/features/library/application/library_controller.dart';
 import 'package:rhythmo/features/library/application/library_entries.dart';
@@ -82,6 +83,7 @@ class LibraryScreen extends StatefulWidget {
     required this.picker,
     required this.player,
     this.recent,
+    this.forYou,
     this.recentSearches,
     this.devicePlaylists,
     this.devicePlaylistOffers,
@@ -126,6 +128,9 @@ class LibraryScreen extends StatefulWidget {
 
   /// The account's recently played tracks; null hides them.
   final RecentlyPlayedController? recent;
+
+  /// «برای تو» on «خانه» (#226); null hides it.
+  final ForYouController? forYou;
 
   /// The searches run from the search screen; kept in secure storage
   /// when null.
@@ -333,10 +338,12 @@ class _LibraryScreenState extends State<LibraryScreen>
       widget.botLinks?.load();
       // What was played on another device meanwhile.
       widget.recent?.load();
+      widget.forYou?.load();
     });
     widget.library.load();
     widget.botLinks?.load();
     widget.recent?.load();
+    widget.forYou?.load();
     widget.notifications?.startPolling();
     // «خانه» shows the newest of them (#447).
     widget.notifications?.load();
@@ -840,6 +847,7 @@ class _LibraryScreenState extends State<LibraryScreen>
   Future<void> _refreshLibrary() async {
     widget.botLinks?.load();
     widget.recent?.load();
+    widget.forYou?.load();
     if (widget.localAudio.supported) widget.localAudio.load();
     final ok = await widget.library.load();
     if (!ok && mounted) {
@@ -958,6 +966,7 @@ class _LibraryScreenState extends State<LibraryScreen>
             changes: _libraryChanges,
             tracks: _unifiedTracks,
             recent: widget.recent,
+            forYou: widget.forYou,
             notifications:
                 widget.playlists == null ? null : widget.notifications,
             onOpenNotifications: _openNotifications,
