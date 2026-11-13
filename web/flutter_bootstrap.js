@@ -3,7 +3,17 @@
 
 // Flutter's own service worker only unregisters itself now, so it is not
 // registered; rhythmo's offline worker keeps the app openable offline.
-_flutter.loader.load();
+//
+// CanvasKit, the biggest download, is fetched from a path named after the
+// engine build, so browsers and the offline worker may keep it for good
+// without ever running a stale one after an upgrade; deploy/nginx.conf maps
+// the path back to canvaskit/ (#376).
+var rhythmoEngine = (_flutter.buildConfig || {}).engineRevision;
+_flutter.loader.load({
+  config: {
+    canvasKitBaseUrl: rhythmoEngine ? 'canvaskit-' + rhythmoEngine + '/' : 'canvaskit/',
+  },
+});
 
 (function () {
   if (!('serviceWorker' in navigator)) return;

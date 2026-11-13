@@ -254,11 +254,14 @@ jobs:
           assert "location /app/" in nginx and "/app/index.html" in nginx
           # Nothing outside /app/ may fall through to nginx's stock page (#153).
           assert "return 302 /app/$is_args$args;" in nginx
-          # Browser hardening headers on the app, repeated where a location
-          # sets its own add_header (#214).
+          # Browser hardening headers on the app, repeated in every location
+          # that sets its own add_header, as all of them set Cache-Control
+          # (#214, #376).
           for header in ("Strict-Transport-Security", "X-Content-Type-Options", "X-Frame-Options",
                          "frame-ancestors 'none'", "Referrer-Policy", "Permissions-Policy"):
-              assert nginx.count(header) == 2, header
+              assert nginx.count(header) == 1 + nginx.count("add_header Cache-Control"), header
+          # CanvasKit is cached for good only under its engine build's path.
+          assert "immutable" in nginx.split("location ~ ^/app/canvaskit-", 1)[1].split("}", 1)[0]
           assert "rm -f /usr/share/nginx/html/index.html" in docker
 
           # The shared front nginx routes like the Caddyfile (#153).
