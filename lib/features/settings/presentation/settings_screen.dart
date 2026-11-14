@@ -24,6 +24,8 @@ import 'package:rhythmo/features/social/presentation/profile_edit_screen.dart';
 import 'package:rhythmo/features/social/presentation/social_scope.dart';
 import 'package:rhythmo/features/settings/presentation/settings_group.dart';
 import 'package:rhythmo/features/settings/presentation/storage_usage_card.dart';
+import 'package:rhythmo/features/settings/application/storage_request_controller.dart';
+import 'package:rhythmo/features/settings/presentation/storage_request_section.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -31,6 +33,7 @@ class SettingsScreen extends StatefulWidget {
     this.onFeedback,
     required this.cache,
     this.botLinks,
+    this.storageRequests,
     this.library,
     this.player,
     this.onManagePlaylists,
@@ -86,6 +89,9 @@ class SettingsScreen extends StatefulWidget {
 
   /// Null when the app has no API to ask about bots.
   final BotLinkController? botLinks;
+
+  /// Asking for more cloud storage; null hides it.
+  final StorageRequestController? storageRequests;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -222,6 +228,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       limitBytes: library.limitBytes,
                     ),
                   ),
+                ),
+              if ((widget.library, widget.storageRequests)
+                  case (final library?, final requests?))
+                ListenableBuilder(
+                  listenable: library,
+                  builder: (context, _) => library.limitBytes > 0
+                      ? StorageRequestSection(
+                          controller: requests,
+                          limitBytes: library.limitBytes,
+                        )
+                      : const SizedBox.shrink(),
                 ),
               if (widget.player case final player?)
                 PlaybackSettingsSection(player: player),

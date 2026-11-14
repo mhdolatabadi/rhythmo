@@ -16,12 +16,14 @@ class AudioInterruptions {
   /// tells a call, which ends, from another app that took over for good.
   AudioInterruptions({
     required Stream<AudioInterruptionEvent> events,
+    Stream<void>? becomingNoisy,
     this.inCall,
     this.pollEvery = const Duration(seconds: 1),
     this.callStartsWithin = const Duration(seconds: 5),
     this.callLastsAtMost = const Duration(hours: 3),
   }) {
     _events = events.listen(_onEvent);
+    _noisy = becomingNoisy?.listen((_) => _onNoisy());
   }
 
   final Future<bool> Function()? inCall;
@@ -35,6 +37,7 @@ class AudioInterruptions {
   final Duration callLastsAtMost;
 
   late final StreamSubscription<AudioInterruptionEvent> _events;
+  StreamSubscription<void>? _noisy;
   PlayerController? _player;
 
   /// Paused by an interruption, not by the listener: play again after it.
@@ -64,11 +67,28 @@ class AudioInterruptions {
     }
   }
 
+  /// Headphones unplugged or a Bluetooth speaker gone: the music would
+  /// suddenly come out of the phone's speaker, so it pauses and stays
+  /// paused (#237).
+  void _onNoisy() {
+    final player = _player;
+    if (player == null) return;
+    _cancel();
+    final status = player.status;
+    if (status == PlayerStatus.playing || status == PlayerStatus.buffering) {
+      unawaited(player.pause());
+    }
+  }
+
   void _onEvent(AudioInterruptionEvent event) {
     final player = _player;
     if (player == null) return;
+    if (event.type == AudioInterruptionType.duck) {
+      // A notification sound: play on, quieter, until it is over (#237).
+      unawaited(player.setDucked(event.begin));
+      return;
+    }
     if (event.begin) {
-      if (event.type == AudioInterruptionType.duck) return;
       final status = player.status;
       if (status == PlayerStatus.playing || status == PlayerStatus.buffering) {
         _resume = true;
@@ -89,7 +109,7 @@ class AudioInterruptions {
         // iOS: the interruption ended without asking to resume.
         if (_poll == null) _cancel();
       case AudioInterruptionType.duck:
-        break;
+        break; // handled above
     }
   }
 
@@ -137,5 +157,6 @@ class AudioInterruptions {
     _cancel();
     _player?.removeListener(_onPlayer);
     unawaited(_events.cancel());
+    unawaited(_noisy?.cancel());
   }
 }

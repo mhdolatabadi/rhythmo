@@ -129,6 +129,10 @@ func TestPublicPlaylistPage(t *testing.T) {
 		`<meta property="og:type" content="music.playlist">`,
 		`src="/p/` + token + `/t/t1"`,
 		`href="/app/?shared=` + token + `"`,
+		`<script src="/player.js" defer></script>`,
+		`data-play-all hidden`,
+		`data-track data-title="First"`,
+		`data-art="/api/v1/shared-playlists/` + token + `/tracks/t1/artwork"`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("playlist page is missing %q", want)
@@ -555,5 +559,18 @@ func TestSitemapIndexPagesTheStore(t *testing.T) {
 	plain := get(publicSite(&sharingStore{}, AnonymousLimits{}), "/sitemap.xml").Body.String()
 	if strings.Contains(plain, "songs-") || get(publicSite(&sharingStore{}, AnonymousLimits{}), "/sitemaps/songs-1.xml").Code != http.StatusNotFound {
 		t.Errorf("a site without a store lists store sitemaps:\n%s", plain)
+	}
+}
+
+func TestPublicListPlayerScript(t *testing.T) {
+	site := publicSite(&sharingStore{}, AnonymousLimits{})
+	script := get(site, "/player.js")
+	if script.Code != http.StatusOK || !strings.HasPrefix(script.Header().Get("Content-Type"), "text/javascript") ||
+		!strings.Contains(script.Body.String(), "data-play-all") {
+		t.Fatalf("player.js = %d %s", script.Code, script.Header().Get("Content-Type"))
+	}
+	policy := get(site, "/").Header().Get("Content-Security-Policy")
+	if !strings.Contains(policy, "script-src 'self';") || strings.Contains(policy, "unsafe-inline';") && strings.Contains(policy, "script-src 'unsafe-inline'") {
+		t.Fatalf("policy = %q", policy)
 	}
 }
