@@ -68,6 +68,7 @@ type UploadLimits struct {
 type TrackHandlers struct {
 	tracks  TrackStore
 	storage ObjectStore
+	streams StreamPresigner
 	tokens  *auth.Tokens
 	limits  UploadLimits
 	imports ImportCounter
@@ -112,6 +113,12 @@ func (h *TrackHandlers) WithTagRewrites(retags TagRewriteNotifier) *TrackHandler
 // so a new track can be identified right away.
 func (h *TrackHandlers) WithFingerprints(fingerprints TagRewriteNotifier) *TrackHandlers {
 	h.fingerprints = fingerprints
+	return h
+}
+
+// WithStreams presigns play links through streams, such as MediaStreams.
+func (h *TrackHandlers) WithStreams(streams StreamPresigner) *TrackHandlers {
+	h.streams = streams
 	return h
 }
 
@@ -317,7 +324,11 @@ func (h *TrackHandlers) handleStream(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	url, expiresAt, err := h.storage.PresignGet(r.Context(), track.StorageKey)
+	var streams StreamPresigner = h.storage
+	if h.streams != nil {
+		streams = h.streams
+	}
+	url, expiresAt, err := streams.PresignGet(r.Context(), track.StorageKey)
 	if err != nil {
 		internalError(w, "presign track", err)
 		return

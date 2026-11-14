@@ -3,6 +3,8 @@ import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/data/admin_song_reports.dart';
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -728,10 +730,17 @@ class ApiClient
 
   @override
   Future<StreamLink> streamLink(String token, String trackId) async {
+    return _streamLink('/api/v1/tracks/$trackId/stream', token);
+  }
+
+  /// Asks [path] for a play link. In a browser the server may answer with
+  /// its own link, relative to the API, that skips a large cover tag at the
+  /// start of an MP3 so playback starts at once (#375).
+  Future<StreamLink> _streamLink(String path, String? token) async {
     final body =
-        await _send('GET', '/api/v1/tracks/$trackId/stream', token: token);
+        await _send('GET', kIsWeb ? '$path?client=web' : path, token: token);
     return StreamLink(
-      Uri.parse(body['url'] as String),
+      baseUri.resolve(body['url'] as String),
       DateTime.parse(body['expiresAt'] as String),
     );
   }
@@ -931,34 +940,25 @@ class ApiClient
   @override
   Future<StreamLink> sharedStreamLink(
       String? token, String shareToken, String trackId) async {
-    final body = await _send(
-        'GET',
+    return _streamLink(
         '/api/v1/shared-playlists/${Uri.encodeComponent(shareToken)}'
-            '/tracks/${Uri.encodeComponent(trackId)}/stream',
-        token: token);
-    return StreamLink(Uri.parse(body['url'] as String),
-        DateTime.parse(body['expiresAt'] as String));
+        '/tracks/${Uri.encodeComponent(trackId)}/stream',
+        token);
   }
 
   @override
   Future<StreamLink> playlistStreamLink(
       String token, String playlistId, String trackId) async {
-    final body = await _send(
-        'GET',
+    return _streamLink(
         '/api/v1/playlists/${Uri.encodeComponent(playlistId)}'
-            '/tracks/${Uri.encodeComponent(trackId)}/stream',
-        token: token);
-    return StreamLink(Uri.parse(body['url'] as String),
-        DateTime.parse(body['expiresAt'] as String));
+        '/tracks/${Uri.encodeComponent(trackId)}/stream',
+        token);
   }
 
   @override
   Future<StreamLink> storeStreamLink(String? token, String id) async {
-    final body = await _send(
-        'GET', '/api/v1/store/tracks/${Uri.encodeComponent(id)}/stream',
-        token: token);
-    return StreamLink(Uri.parse(body['url'] as String),
-        DateTime.parse(body['expiresAt'] as String));
+    return _streamLink(
+        '/api/v1/store/tracks/${Uri.encodeComponent(id)}/stream', token);
   }
 
   /// [path] with the non-empty [query] parameters.
