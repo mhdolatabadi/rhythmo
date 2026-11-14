@@ -94,10 +94,12 @@ func (h *AuthHandlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/register", h.handleRegister)
 	mux.HandleFunc("POST /api/v1/auth/login", h.handleLogin)
 	mux.HandleFunc("GET /api/v1/me", h.handleMe)
+	mux.HandleFunc("PATCH /api/v1/me", h.handleUpdateProfile)
 	if h.deletion.Accounts != nil && h.deletion.Objects != nil {
 		mux.HandleFunc("DELETE /api/v1/me", h.handleDeleteAccount)
 	}
 	h.registerEmailVerification(mux)
+	h.registerAccountCodes(mux)
 	if h.revoker != nil {
 		mux.HandleFunc("POST /api/v1/auth/sessions/revoke", h.handleRevokeSessions)
 	}
@@ -156,6 +158,8 @@ type userResponse struct {
 	Verified      bool `json:"verified"`
 	EmailVerified bool `json:"emailVerified"`
 	IsAdmin       bool `json:"isAdmin"`
+	// DisplayName is the public name shown instead of the email (#378).
+	DisplayName string `json:"displayName"`
 }
 
 type sessionResponse struct {
@@ -190,6 +194,11 @@ func (h *AuthHandlers) handleRegister(w http.ResponseWriter, r *http.Request) {
 	hash, err := h.passwords.Hash(input.Password)
 	if err != nil {
 		internalError(w, "hash password", err)
+		return
+	}
+	if h.accountCodes() != nil {
+		// The account is created once the emailed code comes back (#219).
+		h.registerWithCode(w, r, email, hash)
 		return
 	}
 	user, err := h.users.Create(r.Context(), email, hash)
@@ -370,7 +379,7 @@ func (h *AuthHandlers) WithAdmins(emails []string) *AuthHandlers {
 func (h *AuthHandlers) userResponse(user store.User) userResponse {
 	return userResponse{
 		ID: user.ID, Email: user.Email, Verified: user.Verified,
-		EmailVerified: h.emailVerified(user), IsAdmin: h.isAdmin(user),
+		EmailVerified: h.emailVerified(user), IsAdmin: h.isAdmin(user), DisplayName: user.DisplayName,
 	}
 }
 

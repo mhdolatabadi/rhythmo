@@ -191,8 +191,9 @@ class RhythmoAudioHandler extends BaseAudioHandler with SeekHandler {
   MediaItem _mediaItemFor(Track track, Duration? duration, {Uri? cover}) {
     final title = notificationTitle(track);
     final album = _clean(track.album);
-    final sourceLabel = track.isLocal ? 'روی دستگاه' : 'روی سرور';
-    final subtitle = _clean(track.artist) ?? sourceLabel;
+    // Where a song is stored is not artist information; the lock screen
+    // shows the album, or the app's name, when the tags have no artist.
+    final subtitle = _clean(track.artist) ?? album ?? 'ریتمو';
     return MediaItem(
       id: track.id,
       title: title,
@@ -250,10 +251,12 @@ RhythmoAudioHandler? activeMediaSession;
 Future<RhythmoAudioHandler?> startMediaSession() async {
   try {
     final session = await AudioSession.instance;
-    // Music: pause for calls and other apps' audio, duck for notifications.
+    // Music: pause for calls and other apps' audio, duck for notifications,
+    // pause when headphones are unplugged.
     await session.configure(const AudioSessionConfiguration.music());
     final interruptions = AudioInterruptions(
       events: session.interruptionEventStream,
+      becomingNoisy: session.becomingNoisyEventStream,
       inCall: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
           ? _androidInCall
           : null,

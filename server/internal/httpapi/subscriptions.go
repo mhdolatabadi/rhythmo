@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mhdolatabadi/rhythmo/server/internal/bot"
 	"github.com/mhdolatabadi/rhythmo/server/internal/store"
 )
 
@@ -139,7 +138,7 @@ func (h *PlaylistHandlers) handleSubscribed(w http.ResponseWriter, r *http.Reque
 	response := make([]subscribedPlaylistResponse, 0, len(listed))
 	for _, p := range listed {
 		response = append(response, subscribedPlaylistResponse{
-			ShareToken: p.ShareToken, Name: p.Name, Owner: bot.MaskEmail(p.OwnerEmail), TrackCount: p.TrackCount,
+			ShareToken: p.ShareToken, Name: p.Name, Owner: publicOwnerName(p.OwnerName), TrackCount: p.TrackCount,
 			UnreadCount: p.Unread, Muted: p.Muted, SubscribedAt: p.SubscribedAt.UTC(), UpdatedAt: p.UpdatedAt.UTC(),
 		})
 	}

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/mhdolatabadi/rhythmo/server/internal/auth"
-	"github.com/mhdolatabadi/rhythmo/server/internal/bot"
 	"github.com/mhdolatabadi/rhythmo/server/internal/store"
 )
 
@@ -89,8 +88,8 @@ func (h *HistoryHandlers) handleList(w http.ResponseWriter, r *http.Request) {
 	for _, e := range entries {
 		track := playlistTrackResponse{trackResponse: toTrackResponse(e.Track)}
 		if e.Track.OwnerID != userID {
-			// Only the masked address, as a collaborative playlist shows it.
-			addedBy := bot.MaskEmail(e.OwnerEmail)
+			// Only the owner's public name, never their email (#378).
+			addedBy := publicOwnerName(e.OwnerName)
 			track.AddedBy = &addedBy
 		}
 		response.Entries = append(response.Entries, historyEntryResponse{

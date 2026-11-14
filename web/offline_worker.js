@@ -50,6 +50,35 @@ async function keep(key, response) {
   await cache.put(key, response);
 }
 
+// CanvasKit under its engine build's path never changes (#376): served from
+// the kept copy, a repeat visit skips the app's biggest download entirely.
+const IMMUTABLE = /\/canvaskit-[0-9a-f]+\//;
+
+function isImmutable(url) {
+  return IMMUTABLE.test(url.pathname.slice(SCOPE.pathname.length - 1));
+}
+
+async function cacheFirst(event) {
+  const request = event.request;
+  const kept = await caches.match(request.url);
+  if (kept) return kept;
+  const response = await fetch(request);
+  event.waitUntil(
+    (async () => {
+      await keep(request.url, response.clone());
+      // A new engine build replaces the old CanvasKit, about 7 MB.
+      const engine = /\/canvaskit-([0-9a-f]+)\//.exec(request.url);
+      if (!engine) return;
+      const cache = await caches.open(CACHE);
+      for (const old of await cache.keys()) {
+        const other = /\/canvaskit-([0-9a-f]+)\//.exec(old.url);
+        if (other && other[1] !== engine[1]) await cache.delete(old);
+      }
+    })().catch(() => {}),
+  );
+  return response;
+}
+
 async function networkFirst(event) {
   const request = event.request;
   const key = keyFor(request);
@@ -78,7 +107,7 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET' || request.headers.has('range')) return;
   const url = new URL(request.url);
   if (!isAppFile(url)) return;
-  event.respondWith(networkFirst(event));
+  event.respondWith(isImmutable(url) ? cacheFirst(event) : networkFirst(event));
 });
 
 // The page lists files it loaded before this worker controlled it.
