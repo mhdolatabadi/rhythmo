@@ -132,6 +132,31 @@ class Playlist {
         members: members,
       );
 
+  /// The same playlist under [name], with [description] unless null.
+  Playlist withName(String name, {String? description}) => Playlist(
+        id: id,
+        name: name,
+        trackCount: trackCount,
+        tracks: tracks,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        shareToken: shareToken,
+        isPublic: isPublic,
+        publicReview: publicReview,
+        isOwner: isOwner,
+        isAdmin: isAdmin,
+        description: description ?? this.description,
+        collabToken: collabToken,
+        owner: owner,
+        members: members,
+      );
+
+  /// Prefix of the IDs of playlists kept only on this device (#363).
+  static const localPrefix = 'local:';
+
+  /// Kept only on this device: no sharing, collaboration or channels.
+  bool get isLocal => id.startsWith(localPrefix);
+
   /// Whether more than one person adds tracks to it.
   bool get isCollaborative => !isOwner || members.isNotEmpty;
 

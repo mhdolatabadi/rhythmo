@@ -57,6 +57,8 @@ type verificationAPI struct {
 	testAPI
 	mailer *fakeMailer
 	linker *fakeLinker
+	users  *store.Users
+	auth   *AuthHandlers
 }
 
 func newVerificationAPI(t *testing.T, verification *EmailVerification) verificationAPI {
@@ -68,10 +70,19 @@ func newVerificationAPI(t *testing.T, verification *EmailVerification) verificat
 	if err != nil {
 		t.Fatal(err)
 	}
+	sessions := auth.NewSessions(func(ctx context.Context, id string) (int64, error) {
+		epoch, err := users.SessionEpoch(ctx, id)
+		if errors.Is(err, store.ErrNotFound) {
+			return 0, auth.ErrNoAccount
+		}
+		return epoch, err
+	}, time.Minute, 100)
+	tokens.WithSessions(sessions)
 	authHandlers, err := NewAuthHandlers(users, auth.Passwords{Cost: bcrypt.MinCost}, tokens, AuthRateLimiters{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	authHandlers.WithSessionRevocation(users, sessions)
 	authHandlers.WithAdmins([]string{"boss@example.com"})
 	mailer := &fakeMailer{}
 	if verification != nil {
@@ -80,6 +91,7 @@ func newVerificationAPI(t *testing.T, verification *EmailVerification) verificat
 			t.Fatal(err)
 		}
 		verification.Store, verification.Mailer, verification.Codes = users, mailer, codes
+		verification.syncMail = true
 		authHandlers.WithEmailVerification(*verification)
 	}
 	gate := authHandlers.EmailGate()
@@ -99,14 +111,29 @@ func newVerificationAPI(t *testing.T, verification *EmailVerification) verificat
 	})
 	return verificationAPI{
 		testAPI: testAPI{handler: handler, tokens: tokens},
-		mailer:  mailer, linker: linker,
+		mailer:  mailer, linker: linker, users: users, auth: authHandlers,
 	}
 }
 
+// register signs up through the API when verification is off. With it on,
+// it makes an account that has not verified its address yet, as accounts
+// from before sign-up codes (#219) are, mails it a code and signs it in.
 func (a verificationAPI) register(t *testing.T, email string) (string, userResponse) {
 	t.Helper()
-	response := a.do(t, http.MethodPost, "/api/v1/auth/register", `{"email":"`+email+`","password":"correct horse"}`, "")
-	if response.Code != http.StatusCreated {
+	if a.auth.verification != nil {
+		hash, err := a.auth.passwords.Hash("correct horse")
+		if err != nil {
+			t.Fatal(err)
+		}
+		user, err := a.users.Create(context.Background(), email, hash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.auth.afterRegister(context.Background(), user)
+	}
+	path := map[bool]string{true: "/api/v1/auth/login", false: "/api/v1/auth/register"}[a.auth.verification != nil]
+	response := a.do(t, http.MethodPost, path, `{"email":"`+email+`","password":"correct horse"}`, "")
+	if response.Code != http.StatusCreated && response.Code != http.StatusOK {
 		t.Fatalf("register: %d %s", response.Code, response.Body)
 	}
 	session := decode[sessionResponse](t, response)

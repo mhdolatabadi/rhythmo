@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/core/api/api_client.dart';
@@ -38,8 +42,10 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
       NotificationsApi? subscriptions,
       BotChannelsApi? channels,
       OfflineOutbox? outbox,
+      LocalPlaylistStore? localStore,
       String? Function()? accountId})
       : _api = api,
+        _localStore = localStore ?? MemoryLocalPlaylistStore(),
         _outbox = outbox,
         _subscriptions = subscriptions,
         _channels = channels,
@@ -49,7 +55,98 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
         _accountId = accountId ?? (() => null);
 
   final DevicePlaylistStore _deviceStore;
+  final LocalPlaylistStore _localStore;
   final String? Function() _accountId;
+
+  /// Playlists kept only on this device, newest first (#363).
+  Future<List<Playlist>> _readLocal() async {
+    try {
+      final raw = await _localStore.read();
+      final decoded = raw == null ? null : jsonDecode(raw);
+      if (decoded is! List) return [];
+      return [
+        for (final item in decoded)
+          if (item is Map &&
+              item['id'] is String &&
+              item['name'] is String &&
+              item['tracks'] is List)
+            _localPlaylist(
+                item['id'] as String,
+                item['name'] as String,
+                DateTime.tryParse(item['createdAt'] as String? ?? '') ??
+                    DateTime(2026),
+                [
+                  for (final track in item['tracks'] as List)
+                    if (trackFromJson(track) case final track?) track,
+                ]),
+      ];
+    } catch (error) {
+      debugPrint('Device playlists unreadable: $error');
+      return [];
+    }
+  }
+
+  static Playlist _localPlaylist(
+          String id, String name, DateTime createdAt, List<Track> tracks) =>
+      Playlist(
+        id: id,
+        name: name,
+        trackCount: tracks.length,
+        tracks: tracks,
+        createdAt: createdAt,
+        updatedAt: createdAt,
+      );
+
+  Future<void> _writeLocal(List<Playlist> local) => _localStore.write(
+        jsonEncode([
+          for (final playlist in local)
+            {
+              'id': playlist.id,
+              'name': playlist.name,
+              'createdAt': playlist.createdAt.toIso8601String(),
+              'tracks': [
+                for (final track in playlist.tracks) trackToJson(track)
+              ],
+            },
+        ]),
+      );
+
+  /// Changes the device playlist [id] with [change] (null deletes it),
+  /// saves, and shows the result.
+  Future<Playlist?> _changeLocal(
+      String id, Playlist? Function(Playlist playlist) change) async {
+    final local = await _readLocal();
+    final index = local.indexWhere((playlist) => playlist.id == id);
+    if (index == -1) return null;
+    final changed = change(local[index]);
+    if (changed == null) {
+      local.removeAt(index);
+    } else {
+      local[index] = changed;
+    }
+    await _writeLocal(local);
+    playlists = [
+      for (final playlist in playlists)
+        if (playlist.id != id) playlist else if (changed != null) changed,
+    ];
+    notifyListeners();
+    return changed;
+  }
+
+  static final _random = Random.secure();
+
+  /// Makes a playlist kept only on this device.
+  Future<Playlist> createLocal(String name) async {
+    final id = '${Playlist.localPrefix}'
+        '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}'
+        '${_random.nextInt(1 << 30).toRadixString(36)}';
+    final playlist = _localPlaylist(id, name, DateTime.now(), const []);
+    await _writeLocal([playlist, ...await _readLocal()]);
+    playlists = [playlist, ...playlists];
+    status = PlaylistsStatus.loaded;
+    notifyListeners();
+    return playlist;
+  }
 
   /// The signed-in account that device-only records belong to.
   String get deviceScope => _accountId() ?? 'default';
@@ -293,15 +390,24 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
 
   Future<bool> load() async {
     final token = _token();
-    if (token == null) return false;
+    if (token == null) {
+      // Without an account, the playlists kept on this device (#363).
+      playlists = await _readLocal();
+      status = PlaylistsStatus.loaded;
+      notifyListeners();
+      return true;
+    }
     // A refresh keeps the playlists on screen; only a first load waits.
     if (status != PlaylistsStatus.loaded) {
       status = PlaylistsStatus.loading;
       notifyListeners();
     }
     try {
-      playlists = await Future.wait(
+      final cloud = await Future.wait(
           (await _api.listPlaylists(token)).map(_withDeviceTracks));
+      playlists = [...await _readLocal(), ...cloud];
+      // Renames made offline are laid over it as soon as they are read.
+      unawaited(_overlayNames());
       status = PlaylistsStatus.loaded;
       notifyListeners();
       return true;
@@ -316,16 +422,19 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
     }
   }
 
+  /// Makes a playlist in the account; without an account or a connection
+  /// it is kept only on this device (#363).
   Future<Playlist?> create(String name) async {
     final token = _token();
-    if (token == null) return null;
+    if (token == null) return createLocal(name);
     try {
       final playlist = await _api.createPlaylist(token, name);
       playlists = [playlist, ...playlists];
       status = PlaylistsStatus.loaded;
       notifyListeners();
       return playlist;
-    } catch (_) {
+    } catch (error) {
+      if (isUnreachable(error)) return createLocal(name);
       return null;
     }
   }
@@ -414,6 +523,9 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
   }
 
   Future<Playlist?> loadPlaylist(String id) async {
+    if (id.startsWith(Playlist.localPrefix)) {
+      return (await _readLocal()).where((p) => p.id == id).firstOrNull;
+    }
     final token = _token();
     if (token == null) return null;
     try {
@@ -426,14 +538,45 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
 
   static const _addKind = 'playlistAdd';
   static const _arrangeKind = 'playlistTracks';
+  static const _renameKind = 'playlistRename';
+
+  /// Renames made offline that the server has not taken yet, by playlist.
+  Future<Map<String, Map<String, Object?>>> _pendingNames() async => {
+        for (final action in await _outbox?.pending() ?? const [])
+          if (action['kind'] == _renameKind &&
+              action['playlistId'] is String &&
+              action['name'] is String)
+            action['playlistId'] as String: action,
+      };
+
+  Future<void> _overlayNames() async {
+    if (_outbox == null) return;
+    final names = await _pendingNames();
+    if (names.isEmpty) return;
+    playlists = [
+      for (final playlist in playlists)
+        _withPendingName(playlist, names[playlist.id]),
+    ];
+    notifyListeners();
+  }
+
+  static Playlist _withPendingName(
+          Playlist playlist, Map<String, Object?>? rename) =>
+      rename == null
+          ? playlist
+          : playlist.withName(rename['name'] as String,
+              description: rename['description'] as String?);
 
   /// [playlist] with the changes made to it offline that the server has
   /// not taken yet.
   Future<Playlist> _withPending(Playlist playlist) async {
     var tracks = playlist.tracks;
-    for (final action in await _outbox?.pending() ?? const []) {
+    final pending = await _outbox?.pending() ?? const [];
+    for (final action in pending) {
       if (action['playlistId'] != playlist.id) continue;
-      if (action['kind'] == _addKind) {
+      if (action['kind'] == _renameKind && action['name'] is String) {
+        playlist = _withPendingName(playlist, action);
+      } else if (action['kind'] == _addKind) {
         final track = trackFromJson(action['track']);
         if (track != null && !tracks.any((t) => t.id == track.id)) {
           tracks = [...tracks, track];
@@ -455,10 +598,18 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
   /// sent now. Returns false for a change that isn't a playlist's.
   Future<bool> sendPending(Map<String, Object?> action) async {
     final kind = action['kind'];
-    if (kind != _addKind && kind != _arrangeKind) return false;
+    if (kind != _addKind && kind != _arrangeKind && kind != _renameKind) {
+      return false;
+    }
     final token = _token(), id = action['playlistId'];
     if (token == null || id is! String) return true;
-    if (kind == _addKind) {
+    if (kind == _renameKind) {
+      final name = action['name'];
+      if (name is String) {
+        await _api.renamePlaylist(token, id, name,
+            description: action['description'] as String?);
+      }
+    } else if (kind == _addKind) {
       final track = trackFromJson(action['track']);
       if (track == null) return true;
       final ids =
@@ -475,6 +626,18 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
 
   Future<Playlist?> replaceTracks(String id, List<String> trackIds,
       {List<Track> deviceTracks = const []}) async {
+    if (id.startsWith(Playlist.localPrefix)) {
+      return _changeLocal(id, (playlist) {
+        final known = {
+          for (final track in [...playlist.tracks, ...deviceTracks])
+            track.id: track,
+        };
+        return playlist.withTracks([
+          for (final trackId in trackIds.toSet())
+            if (known[trackId] case final track?) track,
+        ]);
+      });
+    }
     final token = _token();
     if (token == null) return null;
     try {
@@ -527,6 +690,9 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
   }
 
   Future<AddTrackResult> addDeviceTrack(String id, Track track) async {
+    if (id.startsWith(Playlist.localPrefix)) {
+      return addTrack(id, track.id, track: track);
+    }
     if (!track.id.startsWith('device:') || !track.isLocal) {
       return addTrack(id, track.id, track: track);
     }
@@ -545,6 +711,16 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
   /// song is added on this device at once and sent once back online.
   Future<AddTrackResult> addTrack(String id, String trackId,
       {Track? track}) async {
+    if (id.startsWith(Playlist.localPrefix)) {
+      final playlist = await loadPlaylist(id);
+      if (playlist == null || track == null) return AddTrackResult.failure;
+      if (playlist.tracks.any((t) => t.id == trackId)) {
+        return AddTrackResult.alreadyPresent;
+      }
+      await _changeLocal(
+          id, (playlist) => playlist.withTracks([...playlist.tracks, track]));
+      return AddTrackResult.added;
+    }
     final token = _token();
     if (token == null) return AddTrackResult.failure;
     try {
@@ -587,6 +763,10 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
 
   /// Renames the playlist, and sets its description unless that is null.
   Future<bool> rename(String id, String name, {String? description}) async {
+    if (id.startsWith(Playlist.localPrefix)) {
+      return await _changeLocal(id, (playlist) => playlist.withName(name)) !=
+          null;
+    }
     final token = _token();
     if (token == null) return false;
     lastErrorCode = null;
@@ -596,11 +776,31 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
       return true;
     } catch (error) {
       if (error is ApiException) lastErrorCode = error.code;
-      return false;
+      final outbox = _outbox;
+      if (outbox == null || !isUnreachable(error)) return false;
+      // Offline: the new name shows now and is sent once back online.
+      final rename = <String, Object?>{
+        'kind': _renameKind,
+        'key': '$_renameKind:$id',
+        'playlistId': id,
+        'name': name,
+        'description': description,
+      };
+      await outbox.add(rename);
+      playlists = [
+        for (final item in playlists)
+          item.id == id ? _withPendingName(item, rename) : item,
+      ];
+      notifyListeners();
+      return true;
     }
   }
 
   Future<bool> delete(String id) async {
+    if (id.startsWith(Playlist.localPrefix)) {
+      await _changeLocal(id, (_) => null);
+      return true;
+    }
     final token = _token();
     if (token == null) return false;
     try {

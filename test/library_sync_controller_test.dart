@@ -172,6 +172,23 @@ void main() {
     expect(sync.operationFor('device:1')!.error, SyncError.offline);
   });
 
+  test('back online, transfers stopped offline start again once', () async {
+    api.createError = Exception('SocketException: Failed host lookup');
+    sync.upload(device(1));
+    await settle();
+    expect(sync.operationFor('device:1')!.error, SyncError.offline);
+
+    // Still unreachable: one try, then it waits for the next reconnection.
+    sync.retryOffline();
+    await settle();
+    expect(sync.operationFor('device:1')!.error, SyncError.offline);
+
+    api.createError = null;
+    sync.retryOffline();
+    await settle();
+    expect(sync.operationFor('device:1'), isNull);
+  });
+
   test('denied media access is reported as a permission problem', () async {
     source.error = PlatformException(code: 'PERMISSION_DENIED');
 
