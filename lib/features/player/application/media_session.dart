@@ -212,10 +212,12 @@ RhythmoAudioHandler? activeMediaSession;
 Future<RhythmoAudioHandler?> startMediaSession() async {
   try {
     final session = await AudioSession.instance;
-    // Music: pause for calls and other apps' audio, duck for notifications.
+    // Music: pause for calls and other apps' audio, duck for notifications,
+    // pause when headphones are unplugged.
     await session.configure(const AudioSessionConfiguration.music());
     final interruptions = AudioInterruptions(
       events: session.interruptionEventStream,
+      becomingNoisy: session.becomingNoisyEventStream,
       inCall: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
           ? _androidInCall
           : null,

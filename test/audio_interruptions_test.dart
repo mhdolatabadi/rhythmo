@@ -128,4 +128,58 @@ void main() {
     events.add(_end(AudioInterruptionType.pause));
     expect(player.status, PlayerStatus.playing);
   });
+
+  group('#237', () {
+    late StreamController<void> noisy;
+
+    AudioInterruptions withNoisy() {
+      noisy = StreamController<void>(sync: true);
+      return AudioInterruptions(
+          events: events.stream, becomingNoisy: noisy.stream)
+        ..attach(player);
+    }
+
+    test('unplugging headphones pauses and does not resume', () async {
+      withNoisy();
+      await player.play(_a);
+
+      noisy.add(null);
+      await Future<void>.delayed(Duration.zero);
+      expect(player.status, PlayerStatus.paused);
+
+      // A call ending later must not start the music on the speaker.
+      events.add(_begin(AudioInterruptionType.pause));
+      events.add(_end(AudioInterruptionType.pause));
+      expect(player.status, PlayerStatus.paused);
+    });
+
+    test('a notification turns the music down and back up', () async {
+      withNoisy();
+      await player.play(_a);
+
+      events.add(_begin(AudioInterruptionType.duck));
+      await Future<void>.delayed(Duration.zero);
+      expect(player.status, PlayerStatus.playing);
+      expect(player.ducked, isTrue);
+      expect(engine.volumes.last, closeTo(duckedVolume, 1e-9));
+
+      events.add(_end(AudioInterruptionType.duck));
+      await Future<void>.delayed(Duration.zero);
+      expect(player.ducked, isFalse);
+      expect(engine.volumes.last, 1);
+    });
+
+    test('ducking keeps the listener\'s own volume', () async {
+      withNoisy();
+      await player.play(_a);
+      await player.setVolume(0.5);
+
+      events.add(_begin(AudioInterruptionType.duck));
+      await Future<void>.delayed(Duration.zero);
+      expect(engine.volumes.last, closeTo(0.5 * duckedVolume, 1e-9));
+      events.add(_end(AudioInterruptionType.duck));
+      await Future<void>.delayed(Duration.zero);
+      expect(engine.volumes.last, closeTo(0.5, 1e-9));
+    });
+  });
 }
