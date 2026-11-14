@@ -14,6 +14,7 @@ const (
 	flacStreamInfo    = 0
 	flacPadding       = 1
 	flacVorbisComment = 4
+	flacPictureBlock  = 6
 	flacMaxBlockBytes = 1<<24 - 1
 )
 
@@ -35,7 +36,7 @@ func (flacFormat) inspect(r io.Reader) (Info, error) {
 	return p.info(flacComment(blocks).metadata()), nil
 }
 
-func (flacFormat) rewrite(dst io.Writer, src io.Reader, m Metadata) (Info, error) {
+func (flacFormat) rewrite(dst io.Writer, src io.Reader, m Metadata, cover []byte) (Info, error) {
 	br := bufio.NewReader(src)
 	blocks, err := readFLACMetadata(br)
 	if err != nil {
@@ -48,9 +49,14 @@ func (flacFormat) rewrite(dst io.Writer, src io.Reader, m Metadata) (Info, error
 	}
 	out := []flacBlock{blocks[0], {kind: flacVorbisComment, data: encoded}}
 	for _, block := range blocks[1:] {
-		if block.kind != flacPadding && block.kind != flacVorbisComment {
-			out = append(out, block)
+		if block.kind == flacPadding || block.kind == flacVorbisComment ||
+			(cover != nil && block.kind == flacPictureBlock) {
+			continue
 		}
+		out = append(out, block)
+	}
+	if cover != nil {
+		out = append(out, flacBlock{kind: flacPictureBlock, data: flacPictureData(cover)})
 	}
 	header := []byte("fLaC")
 	for i, block := range out {

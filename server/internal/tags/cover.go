@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"image/jpeg"
 	"io"
 	"strings"
 )
@@ -136,6 +137,26 @@ func apicPicture(body []byte) ([]byte, bool) {
 		return nil, false
 	}
 	return desc[skip:], kind == 3
+}
+
+// flacPictureData is a FLAC PICTURE block body holding cover, a JPEG, as the
+// front cover. Ogg comments carry the same body in base64.
+func flacPictureData(cover []byte) []byte {
+	width, height := 0, 0
+	if config, err := jpeg.DecodeConfig(bytes.NewReader(cover)); err == nil {
+		width, height = config.Width, config.Height
+	}
+	const mime = "image/jpeg"
+	out := binary.BigEndian.AppendUint32(nil, 3)
+	out = binary.BigEndian.AppendUint32(out, uint32(len(mime)))
+	out = append(out, mime...)
+	out = binary.BigEndian.AppendUint32(out, 0) // empty description
+	out = binary.BigEndian.AppendUint32(out, uint32(width))
+	out = binary.BigEndian.AppendUint32(out, uint32(height))
+	out = binary.BigEndian.AppendUint32(out, 24)
+	out = binary.BigEndian.AppendUint32(out, 0)
+	out = binary.BigEndian.AppendUint32(out, uint32(len(cover)))
+	return append(out, cover...)
 }
 
 func flacPicture(b []byte) ([]byte, bool) {

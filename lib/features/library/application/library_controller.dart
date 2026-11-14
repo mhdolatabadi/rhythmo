@@ -220,6 +220,41 @@ class LibraryController extends ChangeNotifier with QuietAfterDispose {
     }
   }
 
+  /// Whether the server can take a cover chosen for a cloud track.
+  bool get canSetCovers => _api is TrackCoversApi;
+
+  /// Sets or replaces a cloud track's cover (#225). The server shows it at
+  /// once and writes it into the file, so downloads carry it.
+  Future<MetadataSaveResult> setTrackCover(
+    String trackId,
+    Uint8List image, {
+    required int version,
+  }) async {
+    final token = _token();
+    final Object api = _api;
+    if (token == null || api is! TrackCoversApi) {
+      return const MetadataSaveFailed();
+    }
+    try {
+      final updated = await api.setTrackCover(token, trackId, version, image);
+      replaceTrack(updated);
+      return MetadataSaved(updated);
+    } on ApiException catch (error) {
+      final latest = error.details['track'];
+      if (error.statusCode == 409 && latest is Map<String, dynamic>) {
+        final track = Track.fromJson(latest);
+        replaceTrack(track);
+        return MetadataConflict(track);
+      }
+      if (error.statusCode == 400 || error.statusCode == 413) {
+        return MetadataInvalid(error.code ?? 'invalid_image');
+      }
+      return const MetadataSaveFailed();
+    } catch (_) {
+      return const MetadataSaveFailed();
+    }
+  }
+
   /// Shows [track] in place of the copy with the same ID, and follows its
   /// embedded tag rewrite while the server is still writing the file.
   void replaceTrack(Track track) {

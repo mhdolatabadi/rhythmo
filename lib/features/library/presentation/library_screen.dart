@@ -1,3 +1,5 @@
+import 'package:rhythmo/features/library/data/cover_picker.dart';
+import 'package:rhythmo/features/library/data/track_metadata.dart';
 import 'package:rhythmo/features/library/data/track_artwork.dart';
 import 'package:rhythmo/features/journey/presentation/journey_widgets.dart';
 import 'package:rhythmo/core/persian_digits.dart';
@@ -506,6 +508,19 @@ class _LibraryScreenState extends State<LibraryScreen>
               () => widget.localAudio
                   .saveTrackMetadata(track, draft, version: version))
           : widget.library.saveTrackMetadata(track.id, draft, version: version),
+      onChangeCover:
+          track.id.startsWith('device:') || !widget.library.canSetCovers
+              ? null
+              : (image, version) async {
+                  final result = await widget.library
+                      .setTrackCover(track.id, image, version: version);
+                  if (result case MetadataSaved(track: final updated)) {
+                    widget.player.updateTrack(updated);
+                    widget.playlists?.updateTrack(updated);
+                  }
+                  return result;
+                },
+      pickCover: pickCoverImage,
     );
     if (saved == null) return;
     // The library already shows the saved copy; bring the player queue and

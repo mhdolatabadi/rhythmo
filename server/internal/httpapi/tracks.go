@@ -129,6 +129,12 @@ func (h *TrackHandlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/tracks/{id}/stream", h.handleStream)
 	mux.HandleFunc("GET /api/v1/tracks/{id}/artwork", h.handleArtwork)
 	mux.HandleFunc("GET /api/v1/tracks/{id}/download", h.handleDownload)
+	mux.HandleFunc("PUT /api/v1/tracks/{id}/cover", h.handleSetCover)
+	if covers, ok := h.tracks.(TrackCoverStore); ok {
+		chosenCovers.Store(&covers)
+	} else {
+		chosenCovers.Store(nil)
+	}
 }
 
 type trackResponse struct {

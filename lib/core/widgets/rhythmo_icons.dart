@@ -43,6 +43,7 @@ abstract final class RhythmoIcons {
   static const IconData gauge = IconData(0xe628, fontFamily: 'Phosphor');
   static const IconData globe = IconData(0xe288, fontFamily: 'Phosphor');
   static const IconData heart = IconData(0xe2a8, fontFamily: 'Phosphor');
+  static const IconData image = IconData(0xe2ca, fontFamily: 'Phosphor');
   static const IconData link = IconData(0xe2e2, fontFamily: 'Phosphor');
   static const IconData linkBreak = IconData(0xe2e4, fontFamily: 'Phosphor');
   static const IconData linkSimple = IconData(0xe2e6, fontFamily: 'Phosphor');
