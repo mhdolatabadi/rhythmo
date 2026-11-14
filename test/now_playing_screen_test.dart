@@ -23,6 +23,8 @@ const _tracks = [
       album: 'Album',
       fileName: 'a.mp3',
       contentType: 'audio/mpeg',
+      audio: AudioFormat(codec: 'MP3', bitrateKbps: 320, sampleRate: 44100),
+      duration: Duration(minutes: 3, seconds: 5),
       sizeBytes: 2048),
   Track(id: 'b', title: 'Second', contentType: 'audio/mpeg', sizeBytes: 1),
   Track(
@@ -261,6 +263,17 @@ void main() {
     expect(find.text('Album'), findsOneWidget);
     expect(find.text('a.mp3'), findsOneWidget);
     expect(find.text('۲ کیلوبایت'), findsOneWidget);
+    expect(
+        find.text('MP3 · ۳۲۰ کیلوبیت بر ثانیه · ۴۴.۱ کیلوهرتز · '
+            'نسخهٔ اصلی، بدون فشرده‌سازی دوباره'),
+        findsOneWidget);
+    expect(find.text('۳:۰۵'), findsOneWidget);
+  });
+
+  testWidgets('now playing shows the file\'s quality in small type (#383)',
+      (tester) async {
+    await open(tester);
+    expect(find.text('MP3 · 320'), findsOneWidget);
   });
 
   testWidgets('swiping down closes; a short drag springs back', (tester) async {
