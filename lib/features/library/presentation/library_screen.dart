@@ -1,5 +1,6 @@
 import 'package:rhythmo/features/library/data/track_artwork.dart';
 import 'package:rhythmo/features/journey/presentation/journey_widgets.dart';
+import 'package:rhythmo/core/offline/offline_playback.dart';
 import 'package:rhythmo/core/persian_digits.dart';
 import 'dart:async';
 
@@ -1913,18 +1914,31 @@ class _TrackListState extends State<_TrackList> {
               : 'برای پسندیدن آهنگ‌های گنجینه وارد حسابت شو.')));
   }
 
-  /// Kept for the whole session, whichever screen shows the list.
-  static TrackSort _sessionSort = TrackSort.recent;
-  TrackSort _sort = _sessionSort;
+  /// Kept for the whole session, whichever screen shows the list, and in
+  /// the preferences for the next launch (#406).
+  static TrackSort? _sessionSort;
+  TrackSort _sort = _sessionSort ?? TrackSort.recent;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_sessionSort == null) {
+      final saved = AppPreferencesScope.maybeOf(context)?.value.trackSort;
+      if (saved != null && saved != _sort) _sort = saved;
+    }
+  }
 
   /// Searching happens on its own screen, from the header's search button.
   List<Track> get _sortedTracks =>
       widget.filterable ? sortTracks(widget.tracks, _sort) : widget.tracks;
 
-  void _setSort(TrackSort sort) => setState(() {
-        _sort = sort;
-        _sessionSort = sort;
-      });
+  void _setSort(TrackSort sort) {
+    setState(() {
+      _sort = sort;
+      _sessionSort = sort;
+    });
+    AppPreferencesScope.maybeOf(context)?.update(trackSort: sort);
+  }
 
   /// The track's «اقدامات آهنگ» menu, or null when there is nothing to offer.
   Widget? _actionsFor(BuildContext context, Track track) {
@@ -2570,6 +2584,27 @@ class _TrackRow extends StatelessWidget {
     final artist = track.artist?.trim();
     final secondary = theme.textTheme.bodySmall
         ?.copyWith(color: colors.onSurfaceVariant, height: 1.3);
+    // Offline, a cloud song not kept on this device is dimmed, and a tap
+    // says why instead of failing in the player (#405).
+    final playable =
+        OfflinePlaybackScope.maybeOf(context)?.canPlay(track) ?? true;
+    final row = _buildRow(
+        context,
+        theme,
+        colors,
+        artist,
+        secondary,
+        playable || selecting
+            ? onTap
+            : () => ScaffoldMessenger.maybeOf(context)
+              ?..hideCurrentSnackBar()
+              ..showSnackBar(
+                  const SnackBar(content: Text(offlineUnavailableMessage))));
+    return playable ? row : Opacity(opacity: 0.45, child: row);
+  }
+
+  Widget _buildRow(BuildContext context, ThemeData theme, ColorScheme colors,
+      String? artist, TextStyle? secondary, VoidCallback onTap) {
     return CallbackShortcuts(
       bindings: {
         if (onLongPress != null)

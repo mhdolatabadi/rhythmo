@@ -17,6 +17,7 @@ import 'package:rhythmo/core/api/api_client.dart';
 import 'package:rhythmo/core/network/network_status.dart';
 import 'package:rhythmo/core/network/offline_strip.dart';
 import 'package:rhythmo/core/offline/offline_outbox.dart';
+import 'package:rhythmo/core/offline/offline_playback.dart';
 import 'package:rhythmo/core/offline/response_cache.dart';
 import 'package:rhythmo/features/auth/application/auth_controller.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
@@ -167,6 +168,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
           api: _playlistsApi,
           accountId: () => _auth?.user?.id,
           deviceStore: SecureDevicePlaylistStore(),
+          localStore: SecureLocalPlaylistStore(),
           subscriptions: _notificationsApi,
           channels: _apiClient,
           outbox: _outbox,
@@ -243,6 +245,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
           api: _tracksApi,
           token: () => _auth?.token,
           likes: widget.likesApi ?? _apiClient,
+          outbox: _outbox,
         );
 
   late final _artwork = TrackArtworkController((track) {
@@ -314,6 +317,10 @@ class _RhythmoAppState extends State<RhythmoApp> {
 
   /// «ذخیره برای آفلاین» in the browser; null where the audio cache
   /// already keeps played songs.
+  /// Which songs play while offline, for dimming the others.
+  late final OfflinePlayback _offlinePlayback =
+      OfflinePlayback(network: _network, isCached: _audioCache.hasComplete);
+
   late final OfflineSongs? _offlineSongs = switch ((_audioCache, _player)) {
     (final OfflineSongStore store, final PlayerController player) =>
       OfflineSongs(store: store, link: player.linkFor)..load(),
@@ -368,6 +375,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
 
   Future<void> _sendOfflineChanges() => _outbox.flush((action) async {
         if (await _player?.favorites.sendPending(action) ?? false) return;
+        if (await _library?.sendPending(action) ?? false) return;
         await _playlists?.sendPending(action);
       });
 
@@ -390,6 +398,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
     _library?.load();
     _playlists?.load();
     _player?.favorites.refresh();
+    _sync?.retryOffline();
   }
 
   @override
@@ -397,6 +406,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
     _auth?.removeListener(_selectJourneyAccount);
     _auth?.removeListener(_onAuthChanged);
     _network.removeListener(_onNetworkChanged);
+    _offlinePlayback.dispose();
     _network.dispose();
     _artwork.dispose();
     _journey.dispose();
@@ -429,9 +439,12 @@ class _RhythmoAppState extends State<RhythmoApp> {
           builder: (context, child) {
             final page = TrackArtworkScope(
               controller: _artwork,
-              child: OfflineStrip(
-                network: _network,
-                child: child ?? const SizedBox.shrink(),
+              child: OfflinePlaybackScope(
+                playback: _offlinePlayback,
+                child: OfflineStrip(
+                  network: _network,
+                  child: child ?? const SizedBox.shrink(),
+                ),
               ),
             );
             // Screens pushed over everything, like the full-screen player,
