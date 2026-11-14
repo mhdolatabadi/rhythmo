@@ -163,7 +163,10 @@ func serveTrackArtwork(w http.ResponseWriter, r *http.Request, objects any, trac
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	picture, err := trackArtwork.load(ctx, source, track)
+	picture, err := chosenCover(ctx, track.ID)
+	if err == nil && picture == nil {
+		picture, err = trackArtwork.load(ctx, source, track)
+	}
 	if err != nil {
 		w.Header().Set("Cache-Control", "no-store")
 		writeError(w, http.StatusServiceUnavailable, "artwork_unavailable")

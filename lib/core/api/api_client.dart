@@ -123,6 +123,14 @@ class TrackLibrary {
   final int importsInProgress;
 }
 
+/// Covers owners choose for their cloud tracks (#225).
+abstract interface class TrackCoversApi {
+  /// Sets or replaces the cover of [trackId] from a JPEG, PNG or GIF. Like a
+  /// metadata edit it is based on [version] and returns the updated track.
+  Future<Track> setTrackCover(
+      String token, String trackId, int version, Uint8List image);
+}
+
 abstract interface class TracksApi {
   Future<TrackLibrary> listTracks(String token);
   Future<StreamLink> streamLink(String token, String trackId);
@@ -382,6 +390,7 @@ class ApiClient
     implements
         AuthApi,
         TracksApi,
+        TrackCoversApi,
         HistoryApi,
         PlaylistsApi,
         BotsApi,
@@ -612,7 +621,10 @@ class ApiClient
     final http.Response response;
     try {
       response = await _httpClient.get(
-        baseUri.resolve(path),
+        // The version keeps a browser from showing a replaced cover.
+        baseUri
+            .resolve(path)
+            .replace(queryParameters: {'v': '${track.version}'}),
         headers: {if (token != null) 'Authorization': 'Bearer $token'},
       ).timeout(_timeout);
     } catch (_) {
@@ -784,6 +796,32 @@ class ApiClient
       'comment': comment,
     });
     return Track.fromJson(body);
+  }
+
+  @override
+  Future<Track> setTrackCover(
+      String token, String trackId, int version, Uint8List image) async {
+    final request = http.Request('PUT',
+        baseUri.resolve('/api/v1/tracks/${Uri.encodeComponent(trackId)}/cover'))
+      ..headers['Authorization'] = 'Bearer $token'
+      ..headers['If-Match'] = '"$version"'
+      ..headers['Content-Type'] = 'application/octet-stream'
+      ..bodyBytes = image;
+    final response = await _httpClient
+        .send(request)
+        .then(http.Response.fromStream)
+        .timeout(const Duration(seconds: 60));
+    final decoded = _decode(response.body);
+    if (response.statusCode != 200 || decoded == null) {
+      final code = decoded?['error'];
+      throw ApiException(
+        'Server returned HTTP ${response.statusCode}.',
+        statusCode: response.statusCode,
+        code: code is String ? code : null,
+        details: decoded ?? const {},
+      );
+    }
+    return Track.fromJson(decoded);
   }
 
   @override

@@ -50,13 +50,16 @@ func (mp3Format) inspect(r io.Reader) (Info, error) {
 	return p.info(tag.metadata()), nil
 }
 
-func (mp3Format) rewrite(dst io.Writer, src io.Reader, m Metadata) (Info, error) {
+func (mp3Format) rewrite(dst io.Writer, src io.Reader, m Metadata, cover []byte) (Info, error) {
 	br := bufio.NewReader(src)
 	old, err := readID3(br)
 	if err != nil {
 		return Info{}, err
 	}
 	tag := old.with(m)
+	if cover != nil {
+		tag = tag.withCover(cover)
+	}
 	encoded, err := tag.bytes()
 	if err != nil {
 		return Info{}, err
@@ -206,6 +209,23 @@ func (t id3Tag) with(m Metadata) id3Tag {
 		}
 		out.frames = append(out.frames, frame)
 	}
+	return out
+}
+
+// withCover drops every embedded picture and adds cover as the front one.
+func (t id3Tag) withCover(cover []byte) id3Tag {
+	out := id3Tag{major: t.major}
+	for _, frame := range t.frames {
+		if string(frame[:4]) != "APIC" {
+			out.frames = append(out.frames, frame)
+		}
+	}
+	// Latin-1 text, the MIME type, picture type 3 (front cover), an empty
+	// description, then the image.
+	body := append([]byte{0}, "image/jpeg\x00"...)
+	body = append(body, 3, 0)
+	body = append(body, cover...)
+	out.frames = append(out.frames, id3Frame(out.major, "APIC", body))
 	return out
 }
 
