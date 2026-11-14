@@ -50,6 +50,7 @@ class HomeView extends StatelessWidget {
     this.onPopular,
     this.onStore,
     this.onIdentify,
+    this.onFriends,
   });
 
   /// The app bar, as a sliver.
@@ -67,6 +68,9 @@ class HomeView extends StatelessWidget {
   final VoidCallback? onPopular;
   final VoidCallback? onStore;
   final VoidCallback? onIdentify;
+
+  /// Opens «فعالیت دوستان» (#228); null hides it.
+  final VoidCallback? onFriends;
 
   /// The notices from followed channels; null hides «تازه از کانال‌هایت».
   final NotificationsController? notifications;
@@ -103,6 +107,8 @@ class HomeView extends StatelessWidget {
             _DiscoverCard('گنجینه', RhythmoIcons.vinylRecord, open),
           if (onIdentify case final open?)
             _DiscoverCard('این آهنگ چیه؟', RhythmoIcons.microphoneStage, open),
+          if (onFriends case final open?)
+            _DiscoverCard('دوستان', RhythmoIcons.users, open),
         ];
         // As wide as «موسیقی من»'s list: 880 px at most, centred.
         final width = MediaQuery.sizeOf(context).width;

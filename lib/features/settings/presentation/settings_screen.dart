@@ -20,6 +20,8 @@ import 'package:rhythmo/features/settings/presentation/queue_settings_section.da
 import 'package:rhythmo/features/settings/application/cache_controller.dart';
 import 'package:rhythmo/features/settings/presentation/delete_account_screen.dart';
 import 'package:rhythmo/features/settings/presentation/display_name_tile.dart';
+import 'package:rhythmo/features/social/presentation/profile_edit_screen.dart';
+import 'package:rhythmo/features/social/presentation/social_scope.dart';
 import 'package:rhythmo/features/settings/presentation/settings_group.dart';
 import 'package:rhythmo/features/settings/presentation/storage_usage_card.dart';
 
@@ -186,6 +188,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 if (widget.onSetDisplayName case final save?)
                   DisplayNameTile(name: widget.displayName, onSave: save),
+                if (SocialScope.maybeOf(context) case final social?
+                    when widget.email != null)
+                  ListTile(
+                    leading: const Icon(RhythmoIcons.userCircle),
+                    title: const Text('نمایه‌ی عمومی'),
+                    subtitle: const Text(
+                        'شناسه، معرفی، دنبال‌کننده‌ها و مسدودشده‌ها'),
+                    onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                            builder: (_) => ProfileEditScreen(social: social))),
+                  ),
                 if (widget.onManagePlaylists case final manage?)
                   ListTile(
                     leading: const Icon(RhythmoIcons.playlist),

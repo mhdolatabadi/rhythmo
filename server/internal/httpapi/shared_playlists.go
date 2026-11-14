@@ -209,6 +209,8 @@ type sharedPlaylistResponse struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Owner       string `json:"owner"`
+	// OwnerHandle opens the owner's public profile (#228), when they have one.
+	OwnerHandle string `json:"ownerHandle,omitempty"`
 	IsOwner     bool   `json:"isOwner"`
 	Public      bool   `json:"public"`
 	TrackCount  int    `json:"trackCount"`
@@ -263,7 +265,7 @@ func (h *PlaylistHandlers) handleShared(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	response := sharedPlaylistResponse{
-		Name: shared.Name, Description: shared.Description, Owner: publicOwnerName(shared.OwnerName), IsOwner: shared.OwnerID == userID,
+		Name: shared.Name, Description: shared.Description, Owner: publicOwnerName(shared.OwnerName), OwnerHandle: shared.OwnerHandle, IsOwner: shared.OwnerID == userID,
 		Public: shared.IsPublic, TrackCount: len(shared.Tracks), LikeCount: likes.Count, Liked: likes.Liked,
 		Tracks: make([]trackResponse, 0, len(shared.Tracks)), UpdatedAt: shared.UpdatedAt.UTC(),
 	}

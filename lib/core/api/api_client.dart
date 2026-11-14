@@ -8,6 +8,8 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:rhythmo/features/social/data/social.dart';
+import 'package:rhythmo/features/admin/data/admin_profile_reports.dart';
 import 'package:rhythmo/core/network/network_status.dart';
 import 'package:rhythmo/core/offline/response_cache.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
@@ -402,7 +404,9 @@ class ApiClient
         FeedbackApi,
         AdminQuotaApi,
         BaleArchiveApi,
-        BaleTopicCatalogApi {
+        BaleTopicCatalogApi,
+        SocialApi,
+        AdminProfileReportsApi {
   ApiClient(this.baseUri,
       {http.Client? httpClient, this.offlineCache, this.network})
       : _httpClient = httpClient ?? http.Client();
@@ -567,8 +571,11 @@ class ApiClient
   @override
   Future<void> reviewPublication(
       String token, PendingPublication publication, bool approved) async {
-    final kind =
-        publication.kind == PublicationKind.playlist ? 'playlists' : 'tracks';
+    final kind = switch (publication.kind) {
+      PublicationKind.playlist => 'playlists',
+      PublicationKind.track => 'tracks',
+      PublicationKind.profile => 'profiles',
+    };
     await _send('PATCH',
         '/api/v1/admin/publications/$kind/${Uri.encodeComponent(publication.id)}',
         token: token, body: {'approved': approved});
@@ -1444,6 +1451,130 @@ class ApiClient
     });
     return Track.fromJson(body);
   }
+
+  @override
+  Future<List<ProfileReport>> listProfileReports(String token) async {
+    final body =
+        await _send('GET', '/api/v1/admin/profile-reports', token: token);
+    return [
+      for (final r in body['reports'] as List? ?? const [])
+        ProfileReport.fromJson(r as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<void> resolveProfileReports(String token, String userId,
+          {required bool hide}) =>
+      _send('PATCH',
+          '/api/v1/admin/profile-reports/${Uri.encodeComponent(userId)}',
+          token: token, body: {'hide': hide});
+
+  @override
+  Future<MyProfile> myProfile(String token) async => MyProfile.fromJson(
+      await _send('GET', '/api/v1/me/profile', token: token));
+
+  @override
+  Future<MyProfile> updateProfile(
+    String token, {
+    required String handle,
+    required String displayName,
+    required String bio,
+    required bool public,
+    required bool hideActivity,
+  }) async =>
+      MyProfile.fromJson(
+          await _send('PUT', '/api/v1/me/profile', token: token, body: {
+        'handle': handle,
+        'displayName': displayName,
+        'bio': bio,
+        'public': public,
+        'hideActivity': hideActivity,
+      }));
+
+  @override
+  Future<MyProfile> setAvatar(String token, Uint8List image) async {
+    final request =
+        http.Request('PUT', baseUri.resolve('/api/v1/me/profile/avatar'))
+          ..headers['Content-Type'] = 'application/octet-stream'
+          ..headers['Authorization'] = 'Bearer $token'
+          ..bodyBytes = image;
+    final response = await http.Response.fromStream(
+        await _httpClient.send(request).timeout(_timeout));
+    final decoded = _decode(response.body);
+    if (response.statusCode != 200 || decoded == null) {
+      final code = decoded?['error'];
+      throw ApiException('Server returned HTTP ${response.statusCode}.',
+          statusCode: response.statusCode,
+          code: code is String ? code : null,
+          details: decoded ?? const {});
+    }
+    return MyProfile.fromJson(decoded);
+  }
+
+  @override
+  Future<void> deleteAvatar(String token) =>
+      _send('DELETE', '/api/v1/me/profile/avatar',
+          token: token, expectBody: false);
+
+  @override
+  Future<PublicProfile> profile(String? token, String handle) async =>
+      PublicProfile.fromJson(await _send(
+          'GET', '/api/v1/users/${Uri.encodeComponent(handle)}',
+          token: token));
+
+  @override
+  Future<void> setFollowing(String token, String handle, bool follow) => _send(
+      follow ? 'PUT' : 'DELETE',
+      '/api/v1/users/${Uri.encodeComponent(handle)}/follow',
+      token: token,
+      expectBody: false);
+
+  @override
+  Future<void> setBlocked(String token, String handle, bool block) => _send(
+      block ? 'PUT' : 'DELETE',
+      '/api/v1/users/${Uri.encodeComponent(handle)}/block',
+      token: token,
+      expectBody: false);
+
+  @override
+  Future<void> report(String token, String handle, ProfileReportReason reason,
+          {String? details}) =>
+      _send('POST', '/api/v1/users/${Uri.encodeComponent(handle)}/report',
+          token: token,
+          body: {
+            'reason': reason.code,
+            if (details != null && details.trim().isNotEmpty)
+              'details': details.trim(),
+          },
+          expectBody: false);
+
+  @override
+  Future<List<({String handle, String displayName})>> blocked(
+      String token) async {
+    final body = await _send('GET', '/api/v1/me/blocked', token: token);
+    return [
+      for (final b in body['blocked'] as List? ?? const [])
+        (
+          handle: (b as Map<String, dynamic>)['handle'] as String,
+          displayName: b['displayName'] as String? ?? '',
+        ),
+    ];
+  }
+
+  @override
+  Future<FeedPage> feed(String token, {String? before}) async {
+    final query =
+        before == null ? '' : '?before=${Uri.encodeComponent(before)}';
+    final body = await _send('GET', '/api/v1/feed$query', token: token);
+    return FeedPage([
+      for (final item in body['items'] as List? ?? const [])
+        if (FeedItem.fromJson(item as Map<String, dynamic>) case final parsed?)
+          parsed,
+    ], body['next'] as String?);
+  }
+
+  @override
+  Uri resolve(String path) => baseUri.resolve(path);
 
   Future<Map<String, dynamic>> _send(
     String method,

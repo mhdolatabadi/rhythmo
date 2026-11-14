@@ -342,6 +342,15 @@ func run() error {
 		return err
 	}
 	trackLikes := store.NewTrackLikes(pool)
+	followRate, err := rateLimiterEnv("FOLLOW_RATE", 60, time.Hour)
+	if err != nil {
+		return err
+	}
+	profileReportRate, err := rateLimiterEnv("PROFILE_REPORT_RATE", 20, 24*time.Hour)
+	if err != nil {
+		return err
+	}
+	profiles := store.NewProfiles(pool)
 	// Curated archive browsing must not consume the general link-import
 	// budget. The archive still has its own bounded admin request window.
 	archiveRate, err := rateLimiterEnv("BALE_ARCHIVE_ADMIN_RATE", 120, 10*time.Minute)
@@ -349,7 +358,8 @@ func run() error {
 		return err
 	}
 	adminHandlers := httpapi.NewAdminHandlers(authHandlers, users).WithQuota(ownerQuotaBytes).WithPlaylists(playlists).
-		WithPublications(store.NewPublications(pool), objects).WithBaleArchive(baleArchive, archiveRate)
+		WithPublications(store.NewPublications(pool), objects).WithBaleArchive(baleArchive, archiveRate).
+		WithProfiles(profiles)
 	storeHandlers := httpapi.NewCatalogHandlers(storeCatalog, tokens, objects,
 		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 		WithSave(store.NewFingerprints(pool), httpapi.SavePolicy{
@@ -379,7 +389,8 @@ func run() error {
 		WithSite(os.Getenv("WEB_ORIGIN")).
 		WithVerification(os.Getenv("GOOGLE_SITE_VERIFICATION"), os.Getenv("BING_SITE_VERIFICATION")).
 		WithIndexNow(os.Getenv("INDEXNOW_KEY")).
-		WithStore(storeCatalog)
+		WithStore(storeCatalog).
+		WithProfiles(profiles)
 	server := &http.Server{
 		Addr: ":" + port,
 		Handler: httpapi.NewHandler(httpapi.Config{
@@ -406,6 +417,8 @@ func run() error {
 			Identify: identifyHandlers,
 			Store:    storeHandlers,
 			Likes:    httpapi.NewLikeHandlers(trackLikes, tracks, tokens, likeRate).WithPublishGate(publishGate),
+			Social: httpapi.NewSocialHandlers(profiles, tokens, followRate, profileReportRate, publicViewRate).
+				WithPublishGate(publishGate),
 			Ops:      ops,
 			Webhooks: webhooks,
 		}),

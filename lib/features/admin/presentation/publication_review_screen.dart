@@ -146,9 +146,14 @@ class _PublicationReviewScreenState extends State<PublicationReviewScreen> {
                               Row(
                                 children: [
                                   Icon(
-                                    item.kind == PublicationKind.playlist
-                                        ? RhythmoIcons.listPlus
-                                        : RhythmoIcons.globe,
+                                    switch (item.kind) {
+                                      PublicationKind.playlist =>
+                                        RhythmoIcons.listPlus,
+                                      PublicationKind.track =>
+                                        RhythmoIcons.globe,
+                                      PublicationKind.profile =>
+                                        RhythmoIcons.userCircle,
+                                    },
                                     size: 20,
                                   ),
                                   const SizedBox(width: 8),
@@ -162,17 +167,28 @@ class _PublicationReviewScreenState extends State<PublicationReviewScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                item.kind == PublicationKind.playlist
-                                    ? 'فهرست پخش · ${persianDigits(item.trackCount)} آهنگ'
-                                    : [
-                                        'آهنگ',
-                                        if (item.artist case final artist?
-                                            when artist.isNotEmpty)
-                                          artist,
-                                      ].join(' · '),
+                                switch (item.kind) {
+                                  PublicationKind.playlist =>
+                                    'فهرست پخش · ${persianDigits(item.trackCount)} آهنگ',
+                                  PublicationKind.profile =>
+                                    'نمایه · @${item.handle ?? ''}',
+                                  PublicationKind.track => [
+                                      'آهنگ',
+                                      if (item.artist case final artist?
+                                          when artist.isNotEmpty)
+                                        artist,
+                                    ].join(' · '),
+                                },
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
+                              if (item.kind == PublicationKind.profile &&
+                                  (item.bio ?? '').isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(item.bio!,
+                                    maxLines: 4,
+                                    overflow: TextOverflow.ellipsis),
+                              ],
                               const SizedBox(height: 4),
                               Text(item.ownerEmail,
                                   textDirection: TextDirection.ltr,

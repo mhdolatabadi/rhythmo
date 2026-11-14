@@ -26,6 +26,7 @@ var publicTemplates = map[string]*template.Template{
 	"playlist": template.Must(template.New("layout.html").Funcs(template.FuncMap{"digits": display.PersianDigits}).ParseFS(publicFiles, "public/layout.html", "public/playlist.html")),
 	"missing":  template.Must(template.New("layout.html").Funcs(template.FuncMap{"digits": display.PersianDigits}).ParseFS(publicFiles, "public/layout.html", "public/missing.html")),
 	"privacy":  template.Must(template.New("layout.html").Funcs(template.FuncMap{"digits": display.PersianDigits}).ParseFS(publicFiles, "public/layout.html", "public/privacy.html")),
+	"profile":  template.Must(template.New("layout.html").Funcs(template.FuncMap{"digits": display.PersianDigits}).ParseFS(publicFiles, "public/layout.html", "public/profile.html")),
 	"delete":   template.Must(template.New("layout.html").Funcs(template.FuncMap{"digits": display.PersianDigits}).ParseFS(publicFiles, "public/layout.html", "public/delete_account.html")),
 }
 
@@ -67,6 +68,8 @@ type PublicPages struct {
 	catalog CatalogStore
 	// images keeps the drawn link preview cards.
 	images shareImages
+	// profiles, when set, serves public profiles at /u/{handle} (#228).
+	profiles PublicProfileStore
 	// indexNowKey, when set, is served at /{key}.txt to prove the site
 	// owns the key its IndexNow notices carry.
 	indexNowKey string
@@ -164,6 +167,9 @@ func (p *PublicPages) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /privacy", p.handlePrivacy)
 	mux.HandleFunc("GET /delete-account", p.handleDeleteAccount)
 	p.registerStore(mux)
+	if p.profiles != nil {
+		mux.HandleFunc("GET /u/{handle}", p.handleProfile)
+	}
 	mux.HandleFunc("GET /", p.handleNotFound)
 }
 
@@ -230,9 +236,11 @@ type publicPlaylist struct {
 	// Description is the channel's blurb (#428), if it has one.
 	Description string
 	Owner       string
-	TrackCount  int
-	LikeCount   int
-	Tracks      []publicTrack
+	// OwnerLink is the owner's public profile page, if they have one.
+	OwnerLink  string
+	TrackCount int
+	LikeCount  int
+	Tracks     []publicTrack
 }
 
 // WithSite sets the origin, such as https://rhythmo.ir, that canonical,
@@ -466,6 +474,9 @@ func (p *PublicPages) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	page := publicPlaylist{
 		ShareToken: token, Name: shared.Name, Description: shared.Description, Owner: publicOwnerName(shared.OwnerName),
 		TrackCount: len(shared.Tracks), LikeCount: likes.Count,
+	}
+	if shared.OwnerHandle != "" {
+		page.OwnerLink = "/u/" + shared.OwnerHandle
 	}
 	inStore := p.storeEntriesFor(r, shared.Tracks)
 	recordings := make([]map[string]any, 0, len(shared.Tracks))
