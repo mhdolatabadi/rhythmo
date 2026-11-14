@@ -62,6 +62,25 @@ String trackSubtitle(Track track) {
   return track.isLocal ? 'روی دستگاه' : 'روی سرور';
 }
 
+/// The details sheet's quality line: the badge, the sample rate and, for a
+/// lossless file, that it is the original as uploaded (#383).
+String? audioQualityDetail(Track track) {
+  final audio = track.audio;
+  if (audio == null) return null;
+  final parts = <String>[audio.codec];
+  if (audio.bitrateKbps case final kbps?) {
+    parts.add(persianDigits('$kbps کیلوبیت بر ثانیه'));
+  }
+  if (audio.bitDepth case final bits?) parts.add(persianDigits('$bits بیتی'));
+  if (audio.sampleRate case final rate?) {
+    parts.add(persianDigits('${(rate / 1000).toStringAsFixed(1)} کیلوهرتز'));
+  }
+  final detail = parts.join(' · ');
+  return track.isLocal
+      ? detail
+      : '$detail · نسخهٔ اصلی، بدون فشرده‌سازی دوباره';
+}
+
 /// `m:ss`, as players show positions.
 String formatPlaybackTime(Duration value) {
   final minutes = value.inMinutes;
@@ -531,6 +550,20 @@ class _TitleRow extends StatelessWidget {
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
+              if (track.audio case final audio?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    audio.label,
+                    key: const ValueKey('audio-quality'),
+                    textDirection: TextDirection.ltr,
+                    semanticsLabel: 'کیفیت: ${audio.label}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -1033,6 +1066,14 @@ class _TrackDetailsSheet extends StatelessWidget {
       ('هنرمند', track.artist),
       ('آلبوم', track.album),
       ('نام فایل', track.fileName),
+      ('کیفیت', audioQualityDetail(track)),
+      (
+        'مدت',
+        switch (track.duration) {
+          final length? => formatPlaybackTime(length),
+          null => null,
+        }
+      ),
       ('حجم', formatSize(track.sizeBytes)),
       (
         'منبع',

@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/mhdolatabadi/rhythmo/server/internal/audioinfo"
 	"github.com/mhdolatabadi/rhythmo/server/internal/auth"
 	"github.com/mhdolatabadi/rhythmo/server/internal/balearchive"
 	"github.com/mhdolatabadi/rhythmo/server/internal/bot"
@@ -43,6 +44,9 @@ const (
 	maxRateLimitKeys    = 10_000
 	loudnessScanEvery   = 2 * time.Minute
 	loudnessScanBatch   = 50
+	// New uploads show their format within this long (#383).
+	audioScanEvery = 20 * time.Second
+	audioScanBatch = 50
 	// sessionCacheTTL bounds how long a revocation takes to reach another API process.
 	sessionCacheTTL      = 30 * time.Second
 	defaultTagWorkers    = 1
@@ -425,6 +429,7 @@ func run() error {
 	go cleanPendingUploads(ctx, tracks, objects, pendingTTL, cleanupEvery, cleanupBatch)
 	// Reads ReplayGain from new uploads and, once, from every older track.
 	go loudness.NewScanner(tracks, objects, loudnessScanEvery, loudnessScanBatch).Run(ctx)
+	go audioinfo.NewScanner(tracks, objects, audioScanEvery, audioScanBatch).Run(ctx)
 	go purgeDeletedAccounts(ctx, users, objects, cleanupEvery, cleanupBatch)
 	// Groups every song in a public playlist into the store's catalog.
 	go catalog.NewIndexer(storeCatalog, catalog.Config{}).Run(ctx)
