@@ -269,6 +269,11 @@ jobs:
           # CanvasKit is cached for good only under its engine build's path.
           assert "immutable" in nginx.split("location ~ ^/app/canvaskit-", 1)[1].split("}", 1)[0]
           assert "rm -f /usr/share/nginx/html/index.html" in docker
+          # #209: nginx without root, and no Android backups of the session.
+          assert "FROM nginxinc/nginx-unprivileged:" in docker and "\nUSER 101\n" in docker
+          assert "net.ipv4.ip_unprivileged_port_start: 0" in compose
+          manifest = Path("android/app/src/main/AndroidManifest.xml").read_text()
+          assert 'android:allowBackup="false"' in manifest
 
           # The shared front nginx routes like the Caddyfile (#153).
           front = Path("deploy/front-proxy.nginx.conf").read_text()
