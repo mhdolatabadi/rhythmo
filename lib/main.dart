@@ -22,6 +22,8 @@ import 'package:rhythmo/features/auth/application/auth_controller.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
 import 'package:rhythmo/features/auth/presentation/auth_gate.dart';
 import 'package:rhythmo/features/bots/application/bot_link_controller.dart';
+import 'package:rhythmo/features/settings/application/storage_request_controller.dart';
+import 'package:rhythmo/features/settings/data/storage_request.dart';
 import 'package:rhythmo/features/identify/application/identify_controller.dart';
 import 'package:rhythmo/features/identify/data/snippet_recorder.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
@@ -69,6 +71,7 @@ class RhythmoApp extends StatefulWidget {
     this.tracksApi,
     this.playlistsApi,
     this.botsApi,
+    this.storageRequestApi,
     this.linkImportsApi,
     this.identifyApi,
     this.storeApi,
@@ -103,6 +106,7 @@ class RhythmoApp extends StatefulWidget {
   final TracksApi? tracksApi;
   final PlaylistsApi? playlistsApi;
   final BotsApi? botsApi;
+  final StorageRequestApi? storageRequestApi;
   final LinkImportsApi? linkImportsApi;
   final IdentifyApi? identifyApi;
   final StoreApi? storeApi;
@@ -186,6 +190,14 @@ class _RhythmoAppState extends State<RhythmoApp> {
   late final BotLinkController? _botLinks = _botsApi == null
       ? null
       : BotLinkController(api: _botsApi, token: () => _auth?.token);
+
+  late final StorageRequestApi? _storageRequestApi =
+      widget.storageRequestApi ?? _apiClient;
+  late final StorageRequestController? _storageRequests =
+      _storageRequestApi == null
+          ? null
+          : StorageRequestController(
+              api: _storageRequestApi, token: () => _auth?.token);
 
   late final LinkImportsApi? _linkImportsApi =
       widget.linkImportsApi ?? _apiClient;
@@ -409,6 +421,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
     _recent?.dispose();
     _lyrics?.dispose();
     _botLinks?.dispose();
+    _storageRequests?.dispose();
     _linkImports?.dispose();
     _identify?.dispose();
     _store?.dispose();
@@ -476,6 +489,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
                       sync: _sync,
                       cache: _cache,
                       botLinks: _botLinks,
+                      storageRequests: _storageRequests,
                       linkImports: _linkImports,
                       identify: _identify,
                       store: _store,

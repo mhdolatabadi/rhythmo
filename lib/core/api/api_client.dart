@@ -1,5 +1,6 @@
 import 'package:rhythmo/features/bale_archive/bale_archive.dart';
 import 'package:rhythmo/features/feedback/feedback_api.dart';
+import 'package:rhythmo/features/settings/data/storage_request.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/data/admin_song_reports.dart';
 import 'dart:convert';
@@ -397,6 +398,7 @@ class ApiClient
         AdminSongReportsApi,
         FeedbackApi,
         AdminQuotaApi,
+        StorageRequestApi,
         BaleArchiveApi,
         BaleTopicCatalogApi {
   ApiClient(this.baseUri,
@@ -545,6 +547,43 @@ class ApiClient
         token: token, body: {'bytes': bytes});
     return AdminAccount.fromJson(body);
   }
+
+  @override
+  Future<StorageRequest?> myStorageRequest(String token) async {
+    final body = await _send('GET', '/api/v1/me/storage-request', token: token);
+    return body.isEmpty ? null : StorageRequest.fromJson(body);
+  }
+
+  @override
+  Future<StorageRequest> requestStorage(String token, int bytes,
+      {String reason = ''}) async {
+    final body = await _send('POST', '/api/v1/me/storage-request',
+        token: token, body: {'bytes': bytes, 'reason': reason});
+    return StorageRequest.fromJson(body);
+  }
+
+  @override
+  Future<List<PendingStorageRequest>> pendingStorageRequests(
+      String token) async {
+    final body =
+        await _send('GET', '/api/v1/admin/storage-requests', token: token);
+    return [
+      for (final item in body['requests'] as List<dynamic>)
+        PendingStorageRequest.fromJson(item as Map<String, dynamic>)
+    ];
+  }
+
+  @override
+  Future<void> decideStorageRequest(String token, String id,
+          {required bool approved, int bytes = 0, String reason = ''}) =>
+      _send(
+          'PATCH', '/api/v1/admin/storage-requests/${Uri.encodeComponent(id)}',
+          token: token,
+          body: {
+            'approved': approved,
+            if (approved) 'bytes': bytes,
+            'reason': reason
+          });
 
   static const _timeout = Duration(seconds: 15);
 
@@ -1485,7 +1524,8 @@ class ApiClient
         details: decoded ?? const {},
       );
     }
-    if (!expectBody) return const {};
+    // 204 has no body by definition.
+    if (!expectBody || response.statusCode == 204) return const {};
     if (decoded == null) {
       throw const ApiException('Server returned an invalid response.');
     }

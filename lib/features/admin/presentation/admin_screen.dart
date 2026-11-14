@@ -1,3 +1,5 @@
+import 'package:rhythmo/features/admin/presentation/storage_requests_screen.dart';
+import 'package:rhythmo/features/settings/data/storage_request.dart';
 import 'package:rhythmo/features/bale_archive/bale_archive.dart';
 import 'package:rhythmo/features/bale_archive/bale_archive_screen.dart';
 import 'package:rhythmo/features/feedback/feedback_api.dart';
@@ -270,6 +272,16 @@ class _AdminScreenState extends State<AdminScreen> {
                           api: widget.api as BaleTopicCatalogApi,
                           token: widget.token))),
             ),
+          if (widget.api is StorageRequestApi)
+            IconButton(
+                tooltip: 'درخواست‌های فضای بیشتر',
+                icon: const Icon(RhythmoIcons.cloud),
+                onPressed: _forbidden
+                    ? null
+                    : () => Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => StorageRequestsScreen(
+                            api: widget.api as StorageRequestApi,
+                            token: widget.token)))),
           if (widget.api is AdminSongReportsApi)
             IconButton(
                 tooltip: 'گزارش آهنگ‌ها',
