@@ -55,6 +55,22 @@ type PlaylistHandlers struct {
 	// (#414); nil leaves them out.
 	subscriptions SubscriptionStore
 	notifications NotificationStore
+	// trackLikes fills each song's like state in a public playlist (#357);
+	// nil leaves it out.
+	trackLikes TrackLikeStates
+}
+
+// TrackLikeStates reads the like state of songs for a viewer;
+// *store.TrackLikes implements it.
+type TrackLikeStates interface {
+	TrackStates(ctx context.Context, viewerID string, trackIDs []string) (map[string]store.LikeState, error)
+}
+
+// WithTrackLikes shows how many listeners like each song of a public
+// playlist, and whether the viewer does, so they can like single songs.
+func (h *PlaylistHandlers) WithTrackLikes(likes TrackLikeStates) *PlaylistHandlers {
+	h.trackLikes = likes
+	return h
 }
 
 // WithPublishGate makes listing a playlist publicly need an admin's
