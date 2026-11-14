@@ -35,16 +35,33 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Resolve image name
+      # deploy/.env NAFIR_IMAGE_REPO must name this same path.
+      - name: Resolve image name and tags
         id: image
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+        shell: bash
+        run: |
+          name="ghcr.io/mhdolatabadi/rhythmo/${{ matrix.name }}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ matrix.name }}" == transcriber ]]; then
+            # The transcriber holds a 1.5 GB model. Tag it by the content of its
+            # folder, so the server only pulls it again when that folder changes.
+            tag="src-$(git rev-parse "HEAD:${{ matrix.context }}")"
+            if docker buildx imagetools inspect "${name}:${tag}" > /dev/null 2>&1; then
+              echo "${name}:${tag} already exists; not rebuilding it."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            tag="${GITHUB_SHA}"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
+        if: steps.image.outputs.skip != 'true'
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
           tags: |
-            ${{ steps.image.outputs.name }}:${{ github.sha }}
+            ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
             ${{ steps.image.outputs.name }}:latest
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}

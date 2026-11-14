@@ -736,7 +736,9 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                         label: 'ویرایش نام و توضیح',
                       ),
                     ),
-                  if (current.canManage && widget.controller.supportsGoals)
+                  if (current.canManage &&
+                      !current.isLocal &&
+                      widget.controller.supportsGoals)
                     const PopupMenuItem(
                       value: _PlaylistAction.goal,
                       child: _MenuRow(
@@ -744,7 +746,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                         label: 'هدف مشترک',
                       ),
                     ),
-                  if (widget.controller.supportsGoals)
+                  if (!current.isLocal && widget.controller.supportsGoals)
                     const PopupMenuItem(
                       value: _PlaylistAction.occasion,
                       child: _MenuRow(
@@ -752,7 +754,9 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                         label: 'افزودن به مجموعه',
                       ),
                     ),
-                  if (current.canManage && widget.controller.canSyncChannels)
+                  if (current.canManage &&
+                      !current.isLocal &&
+                      widget.controller.canSyncChannels)
                     const PopupMenuItem(
                       value: _PlaylistAction.syncChannel,
                       child: _MenuRow(
@@ -803,8 +807,12 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       onPlay: () => widget.player.playFrom(current.tracks, 0),
                       onShuffle: () =>
                           widget.player.playShuffled(current.tracks),
-                      onCollab: current.canManage ? _collab : null,
-                      onShare: current.isOwner ? _share : null,
+                      // A playlist kept only on this phone is never shared.
+                      onCollab: current.canManage && !current.isLocal
+                          ? _collab
+                          : null,
+                      onShare:
+                          current.isOwner && !current.isLocal ? _share : null,
                       onSelectTracks: _selectTracks,
                       onTapTrack: (index) =>
                           widget.player.playTapped(current.tracks, index),
@@ -1055,6 +1063,7 @@ class _PlaylistDetailHeader extends StatelessWidget {
           Text(
             [
               '${persianDigits(playlist.displayTrackCount)} قطعه موسیقی',
+              if (playlist.isLocal) 'فقط روی همین گوشی',
               if (playlist.isAdmin) 'ادمین هستی',
               if (!playlist.isOwner && playlist.owner != null)
                 'از ${playlist.owner}'
@@ -1170,12 +1179,18 @@ class PlaylistPrivacyLine extends StatelessWidget {
     final count = '${persianDigits(playlist.displayTrackCount)} آهنگ';
     return Row(
       children: [
-        Icon(public ? RhythmoIcons.globe : RhythmoIcons.lockSimple,
-            size: 14, color: colors.secondary),
+        Icon(
+            playlist.isLocal
+                ? RhythmoIcons.deviceMobile
+                : public
+                    ? RhythmoIcons.globe
+                    : RhythmoIcons.lockSimple,
+            size: 14,
+            color: colors.secondary),
         const SizedBox(width: RhythmoSpace.xs),
         Flexible(
           child: Text(
-            '${public ? 'عمومی' : 'خصوصی'} · $count',
+            '${playlist.isLocal ? 'روی گوشی' : public ? 'عمومی' : 'خصوصی'} · $count',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

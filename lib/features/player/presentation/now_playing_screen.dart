@@ -15,6 +15,7 @@ import 'package:rhythmo/features/player/application/favorite_tracks.dart';
 import 'package:rhythmo/features/lyrics/presentation/lyrics_sheet.dart';
 import 'package:rhythmo/features/player/application/play_queue.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
+import 'package:rhythmo/features/player/presentation/equalizer_sheet.dart';
 import 'package:rhythmo/features/player/presentation/playback_controls.dart';
 
 /// The widest the now-playing column grows on desktop.
@@ -55,11 +56,36 @@ const playbackErrorShort = 'پخش ناموفق بود. دوباره تلاش ک
 const playbackErrorMessage = 'پخش این آهنگ ناموفق بود. اتصال اینترنت را '
     'بررسی کن و دکمه‌ی وسط را برای تلاش دوباره بزن.';
 
-/// The artist, or where the track plays from when it has none.
+/// Shown in place of the artist when a song's tags have none.
+const unknownArtist = 'هنرمند ناشناس';
+
+/// The artist, else the album, else [unknownArtist]. Where the song is
+/// stored is shown by the row's badge, never in the artist's place.
 String trackSubtitle(Track track) {
-  final artist = track.artist?.trim();
-  if (artist != null && artist.isNotEmpty) return artist;
-  return track.isLocal ? 'روی دستگاه' : 'روی سرور';
+  for (final value in [track.artist, track.album]) {
+    final text = value?.trim();
+    if (text != null && text.isNotEmpty) return text;
+  }
+  return unknownArtist;
+}
+
+/// The details sheet's quality line: the badge, the sample rate and, for a
+/// lossless file, that it is the original as uploaded (#383).
+String? audioQualityDetail(Track track) {
+  final audio = track.audio;
+  if (audio == null) return null;
+  final parts = <String>[audio.codec];
+  if (audio.bitrateKbps case final kbps?) {
+    parts.add(persianDigits('$kbps کیلوبیت بر ثانیه'));
+  }
+  if (audio.bitDepth case final bits?) parts.add(persianDigits('$bits بیتی'));
+  if (audio.sampleRate case final rate?) {
+    parts.add(persianDigits('${(rate / 1000).toStringAsFixed(1)} کیلوهرتز'));
+  }
+  final detail = parts.join(' · ');
+  return track.isLocal
+      ? detail
+      : '$detail · نسخهٔ اصلی، بدون فشرده‌سازی دوباره';
 }
 
 /// `m:ss`, as players show positions.
@@ -191,6 +217,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         track: track,
         canAddToPlaylist: playlists?.signedIn ?? false,
         canCopyLink: storeLink != null,
+        canEqualize: _player.equalizer?.supported ?? false,
       ),
     );
     if (!mounted || choice == null) return;
@@ -202,6 +229,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         if (!mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('لینک آهنگ کپی شد.')));
+      case _TrackChoice.equalizer:
+        await showEqualizerSheet(context, _player.equalizer!);
       case _TrackChoice.details:
         _openDetails(track);
     }
@@ -531,6 +560,20 @@ class _TitleRow extends StatelessWidget {
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
+              if (track.audio case final audio?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    audio.label,
+                    key: const ValueKey('audio-quality'),
+                    textDirection: TextDirection.ltr,
+                    semanticsLabel: 'کیفیت: ${audio.label}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -959,7 +1002,7 @@ class QueueSheet extends StatelessWidget {
   }
 }
 
-enum _TrackChoice { addToPlaylist, copyLink, details }
+enum _TrackChoice { addToPlaylist, copyLink, equalizer, details }
 
 /// The ⋮ sheet of the full-screen player: the song on top, then a short
 /// list of what can be done with it.
@@ -968,11 +1011,13 @@ class _TrackActionsSheet extends StatelessWidget {
     required this.track,
     required this.canAddToPlaylist,
     required this.canCopyLink,
+    this.canEqualize = false,
   });
 
   final Track track;
   final bool canAddToPlaylist;
   final bool canCopyLink;
+  final bool canEqualize;
 
   @override
   Widget build(BuildContext context) {
@@ -1014,6 +1059,8 @@ class _TrackActionsSheet extends StatelessWidget {
                 'افزودن به فهرست پخش'),
           if (canCopyLink)
             option(_TrackChoice.copyLink, RhythmoIcons.link, 'کپی لینک آهنگ'),
+          if (canEqualize)
+            option(_TrackChoice.equalizer, RhythmoIcons.sliders, 'اکولایزر'),
           option(_TrackChoice.details, RhythmoIcons.musicNotes, 'جزئیات آهنگ'),
         ],
       ),
@@ -1033,6 +1080,14 @@ class _TrackDetailsSheet extends StatelessWidget {
       ('هنرمند', track.artist),
       ('آلبوم', track.album),
       ('نام فایل', track.fileName),
+      ('کیفیت', audioQualityDetail(track)),
+      (
+        'مدت',
+        switch (track.duration) {
+          final length? => formatPlaybackTime(length),
+          null => null,
+        }
+      ),
       ('حجم', formatSize(track.sizeBytes)),
       (
         'منبع',

@@ -10,13 +10,17 @@ import 'package:rhythmo/core/offline/response_cache.dart';
 import 'package:rhythmo/features/auth/application/auth_controller.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
 import 'package:rhythmo/features/auth/data/token_store.dart';
+import 'package:rhythmo/features/library/application/library_controller.dart';
 import 'package:rhythmo/features/library/data/track.dart';
+import 'package:rhythmo/features/library/data/track_metadata.dart';
+import 'package:rhythmo/core/offline/offline_playback.dart';
 import 'package:rhythmo/features/player/application/last_playback.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/core/offline/offline_outbox.dart';
 import 'package:rhythmo/features/player/data/offline_songs.dart';
 import 'package:rhythmo/features/player/application/favorite_tracks.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
+import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/features/playlists/data/playlist.dart';
 import 'likes_test.dart' show FakeLikesApi;
 
@@ -324,6 +328,78 @@ void main() {
       expect(api.calls, ['replace:b,a']);
     });
 
+    test('a metadata edit made offline shows, survives a reload, is sent later',
+        () async {
+      const cloud = Track(
+          id: 'c', title: 'قدیم', contentType: 'audio/mpeg', sizeBytes: 1);
+      final api = FakeTracksApi([cloud]);
+      final library =
+          LibraryController(api: api, token: () => 'tok', outbox: outbox);
+      await library.load();
+
+      api.updateError = http.ClientException('offline');
+      final result = await library.saveTrackMetadata(
+          'c', const TrackMetadataDraft(fileName: '', title: 'تازه'),
+          version: 1);
+      expect(result, isA<MetadataSaved>());
+      expect(library.tracks.single.title, 'تازه');
+
+      // The kept server answer still has the old title; the edit wins.
+      await library.load();
+      await pumpEventQueue();
+      expect(library.tracks.single.title, 'تازه');
+
+      api.updateError = null;
+      await outbox.flush((action) async {
+        expect(await library.sendPending(action), isTrue);
+      });
+      expect(api.calls, contains('update:c'));
+      expect(await outbox.pending(), isEmpty);
+    });
+
+    test('an offline edit of a song changed elsewhere is dropped', () async {
+      const cloud = Track(
+          id: 'c',
+          title: 'قدیم',
+          contentType: 'audio/mpeg',
+          sizeBytes: 1,
+          version: 2);
+      final api = FakeTracksApi([cloud]);
+      final library =
+          LibraryController(api: api, token: () => 'tok', outbox: outbox);
+      await library.load();
+      await outbox.add({
+        'kind': 'trackMetadata',
+        'key': 'trackMetadata:c',
+        'trackId': 'c',
+        'version': 1,
+        'fields': {'title': 'تازه'},
+      });
+      await outbox.flush((action) => library.sendPending(action));
+      expect(await outbox.pending(), isEmpty);
+      await library.load();
+      expect(library.tracks.single.title, 'قدیم');
+    });
+
+    test('a playlist renamed offline keeps its new name and is sent later',
+        () async {
+      final api = _Playlists()..offline = true;
+      final playlists =
+          PlaylistsController(api: api, token: () => 'tok', outbox: outbox);
+      await playlists.load();
+
+      expect(await playlists.rename('p1', 'شب'), isTrue);
+      expect(playlists.playlists.single.name, 'شب');
+      await playlists.load();
+      await pumpEventQueue();
+      expect(playlists.playlists.single.name, 'شب');
+      expect((await playlists.loadPlaylist('p1'))!.name, 'شب');
+
+      api.offline = false;
+      await outbox.flush((action) => playlists.sendPending(action));
+      expect(api.calls, ['rename:شب']);
+    });
+
     test('a change the server refuses is dropped; unreachable ones wait',
         () async {
       await outbox.add({'kind': 'x', 'key': 'one'});
@@ -374,6 +450,99 @@ void main() {
     });
   });
 
+  group('playlists kept only on this device', () {
+    final song = Track(
+        id: 'device:9',
+        title: 'نه',
+        contentType: 'audio/mpeg',
+        sizeBytes: 1,
+        sourceUri: Uri.parse('content://media/9'));
+
+    test('without an account: make, fill, arrange, rename and delete',
+        () async {
+      final store = MemoryLocalPlaylistStore();
+      final playlists = PlaylistsController(
+          api: _Playlists(), token: () => null, localStore: store);
+      await playlists.load();
+      expect(playlists.status, PlaylistsStatus.loaded);
+
+      final made = await playlists.create('گوشی');
+      expect(made!.isLocal, isTrue);
+      expect(
+          await playlists.addDeviceTrack(made.id, song), AddTrackResult.added);
+      expect(await playlists.addDeviceTrack(made.id, song),
+          AddTrackResult.alreadyPresent);
+      const other =
+          Track(id: 'c', title: 'C', contentType: 'audio/mpeg', sizeBytes: 1);
+      await playlists
+          .replaceTracks(made.id, ['c', 'device:9'], deviceTracks: [other]);
+      expect(await playlists.rename(made.id, 'شب'), isTrue);
+
+      // Another launch reads it back from the device.
+      final again = PlaylistsController(
+          api: _Playlists(), token: () => null, localStore: store);
+      await again.load();
+      final kept = await again.loadPlaylist(made.id);
+      expect(kept!.name, 'شب');
+      expect(kept.tracks.map((t) => t.id), ['c', 'device:9']);
+      expect(kept.tracks.last.sourceUri, song.sourceUri);
+
+      expect(await again.delete(made.id), isTrue);
+      expect(again.playlists, isEmpty);
+    });
+
+    test('offline, a new playlist is kept on the device beside cloud ones',
+        () async {
+      final api = _Playlists()..createOffline = true;
+      final playlists = PlaylistsController(
+          api: api, token: () => 'tok', localStore: MemoryLocalPlaylistStore());
+      await playlists.load();
+      final made = await playlists.create('سفر دوم');
+      expect(made!.isLocal, isTrue);
+      await playlists.load();
+      expect(playlists.playlists.map((p) => p.name), ['سفر دوم', 'سفر']);
+    });
+  });
+
+  group('offline playback marks', () {
+    const cloud =
+        Track(id: 'c', title: 'C', contentType: 'audio/mpeg', sizeBytes: 1);
+    final local = Track(
+        id: 'device:1',
+        title: 'L',
+        contentType: 'audio/mpeg',
+        sizeBytes: 1,
+        sourceUri: Uri.parse('content://media/1'));
+
+    test('online, every song plays', () {
+      final network = NetworkStatus();
+      final playback =
+          OfflinePlayback(network: network, isCached: (_) async => false);
+      expect(playback.canPlay(cloud), isTrue);
+    });
+
+    test('offline, only songs on the device or kept whole play', () async {
+      final network = NetworkStatus(schedule: (_, __) => () {});
+      var cached = false;
+      final playback =
+          OfflinePlayback(network: network, isCached: (_) async => cached);
+      network.reportFailure();
+      expect(playback.canPlay(local), isTrue);
+      // Unknown at first, so nothing dims by mistake; then the answer.
+      expect(playback.canPlay(cloud), isTrue);
+      await Future<void>.delayed(Duration.zero);
+      expect(playback.canPlay(cloud), isFalse);
+
+      // Kept while online: checked afresh on the next offline spell.
+      network.reportSuccess();
+      cached = true;
+      network.reportFailure();
+      playback.canPlay(cloud);
+      await Future<void>.delayed(Duration.zero);
+      expect(playback.canPlay(cloud), isTrue);
+    });
+  });
+
   test('a late answer after the app closed does not reach a disposed list',
       () async {
     final api = _Playlists();
@@ -403,6 +572,14 @@ class _SongStore implements OfflineSongStore {
 
 class _Playlists implements PlaylistsApi {
   bool offline = false;
+  bool createOffline = false;
+
+  @override
+  Future<Playlist> createPlaylist(String token, String name) async {
+    if (createOffline) throw http.ClientException('offline');
+    throw UnimplementedError();
+  }
+
   List<String> ids = ['a'];
   final calls = <String>[];
 
@@ -437,12 +614,24 @@ class _Playlists implements PlaylistsApi {
   Future<List<Playlist>> listPlaylists(String token) async => [_playlist()];
 
   @override
+  Future<Playlist> renamePlaylist(String token, String playlistId, String name,
+      {String? description}) async {
+    if (offline) throw http.ClientException('offline');
+    calls.add('rename:$name');
+    return _playlist();
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _Auth implements AuthApi {
   bool revoked = false;
   bool unreachable = false;
+
+  @override
+  Future<AuthUser> setDisplayName(String token, String name) async =>
+      AuthUser(id: 'u1', email: 'a@example.com', displayName: name);
 
   @override
   Future<AuthUser> me(String token) async {

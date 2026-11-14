@@ -207,6 +207,20 @@ class LibrarySyncController extends ChangeNotifier with QuietAfterDispose {
     }
   }
 
+  /// Back online: starts again, once, the transfers that stopped for lack
+  /// of a connection (#408). Each reconnection retries them at most once,
+  /// so a flaky network never loops, and a retried upload or download
+  /// replaces its earlier attempt instead of adding a copy.
+  void retryOffline() {
+    final stopped = [
+      for (final operation in _operations.values)
+        if (operation.phase == SyncPhase.failed &&
+            operation.error == SyncError.offline)
+          operation.track.id,
+    ];
+    stopped.forEach(retry);
+  }
+
   /// Stops a queued or running transfer; nothing is left behind.
   void cancel(String trackId) {
     final operation = _operations[trackId];
