@@ -1,5 +1,6 @@
 import 'package:rhythmo/core/persian_digits.dart';
 import 'package:flutter/material.dart';
+import 'package:rhythmo/features/social/presentation/social_scope.dart';
 import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:flutter/services.dart';
@@ -462,14 +463,29 @@ class _ChannelHeader extends StatelessWidget {
                       ?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  playlist.isOwner
-                      ? 'فهرست پخش اشتراکی تو'
-                      : 'اشتراک‌گذاری‌شده توسط ${playlist.owner}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: muted,
-                ),
+                if (!playlist.isOwner &&
+                    playlist.ownerHandle != null &&
+                    SocialScope.maybeOf(context) != null)
+                  InkWell(
+                    onTap: () => SocialScope.maybeOf(context)!
+                        .openProfile(context, playlist.ownerHandle!),
+                    child: Text(
+                      'اشتراک‌گذاری‌شده توسط ${playlist.owner}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          muted?.copyWith(decoration: TextDecoration.underline),
+                    ),
+                  )
+                else
+                  Text(
+                    playlist.isOwner
+                        ? 'فهرست پخش اشتراکی تو'
+                        : 'اشتراک‌گذاری‌شده توسط ${playlist.owner}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: muted,
+                  ),
                 Text(
                   [
                     '${persianDigits(tracks.length)} آهنگ',

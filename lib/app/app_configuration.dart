@@ -57,6 +57,7 @@ abstract final class AppConfiguration {
     _shareTokenTaken = false;
     _collabTokenTaken = false;
     _storeSongTaken = false;
+    _profileTaken = false;
     linkOpened.value++;
   }
 
@@ -90,6 +91,20 @@ abstract final class AppConfiguration {
   }
 
   static bool _shareTokenTaken = false;
+
+  /// The public profile the app was opened with (`/app/?user=…`, or a
+  /// profile page `/u/…` on Android, #228), taken only once.
+  static String? takeInitialProfileHandle() {
+    if (_profileTaken) return null;
+    _profileTaken = true;
+    final handle = _query('user') ?? _pathAfter(const ['u']);
+    return handle == null ||
+            !RegExp(r'^[a-zA-Z][a-zA-Z0-9_]{2,19}$').hasMatch(handle)
+        ? null
+        : handle.toLowerCase();
+  }
+
+  static bool _profileTaken = false;
 
   /// The collaboration link the app was opened with (`/app/?collab=…`),
   /// to join once signed in. Taken only once.

@@ -26,6 +26,8 @@ import 'package:rhythmo/features/library/application/track_sort.dart';
 import 'package:rhythmo/features/library/application/local_audio_controller.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/library/presentation/home_view.dart';
+import 'package:rhythmo/features/social/presentation/friends_feed_screen.dart';
+import 'package:rhythmo/features/social/presentation/social_scope.dart';
 import 'package:rhythmo/features/library/presentation/rhythmo_dock.dart';
 import 'package:rhythmo/features/library/presentation/track_metadata_editor.dart';
 import 'package:rhythmo/features/player/application/favorite_tracks.dart';
@@ -978,6 +980,12 @@ class _LibraryScreenState extends State<LibraryScreen>
             onIdentify: widget.identify == null
                 ? null
                 : () => openIdentify(context, widget.identify!, widget.player),
+            onFriends: switch (SocialScope.maybeOf(context)) {
+              final social? => () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                      builder: (_) => FriendsFeedScreen(social: social))),
+              null => null,
+            },
           ),
         // The list's SliverOverlapInjector reads this absorber. Without it
         // the handle kept the library's taller header (with its tabs) and

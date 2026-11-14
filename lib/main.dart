@@ -42,6 +42,9 @@ import 'package:rhythmo/features/player/data/audio_engine.dart';
 import 'package:rhythmo/features/player/data/offline_songs.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
+import 'package:rhythmo/features/playlists/presentation/shared_playlist_screen.dart';
+import 'package:rhythmo/features/social/presentation/social_scope.dart';
+import 'package:rhythmo/features/store/presentation/store_screen.dart';
 import 'package:rhythmo/features/settings/application/cache_controller.dart';
 import 'package:rhythmo/features/upload/application/upload_controller.dart';
 import 'package:rhythmo/features/upload/data/audio_picker.dart';
@@ -265,6 +268,29 @@ class _RhythmoAppState extends State<RhythmoApp> {
   // One cache shared by playback and the Settings screen.
   late final AudioCache _audioCache = widget.audioCache ?? createAudioCache();
 
+  /// Public profiles and following (#228): needs the server, playlists
+  /// to open and a player to play them.
+  late final Social? _social = switch ((_apiClient, _playlists, _player)) {
+    (final api?, final playlists?, final player?) => Social(
+        api: api,
+        token: () => _auth?.token,
+        openPlaylist: (context, shareToken) =>
+            Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => SharedPlaylistScreen(
+              shareToken: shareToken, controller: playlists, player: player),
+        )),
+        openSong: switch (_store) {
+          final store? => (context, entryId) =>
+              Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => StoreScreen(
+                    controller: store, player: player, openSongId: entryId),
+              )),
+          null => null,
+        },
+      ),
+    _ => null,
+  };
+
   late final PlayerController? _player = _tracksApi == null
       ? null
       : (PlayerController(
@@ -439,10 +465,14 @@ class _RhythmoAppState extends State<RhythmoApp> {
               final songs? => OfflineSongsScope(songs: songs, child: page),
               null => page,
             };
+            final withSocial = switch (_social) {
+              final social? => SocialScope(social: social, child: withSongs),
+              null => withSongs,
+            };
             return switch (_playlists) {
               final playlists? =>
-                PlaylistsScope(controller: playlists, child: withSongs),
-              null => withSongs,
+                PlaylistsScope(controller: playlists, child: withSocial),
+              null => withSocial,
             };
           },
           debugShowCheckedModeBanner: false,
