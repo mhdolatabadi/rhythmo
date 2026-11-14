@@ -98,6 +98,7 @@ func (h *AuthHandlers) register(mux *http.ServeMux) {
 		mux.HandleFunc("DELETE /api/v1/me", h.handleDeleteAccount)
 	}
 	h.registerEmailVerification(mux)
+	h.registerAccountCodes(mux)
 	if h.revoker != nil {
 		mux.HandleFunc("POST /api/v1/auth/sessions/revoke", h.handleRevokeSessions)
 	}
@@ -190,6 +191,11 @@ func (h *AuthHandlers) handleRegister(w http.ResponseWriter, r *http.Request) {
 	hash, err := h.passwords.Hash(input.Password)
 	if err != nil {
 		internalError(w, "hash password", err)
+		return
+	}
+	if h.accountCodes() != nil {
+		// The account is created once the emailed code comes back (#219).
+		h.registerWithCode(w, r, email, hash)
 		return
 	}
 	user, err := h.users.Create(r.Context(), email, hash)
