@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:rhythmo/features/library/application/track_sort.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum LibraryTab {
@@ -19,7 +20,8 @@ class AppPreferences {
   const AppPreferences(
       {this.themeMode = ThemeMode.dark,
       this.order = LibraryTab.values,
-      this.hidden = defaultHiddenTabs});
+      this.hidden = defaultHiddenTabs,
+      this.trackSort = TrackSort.recent});
 
   /// «موسیقی من» opens with two tabs, songs and playlists (#445); the
   /// others can be turned on in settings. Liked songs have their own place
@@ -32,6 +34,9 @@ class AppPreferences {
   final ThemeMode themeMode;
   final List<LibraryTab> order;
   final Set<LibraryTab> hidden;
+
+  /// How song lists are ordered, kept across launches (#406).
+  final TrackSort trackSort;
   factory AppPreferences.fromJson(Object? value) {
     if (value is! Map) {
       return const AppPreferences();
@@ -64,13 +69,17 @@ class AppPreferences {
             (mode) => mode.name == value['theme'],
             orElse: () => ThemeMode.dark),
         order: List.unmodifiable(order),
-        hidden: Set.unmodifiable(hidden));
+        hidden: Set.unmodifiable(hidden),
+        trackSort: TrackSort.values.firstWhere(
+            (sort) => sort.name == value['sort'],
+            orElse: () => TrackSort.recent));
   }
   Map<String, Object> toJson() => {
         'v': 3,
         'theme': themeMode.name,
         'tabs': order.map((tab) => tab.name).toList(),
-        'hidden': hidden.map((tab) => tab.name).toList()
+        'hidden': hidden.map((tab) => tab.name).toList(),
+        'sort': trackSort.name,
       };
 }
 
@@ -127,12 +136,14 @@ class AppPreferencesController extends ChangeNotifier {
   Future<void> update(
       {ThemeMode? themeMode,
       List<LibraryTab>? order,
-      Set<LibraryTab>? hidden}) {
+      Set<LibraryTab>? hidden,
+      TrackSort? trackSort}) {
     _revision++;
     final safe = AppPreferences.fromJson(AppPreferences(
             themeMode: themeMode ?? value.themeMode,
             order: order ?? value.order,
-            hidden: hidden ?? value.hidden)
+            hidden: hidden ?? value.hidden,
+            trackSort: trackSort ?? value.trackSort)
         .toJson());
     value = safe;
     notifyListeners();

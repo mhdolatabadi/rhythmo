@@ -68,6 +68,7 @@ type UploadLimits struct {
 type TrackHandlers struct {
 	tracks  TrackStore
 	storage ObjectStore
+	streams StreamPresigner
 	tokens  *auth.Tokens
 	limits  UploadLimits
 	imports ImportCounter
@@ -115,6 +116,12 @@ func (h *TrackHandlers) WithFingerprints(fingerprints TagRewriteNotifier) *Track
 	return h
 }
 
+// WithStreams presigns play links through streams, such as MediaStreams.
+func (h *TrackHandlers) WithStreams(streams StreamPresigner) *TrackHandlers {
+	h.streams = streams
+	return h
+}
+
 func NewTrackHandlers(tracks TrackStore, objects ObjectStore, tokens *auth.Tokens, limits UploadLimits) *TrackHandlers {
 	return &TrackHandlers{tracks: tracks, storage: objects, tokens: tokens, limits: limits}
 }
@@ -156,6 +163,9 @@ type trackResponse struct {
 	// ReplayGain is the loudness the file's tags carry, or null when they
 	// carry none or have not been read yet (#253).
 	ReplayGain *replayGainResponse `json:"replayGain"`
+	// Audio is the stored file's format, or null until it has been read or
+	// when it is not recognised (#383).
+	Audio *audioResponse `json:"audio"`
 	// Published, LikeCount and Liked are filled in the owner's own library
 	// (#284): whether they published the track to the store, how many
 	// listeners like the song, and whether they do. A public playlist fills
@@ -187,6 +197,22 @@ func toReplayGain(l store.Loudness) *replayGainResponse {
 	}
 }
 
+// audioResponse is the format of the file as stored and streamed; a value
+// that is not known is omitted.
+type audioResponse struct {
+	Codec       string `json:"codec"`
+	BitrateKbps *int32 `json:"bitrateKbps,omitempty"`
+	SampleRate  *int32 `json:"sampleRate,omitempty"`
+	BitDepth    *int32 `json:"bitDepth,omitempty"`
+}
+
+func toAudio(a store.AudioInfo) *audioResponse {
+	if a.Codec == nil || *a.Codec == "" {
+		return nil
+	}
+	return &audioResponse{Codec: *a.Codec, BitrateKbps: a.BitrateKbps, SampleRate: a.SampleRate, BitDepth: a.BitDepth}
+}
+
 // embeddedTagsResponse reports the stored file's tags. Status is original,
 // pending, written, failed or unsupported; UnsupportedFields lists the fields
 // this file's format cannot embed, so the app can say so honestly.
@@ -208,7 +234,7 @@ func toTrackResponse(t store.Track) trackResponse {
 			Status: t.TagStatus, Version: t.TagVersion, Error: t.TagError,
 			UnsupportedFields: tags.UnsupportedFields(t.FileName),
 		},
-		ReplayGain: toReplayGain(t.Loudness),
+		ReplayGain: toReplayGain(t.Loudness), Audio: toAudio(t.Audio),
 	}
 }
 
@@ -318,7 +344,11 @@ func (h *TrackHandlers) handleStream(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	url, expiresAt, err := h.storage.PresignGet(r.Context(), track.StorageKey)
+	var streams StreamPresigner = h.storage
+	if h.streams != nil {
+		streams = h.streams
+	}
+	url, expiresAt, err := streams.PresignGet(r.Context(), track.StorageKey)
 	if err != nil {
 		internalError(w, "presign track", err)
 		return
@@ -608,7 +638,10 @@ func (h *TrackHandlers) handleCreateUpload(w http.ResponseWriter, r *http.Reques
 		derived := audio.Title(input.FileName)
 		title = &derived
 	}
-	if tooLong(title) || tooLong(input.Artist) || tooLong(input.Album) {
+	// Single lines only: control characters, such as newlines or escape
+	// codes, would end up in tags, file names and logs (#209 L3).
+	if tooLong(title) || tooLong(input.Artist) || tooLong(input.Album) ||
+		hasControl(&input.FileName) || hasControl(title) || hasControl(input.Artist) || hasControl(input.Album) {
 		writeError(w, http.StatusBadRequest, "invalid_metadata")
 		return
 	}
@@ -754,6 +787,12 @@ func optionalText(value *string) *string {
 
 func tooLong(value *string) bool {
 	return value != nil && utf8.RuneCountInString(strings.TrimSpace(*value)) > maxTextLength
+}
+
+// hasControl reports whether value holds a control character or invalid
+// UTF-8.
+func hasControl(value *string) bool {
+	return value != nil && !validText(value, len(*value))
 }
 
 func validYear(value *int32) bool {

@@ -5,7 +5,7 @@ name: nafir
 
 services:
   api:
-    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/nafir}/api:${NAFIR_IMAGE_TAG:-latest}
+    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/rhythmo}/api:${NAFIR_IMAGE_TAG:-latest}
     build:
       context: ../server
     restart: unless-stopped
@@ -28,6 +28,8 @@ services:
       EMAIL_VERIFY_IP_RATE_REQUESTS: ${EMAIL_VERIFY_IP_RATE_REQUESTS:-100}
       EMAIL_VERIFY_IP_RATE_WINDOW: ${EMAIL_VERIFY_IP_RATE_WINDOW:-15m}
       AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:?set AUTH_TOKEN_SECRET in .env}
+      # How long a login lasts (#398).
+      AUTH_TOKEN_TTL: ${AUTH_TOKEN_TTL:-8760h}
       STORAGE_ENDPOINT: minio:9000
       STORAGE_PUBLIC_URL: https://${NAFIR_DOMAIN}
       STORAGE_BUCKET: nafir-music
@@ -120,7 +122,7 @@ services:
 
   transcriber:
     profiles: [transcription]
-    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/nafir}/transcriber:${NAFIR_IMAGE_TAG:-latest}
+    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/rhythmo}/transcriber:${NAFIR_TRANSCRIBER_TAG:-${NAFIR_IMAGE_TAG:-latest}}
     restart: unless-stopped
     environment:
       TRANSCRIPTION_TOKEN: ${TRANSCRIPTION_TOKEN:-}
@@ -135,11 +137,14 @@ services:
     # No published ports. Only the API uses this service.
 
   web:
-    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/nafir}/web:${NAFIR_IMAGE_TAG:-latest}
+    image: ${NAFIR_IMAGE_REPO:-ghcr.io/mhdolatabadi/rhythmo}/web:${NAFIR_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.web
     restart: unless-stopped
+    # nginx runs without root and still listens on 80 (#209).
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
     networks: [edge]
 
   postgres:
