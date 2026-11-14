@@ -26,6 +26,7 @@
 {{block "head" .}}{{end}}
 {{if .JSONLD}}<script type="application/ld+json">{{.JSONLD}}</script>{{end}}
 {{if .CrumbsLD}}<script type="application/ld+json">{{.CrumbsLD}}</script>{{end}}
+{{block "scripts" .}}{{end}}
 <style>
 @font-face{font-family:Vazirmatn;font-weight:400;font-display:swap;src:url(/fonts/vazirmatn-regular.woff2) format("woff2")}
 @font-face{font-family:Vazirmatn;font-weight:700 900;font-display:swap;src:url(/fonts/vazirmatn-bold.woff2) format("woff2")}
@@ -105,6 +106,27 @@ a.title:hover,.sub a:hover{text-decoration:underline}
 .crumbs a,.crumbs span{display:inline-block;max-width:16em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:var(--space-3) 0;text-decoration:none}
 .crumbs a:hover{color:var(--text);text-decoration:underline}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* The list player (#377): one bar, row buttons, covers; the native controls stay for pages without scripts. */
+.art img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+.art.has-cover{background:var(--strong)}
+[hidden]{display:none!important}
+.icon-button{flex:none;display:inline-grid;place-items:center;width:48px;height:48px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--text);cursor:pointer}
+.icon-button:hover{background:var(--raised)}
+.icon-button .icon{width:20px;height:20px}
+.icon-button.play{background:var(--primary);color:var(--on-primary)}
+.js-player .track{flex-wrap:nowrap}
+.js-player .track .grow{flex-basis:0}
+.track.playing .title{color:var(--primary)}
+.bar{position:fixed;inset-inline:0;bottom:0;z-index:2;background:#121522f2;border-top:1px solid var(--border);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);padding-bottom:env(safe-area-inset-bottom)}
+.bar-inner{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-2);padding-block:var(--space-2)}
+.bar .grow{order:0;flex:1 1 140px}
+.seek{display:flex;align-items:center;gap:var(--space-2);flex:1 1 100%;order:1;font-size:12px;color:var(--muted)}
+.seek input{flex:1;min-width:0;height:32px;accent-color:var(--primary)}
+.time{font-variant-numeric:tabular-nums;min-width:3em;text-align:center}
+@media(min-width:720px){.seek{flex:2 1 280px}}
+body.has-bar{padding-bottom:152px}
+button.button{font-family:inherit}
+.button .icon{width:18px;height:18px}
 @media(max-width:420px){header.site .wrap{gap:var(--space-2)}header.site .button{padding-inline:var(--space-3)}.hero,.prose{padding:var(--space-5)}.brand{font-size:18px}.brand svg{width:32px;height:32px}}
 </style>
 </head>
@@ -123,6 +145,7 @@ a.title:hover,.sub a:hover{text-decoration:underline}
 {{define "notes"}}<svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M212.92,17.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,56V166.08A36,36,0,1,0,88,196V110.25l112-28v51.83A36,36,0,1,0,216,164V24A8,8,0,0,0,212.92,17.69ZM52,216a20,20,0,1,1,20-20A20,20,0,0,1,52,216ZM88,93.75V62.25l112-28v31.5ZM180,184a20,20,0,1,1,20-20A20,20,0,0,1,180,184Z"/></svg>{{end}}
 {{define "pager"}}{{if or .Prev .Next}}<nav class="pager" aria-label="صفحه‌ها">{{with .Prev}}<a class="button" href="{{.}}" rel="prev">صفحه‌ی قبل</a>{{else}}<span></span>{{end}}{{with .Next}}<a class="button" href="{{.}}" rel="next">صفحه‌ی بعد</a>{{end}}</nav>{{end}}{{end}}
 {{define "note"}}<svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M210.3,56.34l-80-24A8,8,0,0,0,120,40V148.26A48,48,0,1,0,136,184V98.75l69.7,20.91A8,8,0,0,0,216,112V64A8,8,0,0,0,210.3,56.34ZM88,216a32,32,0,1,1,32-32A32,32,0,0,1,88,216ZM200,101.25l-64-19.2V50.75L200,70Z"/></svg>{{end}}
+{{define "play"}}<svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,128a15.74,15.74,0,0,1-7.6,13.51L88.32,229.65a16,16,0,0,1-16.2.3A15.86,15.86,0,0,1,64,216.13V39.87a15.86,15.86,0,0,1,8.12-13.82,16,16,0,0,1,16.2.3L232.4,114.49A15.74,15.74,0,0,1,240,128Z"/></svg>{{end}}
 {{define "heart"}}<svg class="icon small" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,102c0,70-103.79,126.66-108.21,129a8,8,0,0,1-7.58,0C119.79,228.66,16,172,16,102A62.07,62.07,0,0,1,78,40c20.65,0,38.73,8.88,50,23.89C139.27,48.88,157.35,40,178,40A62.07,62.07,0,0,1,240,102Z"/></svg>{{end}}
 
 {{define "icon"}}<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">

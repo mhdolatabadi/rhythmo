@@ -75,3 +75,35 @@ class MemoryDevicePlaylistStore implements DevicePlaylistStore {
     _tracks[playlistId] = List.of(tracks);
   }
 }
+
+/// Playlists that live only on this device (#363): made without an account
+/// or a connection, never sent to the server, never shared. Each is kept
+/// whole, its songs included, as one JSON list.
+abstract interface class LocalPlaylistStore {
+  Future<String?> read();
+  Future<void> write(String json);
+}
+
+class SecureLocalPlaylistStore implements LocalPlaylistStore {
+  SecureLocalPlaylistStore([FlutterSecureStorage? storage])
+      : _storage = storage ?? const FlutterSecureStorage();
+
+  final FlutterSecureStorage _storage;
+  static const _key = 'rhythmo.local_playlists';
+
+  @override
+  Future<String?> read() => _storage.read(key: _key);
+
+  @override
+  Future<void> write(String json) => _storage.write(key: _key, value: json);
+}
+
+class MemoryLocalPlaylistStore implements LocalPlaylistStore {
+  String? json;
+
+  @override
+  Future<String?> read() async => json;
+
+  @override
+  Future<void> write(String json) async => this.json = json;
+}

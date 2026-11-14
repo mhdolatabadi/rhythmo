@@ -132,8 +132,8 @@ void main() {
     await handler.skipToNext();
     expect(player.track?.id, 'b');
     expect(handler.mediaItem.value?.title, 'Second');
-    expect(handler.mediaItem.value?.artist, 'روی سرور');
-    expect(handler.mediaItem.value?.displaySubtitle, 'روی سرور');
+    expect(handler.mediaItem.value?.artist, 'ریتمو');
+    expect(handler.mediaItem.value?.displaySubtitle, 'ریتمو');
 
     await handler.skipToPrevious();
     expect(player.track?.id, 'a');
@@ -181,7 +181,8 @@ void main() {
     expect(title(''), untitledTrack);
   });
 
-  test('a track without artist or album shows where it plays from', () async {
+  test('a track without artist or album never shows its storage as artist',
+      () async {
     const local = Track(
         id: 'l',
         title: 'Local',
@@ -192,7 +193,7 @@ void main() {
     await player.playFrom([local], 0);
 
     final item = handler.mediaItem.value!;
-    expect(item.artist, 'روی سرور');
+    expect(item.artist, 'ریتمو');
     expect(item.album, 'ریتمو');
     expect(item.artUri, _artwork, reason: 'the rhythmo logo is the fallback');
   });

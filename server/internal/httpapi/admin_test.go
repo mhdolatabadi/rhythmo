@@ -229,3 +229,89 @@ func TestAdminAccountQuota(t *testing.T) {
 	}
 	expectError(t, api.do(t, "PATCH", path, `{"bytes":1073741824}`, adminToken), http.StatusConflict, "quota_must_increase")
 }
+
+type fakeStorageRequests struct {
+	*fakeAdminStore
+	open     *store.StorageRequest
+	decided  string
+	approved bool
+	granted  int64
+}
+
+func (f *fakeStorageRequests) RequestStorage(_ context.Context, accountID string, bytes int64, reason string) (store.StorageRequest, error) {
+	if f.open != nil {
+		return store.StorageRequest{}, store.ErrStorageRequestOpen
+	}
+	f.open = &store.StorageRequest{ID: "r1", AccountID: accountID, RequestedBytes: bytes, Reason: reason, Status: store.StorageRequestPending, CreatedAt: time.Now()}
+	return *f.open, nil
+}
+
+func (f *fakeStorageRequests) LatestStorageRequest(context.Context, string) (store.StorageRequest, error) {
+	if f.open == nil {
+		return store.StorageRequest{}, store.ErrNotFound
+	}
+	return *f.open, nil
+}
+
+func (f *fakeStorageRequests) PendingStorageRequests(context.Context, int, int64) ([]store.PendingStorageRequest, error) {
+	if f.open == nil || f.open.Status != store.StorageRequestPending {
+		return nil, nil
+	}
+	return []store.PendingStorageRequest{{StorageRequest: *f.open, Email: "member@example.com", QuotaBytes: 1 << 30}}, nil
+}
+
+func (f *fakeStorageRequests) DecideStorageRequest(_ context.Context, id, actor string, approve bool, bytes int64, reason string, _ int64) (store.StorageRequest, error) {
+	if f.open == nil || f.open.ID != id || f.open.Status != store.StorageRequestPending {
+		return store.StorageRequest{}, store.ErrNotPending
+	}
+	f.decided, f.approved, f.granted = actor, approve, bytes
+	f.open.Status = store.StorageRequestRejected
+	if approve {
+		f.open.Status = store.StorageRequestApproved
+	}
+	return *f.open, nil
+}
+
+func TestStorageRequests(t *testing.T) {
+	api := newTestAPI(t)
+	admin, _ := api.users.Create(context.Background(), "admin@example.com", "hash")
+	member, _ := api.users.Create(context.Background(), "member@example.com", "hash")
+	adminToken, _, _ := api.tokens.Issue(admin.ID)
+	memberToken, _, _ := api.tokens.Issue(member.ID)
+	handlers, err := NewAuthHandlers(api.users, auth.Passwords{Cost: bcrypt.MinCost}, api.tokens, AuthRateLimiters{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handlers.WithAdmins([]string{"admin@example.com"})
+	requests := &fakeStorageRequests{fakeAdminStore: &fakeAdminStore{user: member}}
+	api.handler = NewHandler(Config{Auth: handlers, Admin: NewAdminHandlers(handlers, requests).WithQuota(1 << 30)})
+	mine := "/api/v1/me/storage-request"
+	expectError(t, api.do(t, "GET", mine, "", ""), http.StatusUnauthorized, "unauthorized")
+	if result := api.do(t, "GET", mine, "", memberToken); result.Code != http.StatusNoContent {
+		t.Fatalf("no request: %d %s", result.Code, result.Body)
+	}
+	for _, body := range []string{`{"bytes":1073741824}`, `{"bytes":0}`, `{"bytes":1099511627777}`, `{"bytes":5368709120,"reason":"a\u0007b"}`} {
+		expectError(t, api.do(t, "POST", mine, body, memberToken), http.StatusBadRequest, "invalid_storage_request")
+	}
+	result := api.do(t, "POST", mine, `{"bytes":5368709120,"reason":"  آرشیو   کنسرت‌ها "}`, memberToken)
+	if result.Code != http.StatusCreated || requests.open.Reason != "آرشیو کنسرت‌ها" || requests.open.AccountID != member.ID {
+		t.Fatalf("request: %d %s", result.Code, result.Body)
+	}
+	expectError(t, api.do(t, "POST", mine, `{"bytes":5368709120}`, memberToken), http.StatusConflict, "request_open")
+	if result := api.do(t, "GET", mine, "", memberToken); result.Code != http.StatusOK || !strings.Contains(result.Body.String(), `"status":"pending"`) {
+		t.Fatalf("mine: %d %s", result.Code, result.Body)
+	}
+
+	queue := "/api/v1/admin/storage-requests"
+	expectError(t, api.do(t, "GET", queue, "", memberToken), http.StatusForbidden, "admin_required")
+	if result := api.do(t, "GET", queue, "", adminToken); result.Code != http.StatusOK || !strings.Contains(result.Body.String(), `"email":"member@example.com"`) {
+		t.Fatalf("queue: %d %s", result.Code, result.Body)
+	}
+	expectError(t, api.do(t, "PATCH", queue+"/r1", `{"approved":true,"bytes":5368709120}`, memberToken), http.StatusForbidden, "admin_required")
+	expectError(t, api.do(t, "PATCH", queue+"/r1", `{}`, adminToken), http.StatusBadRequest, "invalid_json")
+	expectError(t, api.do(t, "PATCH", queue+"/r1", `{"approved":true}`, adminToken), http.StatusBadRequest, "invalid_storage_request")
+	if result := api.do(t, "PATCH", queue+"/r1", `{"approved":true,"bytes":5368709120}`, adminToken); result.Code != http.StatusOK || requests.decided != admin.ID || !requests.approved || requests.granted != 5368709120 {
+		t.Fatalf("approve: %d %s", result.Code, result.Body)
+	}
+	expectError(t, api.do(t, "PATCH", queue+"/r1", `{"approved":false}`, adminToken), http.StatusConflict, "not_pending")
+}

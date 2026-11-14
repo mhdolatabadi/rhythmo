@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/mhdolatabadi/rhythmo/server/internal/auth"
-	"github.com/mhdolatabadi/rhythmo/server/internal/bot"
 	"github.com/mhdolatabadi/rhythmo/server/internal/fingerprint"
 	"github.com/mhdolatabadi/rhythmo/server/internal/store"
 )
@@ -165,8 +164,8 @@ func (h *IdentifyHandlers) handleIdentify(w http.ResponseWriter, r *http.Request
 		OffsetMS: max(0, result.Score.Offset.Milliseconds()), Track: &track, Source: "library",
 	}
 	if match.Track.OwnerID != userID {
-		// Only the masked address, as shared playlists show it.
-		addedBy := bot.MaskEmail(match.OwnerEmail)
+		// Only the owner's public name, as shared playlists show it.
+		addedBy := publicOwnerName(match.OwnerName)
 		track.AddedBy = &addedBy
 		response.PlaylistID, response.ShareToken = match.Source.PlaylistID, match.Source.ShareToken
 		response.Source = "public"

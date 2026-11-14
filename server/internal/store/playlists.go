@@ -427,7 +427,9 @@ func (p *Playlists) Unshare(ctx context.Context, ownerID, playlistID string) err
 // SharedPlaylist is a playlist as someone with its link sees it.
 type SharedPlaylist struct {
 	Playlist
-	OwnerEmail string
+	// OwnerName is the owner's public display name, "" if they have none.
+	// The owner's email is never loaded for a shared view (#378).
+	OwnerName string
 	// SyncedFrom names the messengers ("bale", "telegram") whose channels
 	// post into this playlist through a bot (#430, #451).
 	SyncedFrom []string
@@ -438,12 +440,12 @@ type SharedPlaylist struct {
 func (p *Playlists) ForShareToken(ctx context.Context, token string) (SharedPlaylist, error) {
 	var shared SharedPlaylist
 	err := p.pool.QueryRow(ctx, `
-		SELECT `+qualifiedPlaylistColumns+`, users.email,
+		SELECT `+qualifiedPlaylistColumns+`, COALESCE(users.display_name, ''),
 			ARRAY(SELECT DISTINCT provider FROM bot_channels WHERE playlist_id = playlists.id ORDER BY provider)
 		FROM playlists JOIN users ON users.id = playlists.owner_id
 		WHERE playlists.share_token = $1
 	`, token).Scan(&shared.ID, &shared.OwnerID, &shared.Name, &shared.Description, &shared.ShareToken,
-		&shared.IsPublic, &shared.PublicReview, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.OwnerEmail,
+		&shared.IsPublic, &shared.PublicReview, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.OwnerName,
 		&shared.SyncedFrom)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SharedPlaylist{}, ErrNotFound
@@ -644,7 +646,7 @@ type PublicPlaylist struct {
 	ShareToken string
 	Name       string
 	OwnerID    string
-	OwnerEmail string
+	OwnerName  string
 	TrackCount int
 	Likes      Likes
 	// SubscriberCount is how many accounts follow the channel (#451).
@@ -657,7 +659,7 @@ type PublicPlaylist struct {
 // Link-only playlists, and ones an admin took out, are never listed.
 func (p *Playlists) Popular(ctx context.Context, userID string, limit int) ([]PublicPlaylist, error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT playlists.share_token, playlists.name, playlists.owner_id::text, users.email,
+		SELECT playlists.share_token, playlists.name, playlists.owner_id::text, COALESCE(users.display_name, ''),
 			(SELECT count(*)::int FROM playlist_tracks pt JOIN tracks ON tracks.id = pt.track_id
 			 WHERE pt.playlist_id = playlists.id AND `+trackBelongs("tracks", "playlists")+`
 			   AND tracks.status = 'ready'),
@@ -682,7 +684,7 @@ func (p *Playlists) Popular(ctx context.Context, userID string, limit int) ([]Pu
 	listed := []PublicPlaylist{}
 	for rows.Next() {
 		var pp PublicPlaylist
-		if err := rows.Scan(&pp.ShareToken, &pp.Name, &pp.OwnerID, &pp.OwnerEmail, &pp.TrackCount,
+		if err := rows.Scan(&pp.ShareToken, &pp.Name, &pp.OwnerID, &pp.OwnerName, &pp.TrackCount,
 			&pp.Likes.Count, &pp.Likes.Liked, &pp.SubscriberCount, &pp.UpdatedAt); err != nil {
 			return nil, err
 		}

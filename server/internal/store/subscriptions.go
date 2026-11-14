@@ -119,7 +119,7 @@ func (p *Playlists) SetMuted(ctx context.Context, userID, token string, muted bo
 type SubscribedPlaylist struct {
 	ShareToken   string
 	Name         string
-	OwnerEmail   string
+	OwnerName    string
 	TrackCount   int
 	Unread       int
 	Muted        bool
@@ -132,7 +132,7 @@ type SubscribedPlaylist struct {
 // stopped being public are left out until they are public again.
 func (p *Playlists) Subscribed(ctx context.Context, userID string) ([]SubscribedPlaylist, error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT playlists.share_token, playlists.name, users.email,
+		SELECT playlists.share_token, playlists.name, COALESCE(users.display_name, ''),
 			(SELECT count(*)::int FROM playlist_tracks pt JOIN tracks ON tracks.id = pt.track_id
 			 WHERE pt.playlist_id = playlists.id AND `+trackBelongs("tracks", "playlists")+`
 			   AND tracks.status = 'ready'),
@@ -152,7 +152,7 @@ func (p *Playlists) Subscribed(ctx context.Context, userID string) ([]Subscribed
 	listed := []SubscribedPlaylist{}
 	for rows.Next() {
 		var sp SubscribedPlaylist
-		if err := rows.Scan(&sp.ShareToken, &sp.Name, &sp.OwnerEmail, &sp.TrackCount, &sp.Unread,
+		if err := rows.Scan(&sp.ShareToken, &sp.Name, &sp.OwnerName, &sp.TrackCount, &sp.Unread,
 			&sp.Muted, &sp.SubscribedAt, &sp.UpdatedAt); err != nil {
 			return nil, err
 		}

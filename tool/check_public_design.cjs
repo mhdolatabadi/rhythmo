@@ -21,7 +21,9 @@ const { chromium } = require('playwright');
         const bounds = await page.evaluate(() => ({
           scroll: document.documentElement.scrollWidth,
           main: document.querySelector('main').getBoundingClientRect().width,
+          // Hidden controls, like «پخش همه» before its script runs, take no space.
           targets: [...document.querySelectorAll('.button, .brand, footer a, input, a.grow')]
+            .filter((node) => !node.closest('[hidden]'))
             .map((node) => node.getBoundingClientRect().height),
         }));
         assert.ok(bounds.scroll <= width, `${file} overflows at ${width}: ${bounds.scroll}`);

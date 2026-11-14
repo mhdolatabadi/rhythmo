@@ -73,7 +73,7 @@ func TestHistoryRecordsOnlyPlayableTracks(t *testing.T) {
 	if len(recent) != 2 || recent[0].Track.ID != bobTrack.ID || recent[1].Track.ID != aliceTrack.ID {
 		t.Fatalf("recent = %+v", recent)
 	}
-	if recent[0].PlaylistID == nil || *recent[0].PlaylistID != together.ID || recent[0].OwnerEmail != "bob@example.com" {
+	if recent[0].PlaylistID == nil || *recent[0].PlaylistID != together.ID || recent[0].OwnerName != "" {
 		t.Fatalf("member track context = %+v", recent[0])
 	}
 	if recent[1].PlaylistID != nil {
