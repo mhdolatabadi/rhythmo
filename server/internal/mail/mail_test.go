@@ -156,3 +156,21 @@ func TestSMTPConfigIsChecked(t *testing.T) {
 		t.Fatalf("a named sender was refused: %v", err)
 	}
 }
+
+func TestAccountEmailsCarryTheirCodeAndNoticeHasNone(t *testing.T) {
+	for _, message := range []Message{
+		SignupCode("a@example.com", "123456", 15),
+		PasswordResetCode("a@example.com", "123456", 15),
+	} {
+		for _, body := range []string{message.Text, message.HTML} {
+			if !strings.Contains(body, "123456") || !strings.Contains(body, "۱۵ دقیقه") {
+				t.Errorf("%q lacks the code or its lifetime", message.Subject)
+			}
+		}
+	}
+	notice := SignupAttempt("a@example.com")
+	if notice.To != "a@example.com" || !strings.Contains(notice.Text, "از قبل حساب دارد") ||
+		!strings.Contains(notice.HTML, `dir="rtl"`) || strings.ContainsAny(notice.Text, "0123456789") {
+		t.Fatalf("notice = %+v", notice)
+	}
+}

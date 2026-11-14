@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:rhythmo/core/api/api_client.dart';
+import 'package:rhythmo/core/offline/offline_outbox.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/library/data/track_metadata.dart';
 import 'package:rhythmo/features/likes/data/likes.dart';
@@ -48,12 +49,19 @@ class LibraryController extends ChangeNotifier with QuietAfterDispose {
     required String? Function() token,
     Schedule? schedule,
     LikesApi? likes,
+    OfflineOutbox? outbox,
   })  : _api = api,
         _token = token,
         _likes = likes,
+        _outbox = outbox,
         _schedule = schedule ?? _timer;
 
   final TracksApi _api;
+
+  /// Keeps metadata edits made offline until the server can take them.
+  final OfflineOutbox? _outbox;
+
+  static const _metadataKind = 'trackMetadata';
 
   /// Publishes single tracks to the store (#284); null hides it.
   final LikesApi? _likes;
@@ -115,6 +123,8 @@ class LibraryController extends ChangeNotifier with QuietAfterDispose {
       final library = await _api.listTracks(token);
       if (generation != _generation) return false;
       _tracks = List.unmodifiable(library.tracks);
+      // Edits made offline are laid over it as soon as they are read.
+      unawaited(_overlayPending(generation));
       _usedBytes = library.usedBytes;
       _limitBytes = library.limitBytes;
       _status = LibraryStatus.loaded;
@@ -179,45 +189,140 @@ class LibraryController extends ChangeNotifier with QuietAfterDispose {
       return trimmed.isEmpty ? null : trimmed;
     }
 
+    final fields = <String, Object?>{
+      'fileName': clean(draft.fileName),
+      'title': draft.title.trim(),
+      'artist': clean(draft.artist),
+      'album': clean(draft.album),
+      'albumArtist': clean(draft.albumArtist),
+      'composer': clean(draft.composer),
+      'genre': clean(draft.genre),
+      'year': draft.year,
+      'trackNumber': draft.trackNumber,
+      'discNumber': draft.discNumber,
+      'comment': clean(draft.comment),
+    };
     _updatingTrackIds.add(trackId);
     notifyListeners();
     try {
-      final updated = await _api.updateTrackMetadata(
-        token,
-        trackId,
-        version: version,
-        fileName: clean(draft.fileName),
-        title: draft.title.trim(),
-        artist: clean(draft.artist),
-        album: clean(draft.album),
-        albumArtist: clean(draft.albumArtist),
-        composer: clean(draft.composer),
-        genre: clean(draft.genre),
-        year: draft.year,
-        trackNumber: draft.trackNumber,
-        discNumber: draft.discNumber,
-        comment: clean(draft.comment),
-      );
+      final updated = await _sendMetadata(token, trackId, version, fields);
       replaceTrack(updated);
       return MetadataSaved(updated);
-    } on ApiException catch (error) {
-      final latest = error.details['track'];
-      if (error.statusCode == 409 && latest is Map<String, dynamic>) {
-        final track = Track.fromJson(latest);
-        replaceTrack(track);
-        return MetadataConflict(track);
+    } catch (error) {
+      final outbox = _outbox;
+      final current = _tracks.where((t) => t.id == trackId).firstOrNull;
+      if (outbox != null && current != null && isUnreachable(error)) {
+        // Offline: the edit shows now and is sent once back online. The
+        // version stays the one the edit started from, so a change made
+        // elsewhere meanwhile wins instead of being overwritten.
+        await outbox.add({
+          'kind': _metadataKind,
+          'key': '$_metadataKind:$trackId',
+          'trackId': trackId,
+          'version': version,
+          'fields': fields,
+        });
+        final edited = _applyMetadata(current, fields);
+        replaceTrack(edited);
+        return MetadataSaved(edited);
       }
-      final field = error.details['field'];
-      if (error.statusCode == 400 && field is String) {
-        return MetadataInvalid(field);
+      if (error is ApiException) {
+        final latest = error.details['track'];
+        if (error.statusCode == 409 && latest is Map<String, dynamic>) {
+          final track = Track.fromJson(latest);
+          replaceTrack(track);
+          return MetadataConflict(track);
+        }
+        final field = error.details['field'];
+        if (error.statusCode == 400 && field is String) {
+          return MetadataInvalid(field);
+        }
       }
-      return const MetadataSaveFailed();
-    } catch (_) {
       return const MetadataSaveFailed();
     } finally {
       _updatingTrackIds.remove(trackId);
       notifyListeners();
     }
+  }
+
+  Future<Track> _sendMetadata(String token, String trackId, int version,
+          Map<String, Object?> fields) =>
+      _api.updateTrackMetadata(
+        token,
+        trackId,
+        version: version,
+        fileName: fields['fileName'] as String?,
+        title: fields['title'] as String,
+        artist: fields['artist'] as String?,
+        album: fields['album'] as String?,
+        albumArtist: fields['albumArtist'] as String?,
+        composer: fields['composer'] as String?,
+        genre: fields['genre'] as String?,
+        year: fields['year'] as int?,
+        trackNumber: fields['trackNumber'] as int?,
+        discNumber: fields['discNumber'] as int?,
+        comment: fields['comment'] as String?,
+      );
+
+  static Track _applyMetadata(Track track, Map<String, Object?> fields) =>
+      track.withMetadata(
+        title: fields['title'] as String? ?? track.title,
+        fileName: fields['fileName'] as String?,
+        artist: fields['artist'] as String?,
+        album: fields['album'] as String?,
+        albumArtist: fields['albumArtist'] as String?,
+        composer: fields['composer'] as String?,
+        genre: fields['genre'] as String?,
+        year: fields['year'] as int?,
+        trackNumber: fields['trackNumber'] as int?,
+        discNumber: fields['discNumber'] as int?,
+        comment: fields['comment'] as String?,
+      );
+
+  Future<void> _overlayPending(int generation) async {
+    if (_outbox == null) return;
+    final tracks = await _withPending(_tracks);
+    if (generation != _generation || identical(tracks, _tracks)) return;
+    _tracks = List.unmodifiable(tracks);
+    notifyListeners();
+  }
+
+  /// [tracks] with the metadata edits made offline that the server has not
+  /// taken yet.
+  Future<List<Track>> _withPending(List<Track> tracks) async {
+    final edits = <String, Map<String, Object?>>{};
+    for (final action in await _outbox?.pending() ?? const []) {
+      if (action['kind'] == _metadataKind &&
+          action['trackId'] is String &&
+          action['fields'] is Map) {
+        edits[action['trackId'] as String] =
+            (action['fields'] as Map).cast<String, Object?>();
+      }
+    }
+    if (edits.isEmpty) return tracks;
+    return [
+      for (final track in tracks)
+        if (edits[track.id] case final fields?)
+          _applyMetadata(track, fields)
+        else
+          track,
+    ];
+  }
+
+  /// Sends a metadata edit kept while offline; throws when it can't be
+  /// sent now, and when the server refuses it (deleted, or changed
+  /// elsewhere), so the outbox drops it and the server's copy stays.
+  /// Returns false for a change that isn't a track edit.
+  Future<bool> sendPending(Map<String, Object?> action) async {
+    if (action['kind'] != _metadataKind) return false;
+    final token = _token(), id = action['trackId'], version = action['version'];
+    final fields = action['fields'];
+    if (token == null || id is! String || version is! int || fields is! Map) {
+      return true;
+    }
+    replaceTrack(await _sendMetadata(
+        token, id, version, fields.cast<String, Object?>()));
+    return true;
   }
 
   /// Whether the server can take a cover chosen for a cloud track.

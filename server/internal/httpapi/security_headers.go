@@ -9,11 +9,12 @@ import (
 // nothing and can't be framed.
 const apiContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
-// pageContentSecurityPolicy fits the server-rendered public pages: no
-// scripts (the JSON-LD block is data, not script), the inline styles the
+// pageContentSecurityPolicy fits the server-rendered public pages: only
+// the site's own list player script (the JSON-LD block is data, not script, and
+// inline scripts stay blocked), the inline styles the
 // templates use, the site's own images and the track previews, which play
 // from presigned storage URLs that may be on another https origin.
-const pageContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; " +
+const pageContentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; " +
 	"media-src 'self' https:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 
 // securityHeaders sets the browser hardening headers on every response, so

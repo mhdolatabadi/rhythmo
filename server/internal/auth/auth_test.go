@@ -108,3 +108,27 @@ func TestCommonPasswordListIsLoaded(t *testing.T) {
 		}
 	}
 }
+
+// A year-long login (#398) still works a day before its year is up and is
+// refused after it.
+func TestYearLongTokenExpiresAfterAYear(t *testing.T) {
+	year := 365 * 24 * time.Hour
+	tokens, err := NewTokens([]byte(strings.Repeat("k", MinSecretBytes)), year)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	tokens.now = func() time.Time { return start }
+	token, expiresAt, err := tokens.Issue("user-1")
+	if err != nil || !expiresAt.Equal(start.Add(year)) {
+		t.Fatalf("issue = %s, %v", expiresAt, err)
+	}
+	tokens.now = func() time.Time { return start.Add(year - 24*time.Hour) }
+	if id, err := tokens.Verify(token); err != nil || id != "user-1" {
+		t.Fatalf("near the end of the year: %q, %v", id, err)
+	}
+	tokens.now = func() time.Time { return start.Add(year + time.Minute) }
+	if _, err := tokens.Verify(token); err == nil {
+		t.Fatal("a token past its year was accepted")
+	}
+}

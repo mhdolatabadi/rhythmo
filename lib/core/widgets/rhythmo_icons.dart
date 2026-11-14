@@ -14,6 +14,9 @@ abstract final class RhythmoIcons {
   static const IconData arrowsClockwise =
       IconData(0xe094, fontFamily: 'Phosphor');
   static const IconData bell = IconData(0xe0ce, fontFamily: 'Phosphor');
+  static const IconData keyboard = IconData(0xe2d8, fontFamily: 'Phosphor');
+  static const IconData speakerLow = IconData(0xe44c, fontFamily: 'Phosphor');
+  static const IconData speakerX = IconData(0xe45c, fontFamily: 'Phosphor');
   static const IconData bellFill = IconData(0xe0ce, fontFamily: 'PhosphorFill');
   static const IconData bellSlash = IconData(0xe0d2, fontFamily: 'Phosphor');
   static const IconData caretDown = IconData(0xe136, fontFamily: 'Phosphor');
@@ -81,6 +84,7 @@ abstract final class RhythmoIcons {
       IconData(0xe40c, fontFamily: 'PhosphorFill');
   static const IconData shuffle = IconData(0xe422, fontFamily: 'Phosphor');
   static const IconData signOut = IconData(0xe42a, fontFamily: 'Phosphor');
+  static const IconData sliders = IconData(0xe432, fontFamily: 'Phosphor');
   static const IconData speakerHigh = IconData(0xe44a, fontFamily: 'Phosphor');
   static const IconData sortAscending =
       IconData(0xe444, fontFamily: 'Phosphor');
