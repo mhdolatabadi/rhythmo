@@ -40,6 +40,7 @@ import 'package:rhythmo/features/player/application/playback_settings.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/data/audio_cache.dart';
 import 'package:rhythmo/features/player/data/audio_engine.dart';
+import 'package:rhythmo/features/player/data/equalizer.dart';
 import 'package:rhythmo/features/player/data/offline_songs.dart';
 import 'package:rhythmo/features/player/presentation/player_shortcuts.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
@@ -286,6 +287,9 @@ class _RhythmoAppState extends State<RhythmoApp> {
           )..load(),
           settingsStore:
               widget.playbackSettingsStore ?? SecurePlaybackSettingsStore(),
+          equalizerStore: widget.audioEngine == null
+              ? SecureEqualizerStore()
+              : MemoryEqualizerStore(),
           // The mini player shows what was playing when the app was closed.
           lastPlaybackStore:
               widget.lastPlaybackStore ?? SecureLastPlaybackStore(),
