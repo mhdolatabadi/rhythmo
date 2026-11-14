@@ -70,6 +70,7 @@ func (h *AdminHandlers) WithQuota(bytes int64) *AdminHandlers { h.defaultQuota =
 
 func (h *AdminHandlers) register(mux *http.ServeMux) {
 	h.registerFeedback(mux)
+	h.registerStorageRequests(mux)
 	h.registerBaleArchive(mux)
 	mux.HandleFunc("GET /api/v1/admin/accounts", h.list)
 	mux.HandleFunc("PATCH /api/v1/admin/accounts/{id}/storage-quota", h.setStorageQuota)
