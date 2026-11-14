@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mhdolatabadi/rhythmo/server/internal/bot"
 	"github.com/mhdolatabadi/rhythmo/server/internal/display"
 	"github.com/mhdolatabadi/rhythmo/server/internal/store"
 )
@@ -138,7 +137,7 @@ func (p *PublicPages) questions() []publicQuestion {
 		{"ریتمو رایگان است؟", "بله. هر حساب " + quotaText(p.quotaBytes) + " فضای ابری برای موسیقی دارد."},
 		{"چه قالب‌هایی را می‌شود آپلود کرد؟", "MP3، M4A، AAC، FLAC، OGG، Opus، WAV و WebM."},
 		{"کیفیت آهنگ‌ها کم می‌شود؟", "نه. ریتمو فایل را همان‌طور که آپلود کرده‌ای نگه می‌دارد و پخش می‌کند."},
-		{"چه کسی فهرست‌های پخش مرا می‌بیند؟", "فقط خودت، مگر اینکه لینکش را بسازی. فهرستی که «عمومی» کنی در صفحه‌ی اول ریتمو هم نشان داده می‌شود و آهنگ‌هایش، بدون نام یا ایمیل تو، در گنجینه ریتمو می‌آیند."},
+		{"چه کسی فهرست‌های پخش مرا می‌بیند؟", "فقط خودت، مگر اینکه لینکش را بسازی. فهرستی که «عمومی» کنی در صفحه‌ی اول ریتمو هم با نام عمومی‌ای که در تنظیمات انتخاب کرده‌ای (یا «کاربر ریتمو») نشان داده می‌شود و آهنگ‌هایش در گنجینه ریتمو می‌آیند. ایمیلت هیچ‌جا نمایش داده نمی‌شود."},
 		{"گنجینه ریتمو چیست؟", "همه‌ی آهنگ‌های فهرست‌های پخش عمومی، هر آهنگ یک بار، که هر کسی بدون ثبت‌نام می‌شنود و با حساب ریتمو به کتابخانه‌اش اضافه می‌کند. کتابخانه‌های خصوصی هیچ‌وقت در گنجینه نمی‌آیند."},
 		{"اپ اندروید هم دارد؟", "بله. ریتمو روی وب بدون نصب کار می‌کند و اپ اندروید هم دارد که موسیقی گوشی را هم نشان می‌دهد و پخش بدون اینترنت دارد."},
 		{"چطور حسابم را حذف کنم؟", "از تنظیمات اپ، «حذف حساب کاربری» را بزن. همه‌ی آهنگ‌ها و فهرست‌های پخشت برای همیشه پاک می‌شوند."},
@@ -322,7 +321,7 @@ func (p *PublicPages) handleHome(w http.ResponseWriter, r *http.Request) {
 	listJSON := make([]map[string]any, 0, len(listed))
 	for i, pl := range listed {
 		items = append(items, publicListItem{
-			ShareToken: pl.ShareToken, Name: pl.Name, Owner: bot.MaskEmail(pl.OwnerEmail),
+			ShareToken: pl.ShareToken, Name: pl.Name, Owner: publicOwnerName(pl.OwnerName),
 			TrackCount: pl.TrackCount, LikeCount: pl.Likes.Count,
 		})
 		listJSON = append(listJSON, map[string]any{
@@ -465,7 +464,7 @@ func (p *PublicPages) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	site := p.origin(r)
 	token := *shared.ShareToken
 	page := publicPlaylist{
-		ShareToken: token, Name: shared.Name, Description: shared.Description, Owner: bot.MaskEmail(shared.OwnerEmail),
+		ShareToken: token, Name: shared.Name, Description: shared.Description, Owner: publicOwnerName(shared.OwnerName),
 		TrackCount: len(shared.Tracks), LikeCount: likes.Count,
 	}
 	inStore := p.storeEntriesFor(r, shared.Tracks)

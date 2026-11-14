@@ -85,7 +85,7 @@ func TestPublicFrontPageListsPublicPlaylists(t *testing.T) {
 		`<link rel="canonical" href="https://rhythmo.example.com/">`,
 		`<meta property="og:title"`,
 		`href="/p/` + token + `"`,
-		`<bdi>a***@example.com</bdi> · ۱ آهنگ`,
+		`<bdi>آلیس</bdi> · ۱ آهنگ`,
 		`href="/app/"`,
 	} {
 		if !strings.Contains(page, want) {
