@@ -12,7 +12,9 @@ import 'package:rhythmo/features/player/application/favorite_tracks.dart';
 import 'package:rhythmo/features/player/application/last_playback.dart';
 import 'package:rhythmo/features/player/application/playback_metrics.dart';
 import 'package:rhythmo/features/player/application/play_queue.dart';
+import 'package:rhythmo/features/player/application/equalizer_controller.dart';
 import 'package:rhythmo/features/player/application/playback_settings.dart';
+import 'package:rhythmo/features/player/data/equalizer.dart';
 import 'package:rhythmo/features/player/data/audio_engine.dart';
 import 'package:rhythmo/features/player/data/loudness.dart';
 
@@ -35,6 +37,9 @@ const sleepFade = Duration(seconds: 5);
 /// How close to the end of a track the next one is fetched and buffered.
 /// Late enough that its short-lived link is still fresh when it starts.
 const preloadLead = Duration(seconds: 30);
+
+/// How loud the music stays while a notification sound plays over it.
+const duckedVolume = 0.3;
 
 /// A play counts as a real listen, for the recently played history, after
 /// this long, or after half of a shorter track.
@@ -59,6 +64,7 @@ class PlayerController extends ChangeNotifier {
     Random? random,
     FavoriteTracks? favorites,
     PlaybackSettingsStore? settingsStore,
+    EqualizerStore? equalizerStore,
     LastPlaybackStore? lastPlaybackStore,
     DateTime Function()? now,
     this.onListened,
@@ -73,7 +79,11 @@ class PlayerController extends ChangeNotifier {
         _settingsStore = settingsStore ?? MemoryPlaybackSettingsStore(),
         _lastPlaybackStore = lastPlaybackStore ?? MemoryLastPlaybackStore(),
         _now = now ?? DateTime.now,
-        favorites = favorites ?? FavoriteTracks() {
+        favorites = favorites ?? FavoriteTracks(),
+        equalizer = engine is EqualizerEngine
+            ? EqualizerController(engine as EqualizerEngine,
+                equalizerStore ?? MemoryEqualizerStore())
+            : null {
     _subscriptions = [
       engine.position.listen((value) {
         _countHeard(value - _position);
@@ -103,6 +113,9 @@ class PlayerController extends ChangeNotifier {
   }
 
   final TracksApi _api;
+
+  /// The equalizer, where the engine has one (#224).
+  final EqualizerController? equalizer;
 
   /// Whether a track is fully kept on this device; it then plays from there
   /// without asking the server for a link, also offline.
@@ -296,6 +309,57 @@ class PlayerController extends ChangeNotifier {
     await _saveSettings();
   }
 
+  /// The listener's volume from 0 to 1, kept between sessions (#381).
+  double get volume => _settings.volume;
+  bool get muted => _settings.muted;
+
+  /// The sleep timer's fade, from 0 to 1; the engine plays at this times
+  /// the listener's volume.
+  double _fadeLevel = 1;
+
+  Future<void> _setFadeLevel(double level) {
+    _fadeLevel = level;
+    return _applyOutputVolume();
+  }
+
+  Future<void> _applyOutputVolume() => _engine.setVolume(_settings.muted
+      ? 0
+      : _fadeLevel * _settings.volume * (_ducked ? duckedVolume : 1));
+
+  bool _ducked = false;
+
+  /// Whether a notification sound has the music turned down for a moment.
+  bool get ducked => _ducked;
+
+  /// Turns the music down while another app plays a short sound, such as a
+  /// notification, and back up after it. The listener's volume is kept.
+  Future<void> setDucked(bool ducked) async {
+    if (_ducked == ducked) return;
+    _ducked = ducked;
+    await _applyOutputVolume();
+  }
+
+  /// Sets the listener's volume; moving it above zero also unmutes.
+  Future<void> setVolume(double volume) async {
+    final value = volume.clamp(0.0, 1.0).toDouble();
+    _volumeChanged = true;
+    _settings = _settings.copyWith(
+        volume: value, muted: value > 0 ? false : _settings.muted);
+    await _applyOutputVolume();
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> toggleMute() async {
+    _volumeChanged = true;
+    _settings = _settings.copyWith(muted: !_settings.muted);
+    await _applyOutputVolume();
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  bool _volumeChanged = false;
+
   /// How long consecutive tracks overlap; zero when off or unsupported.
   Duration get crossfade => _settings.crossfade;
 
@@ -321,9 +385,17 @@ class PlayerController extends ChangeNotifier {
 
   /// Restores saved speed and crossfade; changes made meanwhile win.
   Future<void> loadSettings() async {
+    unawaited(equalizer?.load().catchError((Object error) {
+      debugPrint('Equalizer not restored: $error');
+    }));
     try {
       final saved = await _settingsStore.read();
       if (_settings.speed == 1) await _applySpeed(saved.speed);
+      if (!_volumeChanged && (saved.volume != volume || saved.muted != muted)) {
+        _settings =
+            _settings.copyWith(volume: saved.volume, muted: saved.muted);
+        await _applyOutputVolume();
+      }
       if (_settings.crossfade == Duration.zero) {
         await _applyCrossfade(saved.crossfade);
       }
@@ -477,7 +549,7 @@ class PlayerController extends ChangeNotifier {
     var done = 0;
     _fadeTimer = Timer.periodic(step, (timer) {
       done++;
-      unawaited(_engine.setVolume(max(0, 1 - done / steps)));
+      unawaited(_setFadeLevel(max(0, 1 - done / steps)));
       if (done < steps) return;
       timer.cancel();
       if (!_sleepAtTrackEnd) unawaited(_sleep());
@@ -488,7 +560,7 @@ class PlayerController extends ChangeNotifier {
   Future<void> _sleep() async {
     _clearSleep(restoreVolume: false);
     await pause();
-    await _engine.setVolume(1);
+    await _setFadeLevel(1);
     notifyListeners();
   }
 
@@ -500,7 +572,7 @@ class PlayerController extends ChangeNotifier {
     _fadeTimer = null;
     _sleepAt = null;
     _sleepAtTrackEnd = false;
-    if (fading && restoreVolume) unawaited(_engine.setVolume(1));
+    if (fading && restoreVolume) unawaited(_setFadeLevel(1));
   }
 
   /// The tracks that will play after the current one, in order.
@@ -630,7 +702,7 @@ class PlayerController extends ChangeNotifier {
       // A new track restarts the wait for a track's end at full volume.
       _fadeTimer!.cancel();
       _fadeTimer = null;
-      unawaited(_engine.setVolume(1));
+      unawaited(_setFadeLevel(1));
     }
     metrics.started(track.id, _now());
     _setStatus(PlayerStatus.loading);
@@ -671,7 +743,7 @@ class PlayerController extends ChangeNotifier {
     final sleep = _sleepAtTrackEnd;
     if (sleep) {
       _clearSleep(restoreVolume: false);
-      await _engine.setVolume(1);
+      await _setFadeLevel(1);
     }
     final next = queue.next(auto: true);
     if (next == null) {
@@ -1122,6 +1194,7 @@ class PlayerController extends ChangeNotifier {
     _clearSleep(restoreVolume: false);
     _engine.dispose();
     favorites.dispose();
+    equalizer?.dispose();
     super.dispose();
   }
 }

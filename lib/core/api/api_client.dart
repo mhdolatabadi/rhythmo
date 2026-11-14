@@ -1,9 +1,12 @@
 import 'package:rhythmo/features/bale_archive/bale_archive.dart';
 import 'package:rhythmo/features/for_you/data/for_you.dart';
 import 'package:rhythmo/features/feedback/feedback_api.dart';
+import 'package:rhythmo/features/settings/data/storage_request.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/data/admin_song_reports.dart';
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -43,9 +46,27 @@ class ApiException implements Exception {
 }
 
 abstract interface class AuthApi {
-  Future<AuthSession> register(String email, String password);
+  /// Signs up. Returns the session, or null when the server mailed a code
+  /// to finish with [confirmRegistration] instead; it answers that way
+  /// whether or not the address already has an account.
+  Future<AuthSession?> register(String email, String password);
+
+  /// Creates the account waiting for [email] with the mailed [code].
+  Future<AuthSession> confirmRegistration(String email, String code);
+
+  /// Mails a password reset code if [email] has an account. It succeeds the
+  /// same way when it has none.
+  Future<void> forgotPassword(String email);
+
+  /// Sets a new password with a mailed reset code, ending every other
+  /// session.
+  Future<AuthSession> resetPassword(String email, String code, String password);
   Future<AuthSession> login(String email, String password);
   Future<AuthUser> me(String token);
+
+  /// Sets the public name shown on the account's public playlists; an
+  /// empty name clears it.
+  Future<AuthUser> setDisplayName(String token, String name);
 
   /// Deletes the signed-in account and everything in it for good. The
   /// password is checked again; a wrong one fails with `invalid_password`.
@@ -398,6 +419,7 @@ class ApiClient
         AdminSongReportsApi,
         FeedbackApi,
         AdminQuotaApi,
+        StorageRequestApi,
         BaleArchiveApi,
         BaleTopicCatalogApi,
         ForYouApi {
@@ -548,7 +570,47 @@ class ApiClient
     return AdminAccount.fromJson(body);
   }
 
+  @override
+  Future<StorageRequest?> myStorageRequest(String token) async {
+    final body = await _send('GET', '/api/v1/me/storage-request', token: token);
+    return body.isEmpty ? null : StorageRequest.fromJson(body);
+  }
+
+  @override
+  Future<StorageRequest> requestStorage(String token, int bytes,
+      {String reason = ''}) async {
+    final body = await _send('POST', '/api/v1/me/storage-request',
+        token: token, body: {'bytes': bytes, 'reason': reason});
+    return StorageRequest.fromJson(body);
+  }
+
+  @override
+  Future<List<PendingStorageRequest>> pendingStorageRequests(
+      String token) async {
+    final body =
+        await _send('GET', '/api/v1/admin/storage-requests', token: token);
+    return [
+      for (final item in body['requests'] as List<dynamic>)
+        PendingStorageRequest.fromJson(item as Map<String, dynamic>)
+    ];
+  }
+
+  @override
+  Future<void> decideStorageRequest(String token, String id,
+          {required bool approved, int bytes = 0, String reason = ''}) =>
+      _send(
+          'PATCH', '/api/v1/admin/storage-requests/${Uri.encodeComponent(id)}',
+          token: token,
+          body: {
+            'approved': approved,
+            if (approved) 'bytes': bytes,
+            'reason': reason
+          });
+
   static const _timeout = Duration(seconds: 15);
+
+  /// How long the app waits for lyrics; see [trackLyrics].
+  static const lyricsTimeout = Duration(seconds: 30);
 
   final Uri baseUri;
   final http.Client _httpClient;
@@ -642,9 +704,30 @@ class ApiClient
   }
 
   @override
-  Future<AuthSession> register(String email, String password) async {
+  Future<AuthSession?> register(String email, String password) async {
     final body = await _send('POST', '/api/v1/auth/register',
         body: {'email': email, 'password': password});
+    if (body['token'] == null) return null;
+    return AuthSession.fromJson(body);
+  }
+
+  @override
+  Future<AuthSession> confirmRegistration(String email, String code) async {
+    final body = await _send('POST', '/api/v1/auth/register/confirm',
+        body: {'email': email, 'code': code});
+    return AuthSession.fromJson(body);
+  }
+
+  @override
+  Future<void> forgotPassword(String email) async {
+    await _send('POST', '/api/v1/auth/password/forgot', body: {'email': email});
+  }
+
+  @override
+  Future<AuthSession> resetPassword(
+      String email, String code, String password) async {
+    final body = await _send('POST', '/api/v1/auth/password/reset',
+        body: {'email': email, 'code': code, 'password': password});
     return AuthSession.fromJson(body);
   }
 
@@ -658,6 +741,13 @@ class ApiClient
   @override
   Future<AuthUser> me(String token) async {
     final body = await _send('GET', '/api/v1/me', token: token);
+    return AuthUser.fromJson(body);
+  }
+
+  @override
+  Future<AuthUser> setDisplayName(String token, String name) async {
+    final body = await _send('PATCH', '/api/v1/me',
+        token: token, body: {'displayName': name});
     return AuthUser.fromJson(body);
   }
 
@@ -730,10 +820,17 @@ class ApiClient
 
   @override
   Future<StreamLink> streamLink(String token, String trackId) async {
+    return _streamLink('/api/v1/tracks/$trackId/stream', token);
+  }
+
+  /// Asks [path] for a play link. In a browser the server may answer with
+  /// its own link, relative to the API, that skips a large cover tag at the
+  /// start of an MP3 so playback starts at once (#375).
+  Future<StreamLink> _streamLink(String path, String? token) async {
     final body =
-        await _send('GET', '/api/v1/tracks/$trackId/stream', token: token);
+        await _send('GET', kIsWeb ? '$path?client=web' : path, token: token);
     return StreamLink(
-      Uri.parse(body['url'] as String),
+      baseUri.resolve(body['url'] as String),
       DateTime.parse(body['expiresAt'] as String),
     );
   }
@@ -933,34 +1030,25 @@ class ApiClient
   @override
   Future<StreamLink> sharedStreamLink(
       String? token, String shareToken, String trackId) async {
-    final body = await _send(
-        'GET',
+    return _streamLink(
         '/api/v1/shared-playlists/${Uri.encodeComponent(shareToken)}'
-            '/tracks/${Uri.encodeComponent(trackId)}/stream',
-        token: token);
-    return StreamLink(Uri.parse(body['url'] as String),
-        DateTime.parse(body['expiresAt'] as String));
+        '/tracks/${Uri.encodeComponent(trackId)}/stream',
+        token);
   }
 
   @override
   Future<StreamLink> playlistStreamLink(
       String token, String playlistId, String trackId) async {
-    final body = await _send(
-        'GET',
+    return _streamLink(
         '/api/v1/playlists/${Uri.encodeComponent(playlistId)}'
-            '/tracks/${Uri.encodeComponent(trackId)}/stream',
-        token: token);
-    return StreamLink(Uri.parse(body['url'] as String),
-        DateTime.parse(body['expiresAt'] as String));
+        '/tracks/${Uri.encodeComponent(trackId)}/stream',
+        token);
   }
 
   @override
   Future<StreamLink> storeStreamLink(String? token, String id) async {
-    final body = await _send(
-        'GET', '/api/v1/store/tracks/${Uri.encodeComponent(id)}/stream',
-        token: token);
-    return StreamLink(Uri.parse(body['url'] as String),
-        DateTime.parse(body['expiresAt'] as String));
+    return _streamLink(
+        '/api/v1/store/tracks/${Uri.encodeComponent(id)}/stream', token);
   }
 
   /// [path] with the non-empty [query] parameters.
@@ -1385,7 +1473,10 @@ class ApiClient
     final query = duration == null || duration <= Duration.zero
         ? ''
         : '?durationMs=${duration.inMilliseconds}';
-    final body = await _send('GET', '$path$query', token: token);
+    // The server may try LRCLIB's exact lookup and then its search, which
+    // together can take longer than an ordinary request (#233).
+    final body = await _send('GET', '$path$query',
+        token: token, requestTimeout: lyricsTimeout);
     return TrackLyrics.fromJson(body);
   }
 
@@ -1504,7 +1595,8 @@ class ApiClient
         details: decoded ?? const {},
       );
     }
-    if (!expectBody) return const {};
+    // 204 has no body by definition.
+    if (!expectBody || response.statusCode == 204) return const {};
     if (decoded == null) {
       throw const ApiException('Server returned an invalid response.');
     }

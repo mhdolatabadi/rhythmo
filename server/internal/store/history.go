@@ -16,9 +16,9 @@ type HistoryEntry struct {
 	// PlaylistID is the collaborative playlist someone else's track was
 	// played through; nil for the user's own tracks.
 	PlaylistID *string
-	// OwnerEmail is whoever owns the track.
-	OwnerEmail string
-	PlayedAt   time.Time
+	// OwnerName is the track owner's public display name, "" if none (#378).
+	OwnerName string
+	PlayedAt  time.Time
 }
 
 // History is each user's recently played tracks. Every read and write is
@@ -90,7 +90,7 @@ func (h *History) Record(ctx context.Context, userID, trackID string, playlistID
 // because the user left or was removed from the playlist, are left out.
 func (h *History) Recent(ctx context.Context, userID string, limit int) ([]HistoryEntry, error) {
 	rows, err := h.pool.Query(ctx, `
-		SELECT `+qualifiedTrackColumns("tracks")+`, latest.playlist_id::text, users.email, latest.played_at
+		SELECT `+qualifiedTrackColumns("tracks")+`, latest.playlist_id::text, COALESCE(users.display_name, ''), latest.played_at
 		FROM (
 			SELECT DISTINCT ON (h.track_id) h.id, h.track_id, h.playlist_id, h.played_at
 			FROM play_history h
@@ -111,7 +111,7 @@ func (h *History) Recent(ctx context.Context, userID string, limit int) ([]Histo
 	entries := []HistoryEntry{}
 	for rows.Next() {
 		var e HistoryEntry
-		dest := append(trackDestinations(&e.Track), &e.PlaylistID, &e.OwnerEmail, &e.PlayedAt)
+		dest := append(trackDestinations(&e.Track), &e.PlaylistID, &e.OwnerName, &e.PlayedAt)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}

@@ -20,8 +20,14 @@ class PlaybackSettings {
     this.skipSilence = false,
     this.systemControls = true,
     this.externalPlayback = true,
+    this.volume = 1,
+    this.muted = false,
     this.radio = false,
   });
+
+  /// The listener's own volume from 0 to 1, below the device's.
+  final double volume;
+  final bool muted;
 
   /// «ادامه با پخش مشابه»: when the queue runs out, similar tracks from the
   /// listener's own library keep playing (#226). Off unless turned on.
@@ -69,6 +75,10 @@ class PlaybackSettings {
         (mode) => mode.name == json['loudness'],
         orElse: () => LoudnessMode.track,
       ),
+      volume: json['volume'] is num
+          ? (json['volume'] as num).toDouble().clamp(0.0, 1.0)
+          : 1,
+      muted: json['muted'] == true,
     );
   }
 
@@ -81,6 +91,8 @@ class PlaybackSettings {
         'skipSilence': skipSilence,
         'systemControls': systemControls,
         'externalPlayback': externalPlayback,
+        'volume': volume,
+        'muted': muted,
         'radio': radio,
       };
 
@@ -92,6 +104,8 @@ class PlaybackSettings {
           bool? skipSilence,
           bool? systemControls,
           bool? externalPlayback,
+          double? volume,
+          bool? muted,
           bool? radio,
           LoudnessMode? loudness}) =>
       PlaybackSettings(
@@ -104,6 +118,8 @@ class PlaybackSettings {
         speed: speed ?? this.speed,
         crossfade: crossfade ?? this.crossfade,
         loudness: loudness ?? this.loudness,
+        volume: volume ?? this.volume,
+        muted: muted ?? this.muted,
       );
 }
 

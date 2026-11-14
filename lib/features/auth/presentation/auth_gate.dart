@@ -22,6 +22,7 @@ import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/presentation/popular_playlists_screen.dart';
 import 'package:rhythmo/features/bots/application/bot_link_controller.dart';
+import 'package:rhythmo/features/settings/application/storage_request_controller.dart';
 import 'package:rhythmo/features/link_import/application/link_import_controller.dart';
 import 'package:rhythmo/features/settings/application/cache_controller.dart';
 import 'package:rhythmo/features/upload/application/upload_controller.dart';
@@ -46,6 +47,7 @@ class AuthGate extends StatefulWidget {
     required this.sync,
     required this.cache,
     this.botLinks,
+    this.storageRequests,
     this.linkImports,
     this.identify,
     this.store,
@@ -68,6 +70,7 @@ class AuthGate extends StatefulWidget {
   final LibrarySyncController sync;
   final CacheController cache;
   final BotLinkController? botLinks;
+  final StorageRequestController? storageRequests;
   final LinkImportController? linkImports;
 
   /// «این آهنگ چیه؟»; null hides it.
@@ -181,6 +184,7 @@ class _AuthGateState extends State<AuthGate> {
     widget.recent?.clear();
     widget.forYou?.clear();
     widget.botLinks?.clear();
+    widget.storageRequests?.clear();
     widget.linkImports?.clear();
     widget.uploads.dismiss();
   }
@@ -236,6 +240,8 @@ class _AuthGateState extends State<AuthGate> {
           AuthStatus.signedIn => LibraryScreen(
               key: ValueKey(_linkGeneration),
               email: controller.user!.email,
+              displayName: controller.user!.displayName,
+              onSetDisplayName: controller.setDisplayName,
               onFeedback: widget.adminApi is FeedbackApi
                   ? () => Navigator.of(context).push(MaterialPageRoute<void>(
                       builder: (_) => FeedbackScreen(
@@ -272,6 +278,7 @@ class _AuthGateState extends State<AuthGate> {
                 widget.recent?.clear();
                 widget.forYou?.clear();
                 widget.botLinks?.clear();
+                widget.storageRequests?.clear();
                 widget.sync.clear();
                 widget.linkImports?.clear();
                 widget.uploads.dismiss();
@@ -289,6 +296,7 @@ class _AuthGateState extends State<AuthGate> {
               sync: widget.sync,
               cache: widget.cache,
               botLinks: widget.botLinks,
+              storageRequests: widget.storageRequests,
               linkImports: widget.linkImports,
               identify: widget.identify,
               store: widget.store,

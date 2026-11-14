@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mhdolatabadi/rhythmo/server/internal/bot"
 	"github.com/mhdolatabadi/rhythmo/server/internal/store"
 )
 
@@ -264,7 +263,7 @@ func (h *PlaylistHandlers) handleShared(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	response := sharedPlaylistResponse{
-		Name: shared.Name, Description: shared.Description, Owner: bot.MaskEmail(shared.OwnerEmail), IsOwner: shared.OwnerID == userID,
+		Name: shared.Name, Description: shared.Description, Owner: publicOwnerName(shared.OwnerName), IsOwner: shared.OwnerID == userID,
 		Public: shared.IsPublic, TrackCount: len(shared.Tracks), LikeCount: likes.Count, Liked: likes.Liked,
 		Tracks: make([]trackResponse, 0, len(shared.Tracks)), UpdatedAt: shared.UpdatedAt.UTC(),
 	}
@@ -383,7 +382,7 @@ func (h *PlaylistHandlers) handlePublic(w http.ResponseWriter, r *http.Request) 
 	response := make([]publicPlaylistResponse, 0, len(listed))
 	for _, p := range listed {
 		response = append(response, publicPlaylistResponse{
-			ShareToken: p.ShareToken, Name: p.Name, Owner: bot.MaskEmail(p.OwnerEmail),
+			ShareToken: p.ShareToken, Name: p.Name, Owner: publicOwnerName(p.OwnerName),
 			IsOwner: p.OwnerID == userID, TrackCount: p.TrackCount,
 			LikeCount: p.Likes.Count, Liked: p.Likes.Liked, UpdatedAt: p.UpdatedAt.UTC(),
 		})

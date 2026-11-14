@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/mhdolatabadi/rhythmo/server/internal/audioinfo"
 	"github.com/mhdolatabadi/rhythmo/server/internal/auth"
 	"github.com/mhdolatabadi/rhythmo/server/internal/balearchive"
 	"github.com/mhdolatabadi/rhythmo/server/internal/bot"
@@ -32,7 +33,7 @@ import (
 )
 
 const (
-	defaultTokenTTL     = 30 * 24 * time.Hour
+	defaultTokenTTL     = 365 * 24 * time.Hour
 	defaultStreamURLTTL = time.Hour
 	defaultMaxUpload    = 200 << 20
 	defaultOwnerQuota   = 1 << 30
@@ -43,6 +44,9 @@ const (
 	maxRateLimitKeys    = 10_000
 	loudnessScanEvery   = 2 * time.Minute
 	loudnessScanBatch   = 50
+	// New uploads show their format within this long (#383).
+	audioScanEvery = 20 * time.Second
+	audioScanBatch = 50
 	// sessionCacheTTL bounds how long a revocation takes to reach another API process.
 	sessionCacheTTL      = 30 * time.Second
 	defaultTagWorkers    = 1
@@ -65,13 +69,9 @@ func run() error {
 	if databaseURL == "" {
 		return errors.New("DATABASE_URL is required")
 	}
-	tokenTTL := defaultTokenTTL
-	if raw := os.Getenv("AUTH_TOKEN_TTL"); raw != "" {
-		parsed, err := time.ParseDuration(raw)
-		if err != nil {
-			return fmt.Errorf("AUTH_TOKEN_TTL: %w", err)
-		}
-		tokenTTL = parsed
+	tokenTTL, err := tokenTTLFromEnv(os.Getenv("AUTH_TOKEN_TTL"))
+	if err != nil {
+		return fmt.Errorf("AUTH_TOKEN_TTL: %w", err)
 	}
 	tokens, err := auth.NewTokens([]byte(os.Getenv("AUTH_TOKEN_SECRET")), tokenTTL)
 	if err != nil {
@@ -350,7 +350,9 @@ func run() error {
 	}
 	adminHandlers := httpapi.NewAdminHandlers(authHandlers, users).WithQuota(ownerQuotaBytes).WithPlaylists(playlists).
 		WithPublications(store.NewPublications(pool), objects).WithBaleArchive(baleArchive, archiveRate)
-	storeHandlers := httpapi.NewCatalogHandlers(storeCatalog, tokens, objects,
+	// Stream links for browsers skip large cover tags in MP3s (#375).
+	webMedia := httpapi.NewMediaStreams(objects)
+	storeHandlers := httpapi.NewCatalogHandlers(storeCatalog, tokens, webMedia,
 		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 		WithSave(store.NewFingerprints(pool), httpapi.SavePolicy{
 			Objects: objects, MaxOwnerBytes: ownerQuotaBytes, Enabled: uploadsEnabled,
@@ -370,7 +372,7 @@ func run() error {
 		}
 		ops = httpapi.NewOpsHandlers(opsToken, reporter)
 	}
-	publicPages := httpapi.NewPublicPages(playlists, objects,
+	publicPages := httpapi.NewPublicPages(playlists, webMedia,
 		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 		WithContact(os.Getenv("PRIVACY_CONTACT_EMAIL")).
 		WithQuota(ownerQuotaBytes).
@@ -391,9 +393,9 @@ func run() error {
 				MaxPending: maxPending, Enabled: uploadsEnabled,
 				ReservationUserRate: reservationUserRate, ReservationIPRate: reservationIPRate,
 				CompletionUserRate: completionUserRate, CompletionIPRate: completionIPRate,
-			}).WithImports(bots).WithTagRewrites(retags).WithEmailGate(emailGate).WithFingerprints(readyTracks).
+			}).WithStreams(webMedia).WithImports(bots).WithTagRewrites(retags).WithEmailGate(emailGate).WithFingerprints(readyTracks).
 				WithLikes(trackLikes),
-			Playlists: httpapi.NewPlaylistHandlers(playlists, tokens).WithSharing(playlists, objects, httpapi.SavePolicy{
+			Playlists: httpapi.NewPlaylistHandlers(playlists, tokens).WithSharing(playlists, webMedia, httpapi.SavePolicy{
 				Objects: objects, MaxOwnerBytes: ownerQuotaBytes, Enabled: uploadsEnabled,
 			}).WithAnonymous(httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
 				WithEmailGate(emailGate).WithPublishGate(publishGate).WithSubscriptions(playlists, notifications),
@@ -411,6 +413,7 @@ func run() error {
 			Store:    storeHandlers,
 			Likes:    httpapi.NewLikeHandlers(trackLikes, tracks, tokens, likeRate).WithPublishGate(publishGate),
 			Ops:      ops,
+			Media:    webMedia,
 			Webhooks: webhooks,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
@@ -429,6 +432,7 @@ func run() error {
 	go cleanPendingUploads(ctx, tracks, objects, pendingTTL, cleanupEvery, cleanupBatch)
 	// Reads ReplayGain from new uploads and, once, from every older track.
 	go loudness.NewScanner(tracks, objects, loudnessScanEvery, loudnessScanBatch).Run(ctx)
+	go audioinfo.NewScanner(tracks, objects, audioScanEvery, audioScanBatch).Run(ctx)
 	go purgeDeletedAccounts(ctx, users, objects, cleanupEvery, cleanupBatch)
 	// Groups every song in a public playlist into the store's catalog.
 	go catalog.NewIndexer(storeCatalog, catalog.Config{}).Run(ctx)
@@ -774,4 +778,22 @@ func purgeAccountsOnce(ctx context.Context, accounts accountPurgeQueue, objects 
 			slog.Error("deleted account purge not recorded", "account", deletion.UserID, "error", err)
 		}
 	}
+}
+
+// tokenTTLFromEnv is how long a login lasts: AUTH_TOKEN_TTL when set, or a
+// year, so people are rarely asked to sign in again (#398). Signing out
+// everywhere, a password change and account deletion still end a session
+// early.
+func tokenTTLFromEnv(raw string) (time.Duration, error) {
+	if raw = strings.TrimSpace(raw); raw == "" {
+		return defaultTokenTTL, nil
+	}
+	ttl, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, err
+	}
+	if ttl <= 0 {
+		return 0, errors.New("must be positive")
+	}
+	return ttl, nil
 }
