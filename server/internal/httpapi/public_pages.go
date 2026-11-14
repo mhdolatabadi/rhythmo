@@ -14,12 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mhdolatabadi/rhythmo/server/internal/bot"
 	"github.com/mhdolatabadi/rhythmo/server/internal/display"
 	"github.com/mhdolatabadi/rhythmo/server/internal/store"
 )
 
-//go:embed public/*.html public/rhythmo.png public/social.png public/fonts/*.woff2
+//go:embed public/*.html public/player.js public/rhythmo.png public/social.png public/fonts/*.woff2
 var publicFiles embed.FS
 
 var publicTemplates = map[string]*template.Template{
@@ -138,7 +137,7 @@ func (p *PublicPages) questions() []publicQuestion {
 		{"ریتمو رایگان است؟", "بله. هر حساب " + quotaText(p.quotaBytes) + " فضای ابری برای موسیقی دارد."},
 		{"چه قالب‌هایی را می‌شود آپلود کرد؟", "MP3، M4A، AAC، FLAC، OGG، Opus، WAV و WebM."},
 		{"کیفیت آهنگ‌ها کم می‌شود؟", "نه. ریتمو فایل را همان‌طور که آپلود کرده‌ای نگه می‌دارد و پخش می‌کند."},
-		{"چه کسی فهرست‌های پخش مرا می‌بیند؟", "فقط خودت، مگر اینکه لینکش را بسازی. فهرستی که «عمومی» کنی در صفحه‌ی اول ریتمو هم نشان داده می‌شود و آهنگ‌هایش، بدون نام یا ایمیل تو، در گنجینه ریتمو می‌آیند."},
+		{"چه کسی فهرست‌های پخش مرا می‌بیند؟", "فقط خودت، مگر اینکه لینکش را بسازی. فهرستی که «عمومی» کنی در صفحه‌ی اول ریتمو هم با نام عمومی‌ای که در تنظیمات انتخاب کرده‌ای (یا «کاربر ریتمو») نشان داده می‌شود و آهنگ‌هایش در گنجینه ریتمو می‌آیند. ایمیلت هیچ‌جا نمایش داده نمی‌شود."},
 		{"گنجینه ریتمو چیست؟", "همه‌ی آهنگ‌های فهرست‌های پخش عمومی، هر آهنگ یک بار، که هر کسی بدون ثبت‌نام می‌شنود و با حساب ریتمو به کتابخانه‌اش اضافه می‌کند. کتابخانه‌های خصوصی هیچ‌وقت در گنجینه نمی‌آیند."},
 		{"اپ اندروید هم دارد؟", "بله. ریتمو روی وب بدون نصب کار می‌کند و اپ اندروید هم دارد که موسیقی گوشی را هم نشان می‌دهد و پخش بدون اینترنت دارد."},
 		{"چطور حسابم را حذف کنم؟", "از تنظیمات اپ، «حذف حساب کاربری» را بزن. همه‌ی آهنگ‌ها و فهرست‌های پخشت برای همیشه پاک می‌شوند."},
@@ -162,6 +161,7 @@ func (p *PublicPages) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /nafir.png", p.handleIcon)
 	mux.HandleFunc("GET /social.png", p.handleSocialImage)
 	mux.HandleFunc("GET /fonts/{name}", p.handleFont)
+	mux.HandleFunc("GET /player.js", p.handlePlayerScript)
 	mux.HandleFunc("GET /privacy", p.handlePrivacy)
 	mux.HandleFunc("GET /delete-account", p.handleDeleteAccount)
 	p.registerStore(mux)
@@ -219,6 +219,8 @@ type publicTrack struct {
 	Title  string
 	Artist string
 	Stream string
+	// Art is the song's cover, which the list player shows when it has one.
+	Art string
 	// Link and ArtistLink are the song's and its artist's store pages,
 	// when the song is in the store.
 	Link       string
@@ -322,7 +324,7 @@ func (p *PublicPages) handleHome(w http.ResponseWriter, r *http.Request) {
 	listJSON := make([]map[string]any, 0, len(listed))
 	for i, pl := range listed {
 		items = append(items, publicListItem{
-			ShareToken: pl.ShareToken, Name: pl.Name, Owner: bot.MaskEmail(pl.OwnerEmail),
+			ShareToken: pl.ShareToken, Name: pl.Name, Owner: publicOwnerName(pl.OwnerName),
 			TrackCount: pl.TrackCount, LikeCount: pl.Likes.Count,
 		})
 		listJSON = append(listJSON, map[string]any{
@@ -465,7 +467,7 @@ func (p *PublicPages) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	site := p.origin(r)
 	token := *shared.ShareToken
 	page := publicPlaylist{
-		ShareToken: token, Name: shared.Name, Description: shared.Description, Owner: bot.MaskEmail(shared.OwnerEmail),
+		ShareToken: token, Name: shared.Name, Description: shared.Description, Owner: publicOwnerName(shared.OwnerName),
 		TrackCount: len(shared.Tracks), LikeCount: likes.Count,
 	}
 	inStore := p.storeEntriesFor(r, shared.Tracks)
@@ -475,7 +477,8 @@ func (p *PublicPages) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 		if t.Artist != nil {
 			artist = strings.TrimSpace(*t.Artist)
 		}
-		track := publicTrack{Title: t.Title, Artist: artist, Stream: "/p/" + token + "/t/" + t.ID}
+		track := publicTrack{Title: t.Title, Artist: artist, Stream: "/p/" + token + "/t/" + t.ID,
+			Art: "/api/v1/shared-playlists/" + token + "/tracks/" + t.ID + "/artwork"}
 		recording := map[string]any{"@type": "MusicRecording", "name": t.Title}
 		if entry, ok := inStore[t.ID]; ok {
 			track.Link = storeTrackLink(entry)
@@ -683,4 +686,11 @@ func (p *PublicPages) handleFont(w http.ResponseWriter, r *http.Request) {
 func (p *PublicPages) handleIcon(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeFileFS(w, r, publicFiles, "public/rhythmo.png")
+}
+
+// handlePlayerScript serves the list player the public song lists load.
+func (p *PublicPages) handlePlayerScript(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	http.ServeFileFS(w, r, publicFiles, "public/player.js")
 }

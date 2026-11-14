@@ -12,7 +12,9 @@ import 'package:rhythmo/features/player/application/favorite_tracks.dart';
 import 'package:rhythmo/features/player/application/last_playback.dart';
 import 'package:rhythmo/features/player/application/playback_metrics.dart';
 import 'package:rhythmo/features/player/application/play_queue.dart';
+import 'package:rhythmo/features/player/application/equalizer_controller.dart';
 import 'package:rhythmo/features/player/application/playback_settings.dart';
+import 'package:rhythmo/features/player/data/equalizer.dart';
 import 'package:rhythmo/features/player/data/audio_engine.dart';
 import 'package:rhythmo/features/player/data/loudness.dart';
 
@@ -35,6 +37,9 @@ const sleepFade = Duration(seconds: 5);
 /// How close to the end of a track the next one is fetched and buffered.
 /// Late enough that its short-lived link is still fresh when it starts.
 const preloadLead = Duration(seconds: 30);
+
+/// How loud the music stays while a notification sound plays over it.
+const duckedVolume = 0.3;
 
 /// A play counts as a real listen, for the recently played history, after
 /// this long, or after half of a shorter track.
@@ -59,6 +64,7 @@ class PlayerController extends ChangeNotifier {
     Random? random,
     FavoriteTracks? favorites,
     PlaybackSettingsStore? settingsStore,
+    EqualizerStore? equalizerStore,
     LastPlaybackStore? lastPlaybackStore,
     DateTime Function()? now,
     this.onListened,
@@ -73,7 +79,11 @@ class PlayerController extends ChangeNotifier {
         _settingsStore = settingsStore ?? MemoryPlaybackSettingsStore(),
         _lastPlaybackStore = lastPlaybackStore ?? MemoryLastPlaybackStore(),
         _now = now ?? DateTime.now,
-        favorites = favorites ?? FavoriteTracks() {
+        favorites = favorites ?? FavoriteTracks(),
+        equalizer = engine is EqualizerEngine
+            ? EqualizerController(engine as EqualizerEngine,
+                equalizerStore ?? MemoryEqualizerStore())
+            : null {
     _subscriptions = [
       engine.position.listen((value) {
         _countHeard(value - _position);
@@ -103,6 +113,9 @@ class PlayerController extends ChangeNotifier {
   }
 
   final TracksApi _api;
+
+  /// The equalizer, where the engine has one (#224).
+  final EqualizerController? equalizer;
 
   /// Whether a track is fully kept on this device; it then plays from there
   /// without asking the server for a link, also offline.
@@ -240,8 +253,22 @@ class PlayerController extends ChangeNotifier {
     return _applyOutputVolume();
   }
 
-  Future<void> _applyOutputVolume() =>
-      _engine.setVolume(_settings.muted ? 0 : _fadeLevel * _settings.volume);
+  Future<void> _applyOutputVolume() => _engine.setVolume(_settings.muted
+      ? 0
+      : _fadeLevel * _settings.volume * (_ducked ? duckedVolume : 1));
+
+  bool _ducked = false;
+
+  /// Whether a notification sound has the music turned down for a moment.
+  bool get ducked => _ducked;
+
+  /// Turns the music down while another app plays a short sound, such as a
+  /// notification, and back up after it. The listener's volume is kept.
+  Future<void> setDucked(bool ducked) async {
+    if (_ducked == ducked) return;
+    _ducked = ducked;
+    await _applyOutputVolume();
+  }
 
   /// Sets the listener's volume; moving it above zero also unmutes.
   Future<void> setVolume(double volume) async {
@@ -289,6 +316,9 @@ class PlayerController extends ChangeNotifier {
 
   /// Restores saved speed and crossfade; changes made meanwhile win.
   Future<void> loadSettings() async {
+    unawaited(equalizer?.load().catchError((Object error) {
+      debugPrint('Equalizer not restored: $error');
+    }));
     try {
       final saved = await _settingsStore.read();
       if (_settings.speed == 1) await _applySpeed(saved.speed);
@@ -1092,6 +1122,7 @@ class PlayerController extends ChangeNotifier {
     _clearSleep(restoreVolume: false);
     _engine.dispose();
     favorites.dispose();
+    equalizer?.dispose();
     super.dispose();
   }
 }

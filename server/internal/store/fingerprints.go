@@ -121,10 +121,11 @@ type MatchSource struct {
 
 // Matchable is a fingerprinted track the user may play.
 type Matchable struct {
-	Track      Track
-	OwnerEmail string
-	Source     MatchSource
-	Points     []byte
+	Track Track
+	// OwnerName is the owner's public display name, "" if none (#378).
+	OwnerName string
+	Source    MatchSource
+	Points    []byte
 }
 
 // EachMatchable calls fn for every fingerprinted ready track userID may
@@ -135,7 +136,7 @@ type Matchable struct {
 // stops the walk and is returned.
 func (f *Fingerprints) EachMatchable(ctx context.Context, userID string, fn func(Matchable) error) error {
 	rows, err := f.pool.Query(ctx, `
-		SELECT `+qualifiedTrackColumns("tracks")+`, users.email, via.playlist_id, via.share_token, fp.points
+		SELECT `+qualifiedTrackColumns("tracks")+`, COALESCE(users.display_name, ''), via.playlist_id, via.share_token, fp.points
 		FROM track_fingerprints fp
 		JOIN tracks ON tracks.id = fp.track_id
 		JOIN users ON users.id = tracks.owner_id
@@ -157,7 +158,7 @@ func (f *Fingerprints) EachMatchable(ctx context.Context, userID string, fn func
 	defer rows.Close()
 	for rows.Next() {
 		var m Matchable
-		dest := append(trackDestinations(&m.Track), &m.OwnerEmail, &m.Source.PlaylistID, &m.Source.ShareToken, &m.Points)
+		dest := append(trackDestinations(&m.Track), &m.OwnerName, &m.Source.PlaylistID, &m.Source.ShareToken, &m.Points)
 		if err := rows.Scan(dest...); err != nil {
 			return err
 		}

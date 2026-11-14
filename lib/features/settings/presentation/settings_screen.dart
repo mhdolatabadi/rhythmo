@@ -19,8 +19,11 @@ import 'package:rhythmo/features/settings/presentation/playback_settings_section
 import 'package:rhythmo/features/settings/presentation/queue_settings_section.dart';
 import 'package:rhythmo/features/settings/application/cache_controller.dart';
 import 'package:rhythmo/features/settings/presentation/delete_account_screen.dart';
+import 'package:rhythmo/features/settings/presentation/display_name_tile.dart';
 import 'package:rhythmo/features/settings/presentation/settings_group.dart';
 import 'package:rhythmo/features/settings/presentation/storage_usage_card.dart';
+import 'package:rhythmo/features/settings/application/storage_request_controller.dart';
+import 'package:rhythmo/features/settings/presentation/storage_request_section.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -28,10 +31,13 @@ class SettingsScreen extends StatefulWidget {
     this.onFeedback,
     required this.cache,
     this.botLinks,
+    this.storageRequests,
     this.library,
     this.player,
     this.onManagePlaylists,
     this.email,
+    this.displayName = '',
+    this.onSetDisplayName,
     this.verified = false,
     this.onAdmin,
     this.onLogout,
@@ -44,6 +50,12 @@ class SettingsScreen extends StatefulWidget {
   /// The signed-in account; null hides the account section.
   final VoidCallback? onFeedback;
   final String? email;
+
+  /// The public name shown on public playlists instead of the email.
+  final String displayName;
+
+  /// Saves a new public name; null hides the option.
+  final Future<void> Function(String name)? onSetDisplayName;
   final bool verified;
 
   /// Opens account management for admins; null hides it.
@@ -75,6 +87,9 @@ class SettingsScreen extends StatefulWidget {
 
   /// Null when the app has no API to ask about bots.
   final BotLinkController? botLinks;
+
+  /// Asking for more cloud storage; null hides it.
+  final StorageRequestController? storageRequests;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -175,6 +190,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ? 'ورود با ایمیل · حساب تأییدشده'
                         : 'ورود با ایمیل'),
                   ),
+                if (widget.onSetDisplayName case final save?)
+                  DisplayNameTile(name: widget.displayName, onSave: save),
                 if (widget.onManagePlaylists case final manage?)
                   ListTile(
                     leading: const Icon(RhythmoIcons.playlist),
@@ -198,6 +215,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       limitBytes: library.limitBytes,
                     ),
                   ),
+                ),
+              if ((widget.library, widget.storageRequests)
+                  case (final library?, final requests?))
+                ListenableBuilder(
+                  listenable: library,
+                  builder: (context, _) => library.limitBytes > 0
+                      ? StorageRequestSection(
+                          controller: requests,
+                          limitBytes: library.limitBytes,
+                        )
+                      : const SizedBox.shrink(),
                 ),
               if (widget.player case final player?)
                 PlaybackSettingsSection(player: player),
