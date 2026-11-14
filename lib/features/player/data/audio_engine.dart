@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/player/data/audio_cache.dart';
 import 'package:rhythmo/features/player/data/crossfade.dart';
+import 'package:rhythmo/features/player/data/equalizer.dart';
+import 'package:rhythmo/features/player/data/web_equalizer.dart';
 import 'package:rhythmo/features/player/data/volume_ramp.dart';
 
 enum EngineState { idle, loading, buffering, ready, completed }
@@ -87,9 +90,25 @@ abstract interface class SilenceSkippingEngine {
 /// One just_audio player and the tracks queued in it, by id.
 class _Deck {
   // Calls and other apps' audio are handled by `AudioInterruptions`.
-  _Deck() : player = AudioPlayer(handleInterruptions: false);
+  _Deck() : this._(_androidEqualizer());
+
+  _Deck._(this.equalizer)
+      : player = AudioPlayer(
+          handleInterruptions: false,
+          audioPipeline: equalizer == null
+              ? null
+              : AudioPipeline(androidAudioEffects: [equalizer]),
+        );
+
+  static AndroidEqualizer? _androidEqualizer() =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? AndroidEqualizer()
+          : null;
 
   final AudioPlayer player;
+
+  /// The platform's own equalizer on Android (#224); null elsewhere.
+  final AndroidEqualizer? equalizer;
   ConcatenatingAudioSource? playlist;
   final ids = <String>[];
 
@@ -112,7 +131,8 @@ class _Deck {
 /// throttled in background tabs and on a locked phone, and a second media
 /// element may not start there without a fresh tap. Fades would stutter or
 /// the next track would not start, so crossfade is not offered on the web.
-class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
+class JustAudioEngine
+    implements AudioEngine, SilenceSkippingEngine, EqualizerEngine {
   JustAudioEngine({AudioCache? cache, bool? supportsCrossfade})
       : _cache = cache ?? createAudioCache(),
         supportsCrossfade = supportsCrossfade ?? !kIsWeb {
@@ -149,9 +169,62 @@ class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
   double _volumeFor(Track? track) =>
       _volume *
       _transportGain *
+      _equalizerHeadroom *
       (track == null ? 1 : _gainFor(track).clamp(0.0, 1.0));
 
   bool _skipSilence = false;
+
+  EqualizerSettings _equalizer = const EqualizerSettings();
+
+  /// Boosted bands would clip: the output is turned down by the highest
+  /// boost instead (#224).
+  double _equalizerHeadroom = 1;
+
+  @override
+  bool get supportsEqualizer =>
+      (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ||
+      (kIsWeb && webEqualizerAvailable);
+
+  @override
+  Future<void> setEqualizer(EqualizerSettings settings) async {
+    if (!supportsEqualizer) return;
+    _equalizer = settings;
+    _equalizerHeadroom = math.pow(10, -settings.headroomDb / 20).toDouble();
+    if (_fade == null) {
+      unawaited(_active.player.setVolume(_deckVolume(_active)));
+    }
+    if (kIsWeb) {
+      applyWebEqualizer(settings);
+      return;
+    }
+    for (final deck in [_active, if (_standby case final standby?) standby]) {
+      unawaited(_applyEqualizer(deck));
+    }
+  }
+
+  /// Sets [deck]'s Android equalizer to the curve at its own bands. Its
+  /// bands are only known once its player has loaded something.
+  Future<void> _applyEqualizer(_Deck deck) async {
+    final equalizer = deck.equalizer;
+    if (equalizer == null) return;
+    final settings = _equalizer;
+    try {
+      if (!settings.active) {
+        await equalizer.setEnabled(false);
+        return;
+      }
+      final parameters = await equalizer.parameters;
+      if (!identical(settings, _equalizer)) return;
+      for (final band in parameters.bands) {
+        await band.setGain(settings
+            .gainAt(band.centerFrequency)
+            .clamp(parameters.minDecibels, parameters.maxDecibels));
+      }
+      await equalizer.setEnabled(true);
+    } catch (error) {
+      debugPrint('Equalizer unavailable: $error');
+    }
+  }
 
   @override
   bool get supportsSilenceSkipping =>
@@ -196,6 +269,12 @@ class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
   // Unlike preload generation, this is invalidated only by load/stop/dispose.
   // A slow cache lookup must never replace a newer selection or undo stop.
   int _loadOperation = 0;
+
+  _Deck _newStandby() {
+    final deck = _listen(_Deck());
+    if (_equalizer.active) unawaited(_applyEqualizer(deck));
+    return deck;
+  }
 
   _Deck _listen(_Deck deck) {
     final player = deck.player;
@@ -312,7 +391,7 @@ class JustAudioEngine implements AudioEngine, SilenceSkippingEngine {
     if (generation != _generation) return;
     _nextId = track.id;
     if (supportsCrossfade && _crossfade > Duration.zero) {
-      final deck = _standby ??= _listen(_Deck());
+      final deck = _standby ??= _newStandby();
       final playlist = ConcatenatingAudioSource(children: [source]);
       deck
         ..playlist = playlist

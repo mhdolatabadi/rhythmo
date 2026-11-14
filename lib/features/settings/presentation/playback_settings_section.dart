@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/features/player/application/playback_settings.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
+import 'package:rhythmo/features/player/presentation/equalizer_sheet.dart';
 import 'package:rhythmo/features/player/presentation/playback_controls.dart';
 import 'package:rhythmo/features/settings/presentation/crossfade_setting.dart';
 import 'package:rhythmo/features/settings/presentation/loudness_setting.dart';
@@ -84,6 +85,20 @@ class PlaybackSettingsSection extends StatelessWidget {
                           if (player.supportsCrossfade)
                             CrossfadeSetting(player: player),
                           LoudnessSetting(player: player),
+                          if (player.equalizer case final equalizer?
+                              when equalizer.supported)
+                            ListenableBuilder(
+                              listenable: equalizer,
+                              builder: (context, _) => ListTile(
+                                leading: const Icon(RhythmoIcons.sliders),
+                                title: const Text('اکولایزر'),
+                                trailing: Text(equalizer.settings.enabled
+                                    ? equalizer.settings.preset.label
+                                    : 'خاموش'),
+                                onTap: () =>
+                                    showEqualizerSheet(context, equalizer),
+                              ),
+                            ),
                           if (player.supportsSilenceSkipping)
                             SwitchListTile(
                               title: const Text('رد کردن سکوت'),

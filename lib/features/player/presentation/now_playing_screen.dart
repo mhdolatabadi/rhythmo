@@ -15,6 +15,7 @@ import 'package:rhythmo/features/player/application/favorite_tracks.dart';
 import 'package:rhythmo/features/lyrics/presentation/lyrics_sheet.dart';
 import 'package:rhythmo/features/player/application/play_queue.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
+import 'package:rhythmo/features/player/presentation/equalizer_sheet.dart';
 import 'package:rhythmo/features/player/presentation/playback_controls.dart';
 
 /// The widest the now-playing column grows on desktop.
@@ -191,6 +192,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         track: track,
         canAddToPlaylist: playlists?.signedIn ?? false,
         canCopyLink: storeLink != null,
+        canEqualize: _player.equalizer?.supported ?? false,
       ),
     );
     if (!mounted || choice == null) return;
@@ -202,6 +204,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen>
         if (!mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('لینک آهنگ کپی شد.')));
+      case _TrackChoice.equalizer:
+        await showEqualizerSheet(context, _player.equalizer!);
       case _TrackChoice.details:
         _openDetails(track);
     }
@@ -959,7 +963,7 @@ class QueueSheet extends StatelessWidget {
   }
 }
 
-enum _TrackChoice { addToPlaylist, copyLink, details }
+enum _TrackChoice { addToPlaylist, copyLink, equalizer, details }
 
 /// The ⋮ sheet of the full-screen player: the song on top, then a short
 /// list of what can be done with it.
@@ -968,11 +972,13 @@ class _TrackActionsSheet extends StatelessWidget {
     required this.track,
     required this.canAddToPlaylist,
     required this.canCopyLink,
+    this.canEqualize = false,
   });
 
   final Track track;
   final bool canAddToPlaylist;
   final bool canCopyLink;
+  final bool canEqualize;
 
   @override
   Widget build(BuildContext context) {
@@ -1014,6 +1020,8 @@ class _TrackActionsSheet extends StatelessWidget {
                 'افزودن به فهرست پخش'),
           if (canCopyLink)
             option(_TrackChoice.copyLink, RhythmoIcons.link, 'کپی لینک آهنگ'),
+          if (canEqualize)
+            option(_TrackChoice.equalizer, RhythmoIcons.sliders, 'اکولایزر'),
           option(_TrackChoice.details, RhythmoIcons.musicNotes, 'جزئیات آهنگ'),
         ],
       ),
