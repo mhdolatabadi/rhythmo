@@ -40,6 +40,7 @@ import 'package:rhythmo/features/player/application/player_controller.dart';
 import 'package:rhythmo/features/player/data/audio_cache.dart';
 import 'package:rhythmo/features/player/data/audio_engine.dart';
 import 'package:rhythmo/features/player/data/offline_songs.dart';
+import 'package:rhythmo/features/player/presentation/player_shortcuts.dart';
 import 'package:rhythmo/features/playlists/application/playlists_controller.dart';
 import 'package:rhythmo/features/playlists/data/device_playlist_store.dart';
 import 'package:rhythmo/features/settings/application/cache_controller.dart';
@@ -439,10 +440,15 @@ class _RhythmoAppState extends State<RhythmoApp> {
               final songs? => OfflineSongsScope(songs: songs, child: page),
               null => page,
             };
-            return switch (_playlists) {
+            final withPlaylists = switch (_playlists) {
               final playlists? =>
                 PlaylistsScope(controller: playlists, child: withSongs),
               null => withSongs,
+            };
+            return switch (_player) {
+              final player? =>
+                PlayerShortcuts(player: player, child: withPlaylists),
+              null => withPlaylists,
             };
           },
           debugShowCheckedModeBanner: false,

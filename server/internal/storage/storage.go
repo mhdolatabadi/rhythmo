@@ -189,6 +189,18 @@ func (s *Storage) Put(ctx context.Context, key string, r io.Reader, size int64, 
 	return err
 }
 
+// ReaderAtCloser reads an object at any offset, fetching ranges on demand.
+type ReaderAtCloser interface {
+	io.ReaderAt
+	io.Closer
+}
+
+// OpenReaderAt opens the object at key for reads at any offset; only the
+// ranges read are fetched from storage.
+func (s *Storage) OpenReaderAt(ctx context.Context, key string) (ReaderAtCloser, error) {
+	return s.internal.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+}
+
 // Open streams the object at key.
 func (s *Storage) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 	return s.internal.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})

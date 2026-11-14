@@ -68,6 +68,7 @@ type UploadLimits struct {
 type TrackHandlers struct {
 	tracks  TrackStore
 	storage ObjectStore
+	streams StreamPresigner
 	tokens  *auth.Tokens
 	limits  UploadLimits
 	imports ImportCounter
@@ -112,6 +113,12 @@ func (h *TrackHandlers) WithTagRewrites(retags TagRewriteNotifier) *TrackHandler
 // so a new track can be identified right away.
 func (h *TrackHandlers) WithFingerprints(fingerprints TagRewriteNotifier) *TrackHandlers {
 	h.fingerprints = fingerprints
+	return h
+}
+
+// WithStreams presigns play links through streams, such as MediaStreams.
+func (h *TrackHandlers) WithStreams(streams StreamPresigner) *TrackHandlers {
+	h.streams = streams
 	return h
 }
 
@@ -317,7 +324,11 @@ func (h *TrackHandlers) handleStream(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	url, expiresAt, err := h.storage.PresignGet(r.Context(), track.StorageKey)
+	var streams StreamPresigner = h.storage
+	if h.streams != nil {
+		streams = h.streams
+	}
+	url, expiresAt, err := streams.PresignGet(r.Context(), track.StorageKey)
 	if err != nil {
 		internalError(w, "presign track", err)
 		return
@@ -607,7 +618,10 @@ func (h *TrackHandlers) handleCreateUpload(w http.ResponseWriter, r *http.Reques
 		derived := audio.Title(input.FileName)
 		title = &derived
 	}
-	if tooLong(title) || tooLong(input.Artist) || tooLong(input.Album) {
+	// Single lines only: control characters, such as newlines or escape
+	// codes, would end up in tags, file names and logs (#209 L3).
+	if tooLong(title) || tooLong(input.Artist) || tooLong(input.Album) ||
+		hasControl(&input.FileName) || hasControl(title) || hasControl(input.Artist) || hasControl(input.Album) {
 		writeError(w, http.StatusBadRequest, "invalid_metadata")
 		return
 	}
@@ -753,6 +767,12 @@ func optionalText(value *string) *string {
 
 func tooLong(value *string) bool {
 	return value != nil && utf8.RuneCountInString(strings.TrimSpace(*value)) > maxTextLength
+}
+
+// hasControl reports whether value holds a control character or invalid
+// UTF-8.
+func hasControl(value *string) bool {
+	return value != nil && !validText(value, len(*value))
 }
 
 func validYear(value *int32) bool {

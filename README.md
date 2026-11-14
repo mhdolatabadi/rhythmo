@@ -37,7 +37,7 @@ go run ./cmd/api
 ```
 
 Then open `http://localhost:8080/api/v1/health`. `AUTH_TOKEN_TTL` (default
-`720h`) sets how long a login lasts. The store tests drop and recreate tables in
+`8760h`, one year) sets how long a login lasts. The store tests drop and recreate tables in
 `TEST_DATABASE_URL`, so point it at a disposable database.
 
 | Endpoint | Purpose |

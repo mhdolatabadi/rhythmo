@@ -33,6 +33,8 @@ type Config struct {
 	// Public serves the public HTML pages at /, /p/{token}, sitemap.xml and
 	// robots.txt.
 	Public *PublicPages
+	// Media serves web streams that skip a large leading ID3v2 tag (#375).
+	Media *MediaStreams
 	// Ops is served only when an operator token is configured.
 	Ops *OpsHandlers
 	// Webhooks maps a messenger provider name to its bot webhook, served at
@@ -82,10 +84,13 @@ func NewHandler(config Config) http.Handler {
 	if config.Ops != nil {
 		config.Ops.register(mux)
 	}
+	if config.Media != nil {
+		config.Media.register(mux)
+	}
 	for provider, handler := range config.Webhooks {
 		mux.Handle("POST /api/v1/bots/"+provider+"/webhook/{secret}", handler)
 	}
-	return securityHeaders(cors(config.AllowedOrigin, mux))
+	return securityHeaders(cors(config.AllowedOrigin, markWebStreams(mux)))
 }
 
 func cors(allowedOrigin string, next http.Handler) http.Handler {
