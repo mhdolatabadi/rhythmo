@@ -1,5 +1,7 @@
 import 'package:rhythmo/features/library/data/track_artwork.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:rhythmo/core/persian_digits.dart';
 import 'package:rhythmo/core/design/design.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/features/library/data/track.dart';
@@ -10,9 +12,13 @@ import 'package:rhythmo/features/player/presentation/now_playing_screen.dart';
 /// and progress: a slim glass bar whose only bright control is the white
 /// play button.
 class MiniPlayer extends StatefulWidget {
-  const MiniPlayer({super.key, required this.player});
+  const MiniPlayer({super.key, required this.player, this.showVolume});
 
   final PlayerController player;
+
+  /// Whether the wide bar has a volume control; by default only in a
+  /// browser, since phones and tablets have volume keys.
+  final bool? showVolume;
 
   @override
   State<MiniPlayer> createState() => _MiniPlayerState();
@@ -57,6 +63,8 @@ class _MiniPlayerState extends State<MiniPlayer> {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final compact = constraints.maxWidth < 620;
+                    final showVolume =
+                        widget.showVolume ?? (kIsWeb && !compact);
                     final summary = _TrackSummary(
                       track: track,
                       status: status,
@@ -95,6 +103,12 @@ class _MiniPlayerState extends State<MiniPlayer> {
                               Expanded(child: summary),
                               const SizedBox(width: 24),
                               controls,
+                              // Phones and tablets have volume keys; a
+                              // desktop browser only has the system's.
+                              if (showVolume) ...[
+                                const SizedBox(width: 16),
+                                VolumeControl(player: player),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -467,6 +481,47 @@ class _TimeLabel extends StatelessWidget {
           color: Theme.of(context).colorScheme.onSurfaceVariant,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
+      ),
+    );
+  }
+}
+
+/// Mute and a short volume slider for the desktop bar (#381). The volume is
+/// the listener's own, kept between sessions, under the system volume.
+class VolumeControl extends StatelessWidget {
+  const VolumeControl({super.key, required this.player});
+
+  final PlayerController player;
+
+  @override
+  Widget build(BuildContext context) {
+    final level = player.muted ? 0.0 : player.volume;
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: player.muted ? 'صدا' : 'بی‌صدا',
+            onPressed: player.toggleMute,
+            icon: Icon(
+              level == 0
+                  ? RhythmoIcons.speakerX
+                  : level < 0.5
+                      ? RhythmoIcons.speakerLow
+                      : RhythmoIcons.speakerHigh,
+            ),
+          ),
+          SizedBox(
+            width: 112,
+            child: Slider(
+              value: level,
+              semanticFormatterCallback: (value) =>
+                  persianDigits('${(value * 100).round()}٪'),
+              onChanged: player.setVolume,
+            ),
+          ),
+        ],
       ),
     );
   }

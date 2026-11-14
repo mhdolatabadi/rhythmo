@@ -227,6 +227,43 @@ class PlayerController extends ChangeNotifier {
     await _saveSettings();
   }
 
+  /// The listener's volume from 0 to 1, kept between sessions (#381).
+  double get volume => _settings.volume;
+  bool get muted => _settings.muted;
+
+  /// The sleep timer's fade, from 0 to 1; the engine plays at this times
+  /// the listener's volume.
+  double _fadeLevel = 1;
+
+  Future<void> _setFadeLevel(double level) {
+    _fadeLevel = level;
+    return _applyOutputVolume();
+  }
+
+  Future<void> _applyOutputVolume() =>
+      _engine.setVolume(_settings.muted ? 0 : _fadeLevel * _settings.volume);
+
+  /// Sets the listener's volume; moving it above zero also unmutes.
+  Future<void> setVolume(double volume) async {
+    final value = volume.clamp(0.0, 1.0).toDouble();
+    _volumeChanged = true;
+    _settings = _settings.copyWith(
+        volume: value, muted: value > 0 ? false : _settings.muted);
+    await _applyOutputVolume();
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> toggleMute() async {
+    _volumeChanged = true;
+    _settings = _settings.copyWith(muted: !_settings.muted);
+    await _applyOutputVolume();
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  bool _volumeChanged = false;
+
   /// How long consecutive tracks overlap; zero when off or unsupported.
   Duration get crossfade => _settings.crossfade;
 
@@ -255,6 +292,11 @@ class PlayerController extends ChangeNotifier {
     try {
       final saved = await _settingsStore.read();
       if (_settings.speed == 1) await _applySpeed(saved.speed);
+      if (!_volumeChanged && (saved.volume != volume || saved.muted != muted)) {
+        _settings =
+            _settings.copyWith(volume: saved.volume, muted: saved.muted);
+        await _applyOutputVolume();
+      }
       if (_settings.crossfade == Duration.zero) {
         await _applyCrossfade(saved.crossfade);
       }
@@ -407,7 +449,7 @@ class PlayerController extends ChangeNotifier {
     var done = 0;
     _fadeTimer = Timer.periodic(step, (timer) {
       done++;
-      unawaited(_engine.setVolume(max(0, 1 - done / steps)));
+      unawaited(_setFadeLevel(max(0, 1 - done / steps)));
       if (done < steps) return;
       timer.cancel();
       if (!_sleepAtTrackEnd) unawaited(_sleep());
@@ -418,7 +460,7 @@ class PlayerController extends ChangeNotifier {
   Future<void> _sleep() async {
     _clearSleep(restoreVolume: false);
     await pause();
-    await _engine.setVolume(1);
+    await _setFadeLevel(1);
     notifyListeners();
   }
 
@@ -430,7 +472,7 @@ class PlayerController extends ChangeNotifier {
     _fadeTimer = null;
     _sleepAt = null;
     _sleepAtTrackEnd = false;
-    if (fading && restoreVolume) unawaited(_engine.setVolume(1));
+    if (fading && restoreVolume) unawaited(_setFadeLevel(1));
   }
 
   /// The tracks that will play after the current one, in order.
@@ -559,7 +601,7 @@ class PlayerController extends ChangeNotifier {
       // A new track restarts the wait for a track's end at full volume.
       _fadeTimer!.cancel();
       _fadeTimer = null;
-      unawaited(_engine.setVolume(1));
+      unawaited(_setFadeLevel(1));
     }
     metrics.started(track.id, _now());
     _setStatus(PlayerStatus.loading);
@@ -600,7 +642,7 @@ class PlayerController extends ChangeNotifier {
     final sleep = _sleepAtTrackEnd;
     if (sleep) {
       _clearSleep(restoreVolume: false);
-      await _engine.setVolume(1);
+      await _setFadeLevel(1);
     }
     final next = queue.next(auto: true);
     if (next == null) {
