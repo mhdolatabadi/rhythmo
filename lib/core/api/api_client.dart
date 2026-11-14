@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:rhythmo/features/social/data/social.dart';
+import 'package:rhythmo/features/admin/data/admin_profile_reports.dart';
 import 'package:rhythmo/core/network/network_status.dart';
 import 'package:rhythmo/core/offline/response_cache.dart';
 import 'package:rhythmo/features/auth/data/auth_models.dart';
@@ -404,7 +405,8 @@ class ApiClient
         AdminQuotaApi,
         BaleArchiveApi,
         BaleTopicCatalogApi,
-        SocialApi {
+        SocialApi,
+        AdminProfileReportsApi {
   ApiClient(this.baseUri,
       {http.Client? httpClient, this.offlineCache, this.network})
       : _httpClient = httpClient ?? http.Client();
@@ -569,8 +571,11 @@ class ApiClient
   @override
   Future<void> reviewPublication(
       String token, PendingPublication publication, bool approved) async {
-    final kind =
-        publication.kind == PublicationKind.playlist ? 'playlists' : 'tracks';
+    final kind = switch (publication.kind) {
+      PublicationKind.playlist => 'playlists',
+      PublicationKind.track => 'tracks',
+      PublicationKind.profile => 'profiles',
+    };
     await _send('PATCH',
         '/api/v1/admin/publications/$kind/${Uri.encodeComponent(publication.id)}',
         token: token, body: {'approved': approved});
@@ -1446,6 +1451,23 @@ class ApiClient
     });
     return Track.fromJson(body);
   }
+
+  @override
+  Future<List<ProfileReport>> listProfileReports(String token) async {
+    final body =
+        await _send('GET', '/api/v1/admin/profile-reports', token: token);
+    return [
+      for (final r in body['reports'] as List? ?? const [])
+        ProfileReport.fromJson(r as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<void> resolveProfileReports(String token, String userId,
+          {required bool hide}) =>
+      _send('PATCH',
+          '/api/v1/admin/profile-reports/${Uri.encodeComponent(userId)}',
+          token: token, body: {'hide': hide});
 
   @override
   Future<MyProfile> myProfile(String token) async => MyProfile.fromJson(

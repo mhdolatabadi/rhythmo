@@ -6,11 +6,35 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rhythmo/app/app_configuration.dart';
 import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/core/api/api_client.dart';
+import 'package:rhythmo/features/admin/data/admin_account.dart';
+import 'package:rhythmo/features/admin/data/admin_profile_reports.dart';
+import 'package:rhythmo/features/admin/presentation/profile_reports_screen.dart';
 import 'package:rhythmo/features/social/data/social.dart';
 import 'package:rhythmo/features/social/presentation/friends_feed_screen.dart';
 import 'package:rhythmo/features/social/presentation/profile_edit_screen.dart';
 import 'package:rhythmo/features/social/presentation/profile_screen.dart';
 import 'package:rhythmo/features/social/presentation/social_scope.dart';
+
+class FakeProfileReports implements AdminProfileReportsApi {
+  List<ProfileReport> reports = const [
+    ProfileReport(
+        userId: 'u1',
+        handle: 'spammer',
+        displayName: 'تبلیغ',
+        bio: 'خرید فالوور',
+        reason: 'spam',
+        reports: 3),
+  ];
+  final resolved = <String, bool>{};
+
+  @override
+  Future<List<ProfileReport>> listProfileReports(String token) async => reports;
+
+  @override
+  Future<void> resolveProfileReports(String token, String userId,
+          {required bool hide}) async =>
+      resolved[userId] = hide;
+}
 
 class FakeSocialApi implements SocialApi {
   MyProfile mine = const MyProfile();
@@ -312,5 +336,32 @@ void main() {
     await _pump(tester, FriendsFeedScreen(social: _social(api)));
     expect(find.text('هنوز خبری نیست'), findsOneWidget);
     expect(find.text('پیدا کردن با شناسه'), findsOneWidget);
+  });
+
+  test('a pending profile is its own kind in the review queue', () {
+    final item = PendingPublication.fromJson({
+      'kind': 'profile',
+      'id': 'u1',
+      'title': 'سارا',
+      'handle': 'sara',
+      'bio': 'سلام',
+      'ownerEmail': 'sara@example.com',
+      'requestedAt': '2026-11-14T00:00:00Z',
+    });
+    expect(item.kind, PublicationKind.profile);
+    expect(item.handle, 'sara');
+  });
+
+  testWidgets('an admin takes a reported profile down', (tester) async {
+    final api = FakeProfileReports();
+    await _pump(tester, ProfileReportsScreen(api: api, token: () => 'admin'));
+    expect(find.text('هرزنامه یا تبلیغ · ۳ گزارش'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'پایین بیاور'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'پایین بیاور').last);
+    await tester.pumpAndSettle();
+    expect(api.resolved, {'u1': true});
+    expect(find.text('گزارشی باز نیست.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

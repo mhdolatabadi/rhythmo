@@ -11,6 +11,8 @@ import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/presentation/publication_review_screen.dart';
 import 'package:rhythmo/features/admin/data/admin_song_reports.dart';
 import 'package:rhythmo/features/admin/presentation/song_reports_screen.dart';
+import 'package:rhythmo/features/admin/presentation/profile_reports_screen.dart';
+import 'package:rhythmo/features/admin/data/admin_profile_reports.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key, required this.api, required this.token});
@@ -279,6 +281,16 @@ class _AdminScreenState extends State<AdminScreen> {
                     : () => Navigator.of(context).push(MaterialPageRoute<void>(
                         builder: (_) => SongReportsScreen(
                             api: widget.api as AdminSongReportsApi,
+                            token: widget.token)))),
+          if (widget.api is AdminProfileReportsApi)
+            IconButton(
+                tooltip: 'گزارش نمایه‌ها',
+                icon: const Icon(RhythmoIcons.userCircleMinus),
+                onPressed: _forbidden
+                    ? null
+                    : () => Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => ProfileReportsScreen(
+                            api: widget.api as AdminProfileReportsApi,
                             token: widget.token)))),
           IconButton(
             tooltip: 'درخواست‌های انتشار',

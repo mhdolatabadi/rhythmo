@@ -21,7 +21,8 @@ class AdminAccount {
 typedef AdminAccountPage = ({List<AdminAccount> accounts, bool hasMore});
 
 /// What a pending publication request is for (#322).
-enum PublicationKind { playlist, track }
+/// A profile (#228) is a public profile whose owner isn't verified.
+enum PublicationKind { playlist, track, profile }
 
 /// A request from an account that isn't verified to list a playlist
 /// publicly or publish a track, waiting for an admin.
@@ -35,18 +36,24 @@ class PendingPublication {
     this.artist,
     this.shareToken,
     this.trackCount = 0,
+    this.handle,
+    this.bio,
   });
 
   factory PendingPublication.fromJson(Map<String, dynamic> json) =>
       PendingPublication(
-        kind: json['kind'] == 'playlist'
-            ? PublicationKind.playlist
-            : PublicationKind.track,
+        kind: switch (json['kind']) {
+          'playlist' => PublicationKind.playlist,
+          'profile' => PublicationKind.profile,
+          _ => PublicationKind.track,
+        },
         id: json['id'] as String,
         title: json['title'] as String,
         artist: json['artist'] as String?,
         shareToken: json['shareToken'] as String?,
         trackCount: (json['trackCount'] as num?)?.toInt() ?? 0,
+        handle: json['handle'] as String?,
+        bio: json['bio'] as String?,
         ownerEmail: json['ownerEmail'] as String,
         requestedAt: DateTime.parse(json['requestedAt'] as String),
       );
@@ -59,6 +66,10 @@ class PendingPublication {
   final String? artist;
   final String? shareToken;
   final int trackCount;
+
+  /// A profile's @handle and bio; its title is the display name.
+  final String? handle;
+  final String? bio;
   final String ownerEmail;
   final DateTime requestedAt;
 }
