@@ -1,0 +1,22 @@
+{{define "content"}}
+<section class="hero profile">
+{{if .Profile.Avatar}}<img class="avatar" src="{{.Profile.Avatar}}" alt="" width="72" height="72">{{else}}<span class="avatar">{{template "note"}}</span>{{end}}
+<div>
+<h1><bdi>{{.Profile.Name}}</bdi></h1>
+<p class="meta"><bdi dir="ltr">@{{.Profile.Handle}}</bdi> · {{digits .Profile.Followers}} دنبال‌کننده · {{digits .Profile.Following}} دنبال‌شده</p>
+{{with .Profile.Bio}}<p class="description" dir="auto">{{.}}</p>{{end}}
+<p style="margin-top:16px"><a class="button" href="/app/?user={{.Profile.Handle}}">دنبال کردن در اپ ریتمو</a></p>
+</div>
+</section>
+<h2 class="section">فهرست‌های پخش عمومی</h2>
+{{if .Profile.Playlists}}
+<ol class="list">
+{{range .Profile.Playlists}}<li><a class="row" href="/p/{{.ShareToken}}">
+<span class="art">{{template "note"}}</span>
+<span class="grow"><span class="title" dir="auto">{{.Name}}</span><span class="sub">{{digits .TrackCount}} آهنگ</span></span>
+</a></li>
+{{end}}</ol>
+{{else}}
+<p class="empty">هنوز فهرست پخش عمومی‌ای ندارد.</p>
+{{end}}
+{{end}}
