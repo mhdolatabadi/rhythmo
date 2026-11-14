@@ -12,7 +12,9 @@ import 'package:rhythmo/features/player/application/favorite_tracks.dart';
 import 'package:rhythmo/features/player/application/last_playback.dart';
 import 'package:rhythmo/features/player/application/playback_metrics.dart';
 import 'package:rhythmo/features/player/application/play_queue.dart';
+import 'package:rhythmo/features/player/application/equalizer_controller.dart';
 import 'package:rhythmo/features/player/application/playback_settings.dart';
+import 'package:rhythmo/features/player/data/equalizer.dart';
 import 'package:rhythmo/features/player/data/audio_engine.dart';
 import 'package:rhythmo/features/player/data/loudness.dart';
 
@@ -59,6 +61,7 @@ class PlayerController extends ChangeNotifier {
     Random? random,
     FavoriteTracks? favorites,
     PlaybackSettingsStore? settingsStore,
+    EqualizerStore? equalizerStore,
     LastPlaybackStore? lastPlaybackStore,
     DateTime Function()? now,
     this.onListened,
@@ -73,7 +76,11 @@ class PlayerController extends ChangeNotifier {
         _settingsStore = settingsStore ?? MemoryPlaybackSettingsStore(),
         _lastPlaybackStore = lastPlaybackStore ?? MemoryLastPlaybackStore(),
         _now = now ?? DateTime.now,
-        favorites = favorites ?? FavoriteTracks() {
+        favorites = favorites ?? FavoriteTracks(),
+        equalizer = engine is EqualizerEngine
+            ? EqualizerController(engine as EqualizerEngine,
+                equalizerStore ?? MemoryEqualizerStore())
+            : null {
     _subscriptions = [
       engine.position.listen((value) {
         _countHeard(value - _position);
@@ -103,6 +110,9 @@ class PlayerController extends ChangeNotifier {
   }
 
   final TracksApi _api;
+
+  /// The equalizer, where the engine has one (#224).
+  final EqualizerController? equalizer;
 
   /// Whether a track is fully kept on this device; it then plays from there
   /// without asking the server for a link, also offline.
@@ -252,6 +262,9 @@ class PlayerController extends ChangeNotifier {
 
   /// Restores saved speed and crossfade; changes made meanwhile win.
   Future<void> loadSettings() async {
+    unawaited(equalizer?.load().catchError((Object error) {
+      debugPrint('Equalizer not restored: $error');
+    }));
     try {
       final saved = await _settingsStore.read();
       if (_settings.speed == 1) await _applySpeed(saved.speed);
@@ -1050,6 +1063,7 @@ class PlayerController extends ChangeNotifier {
     _clearSleep(restoreVolume: false);
     _engine.dispose();
     favorites.dispose();
+    equalizer?.dispose();
     super.dispose();
   }
 }

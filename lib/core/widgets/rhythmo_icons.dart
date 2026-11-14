@@ -80,6 +80,7 @@ abstract final class RhythmoIcons {
       IconData(0xe40c, fontFamily: 'PhosphorFill');
   static const IconData shuffle = IconData(0xe422, fontFamily: 'Phosphor');
   static const IconData signOut = IconData(0xe42a, fontFamily: 'Phosphor');
+  static const IconData sliders = IconData(0xe432, fontFamily: 'Phosphor');
   static const IconData speakerHigh = IconData(0xe44a, fontFamily: 'Phosphor');
   static const IconData sortAscending =
       IconData(0xe444, fontFamily: 'Phosphor');
