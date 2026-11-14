@@ -46,6 +46,7 @@ import 'package:rhythmo/features/store/presentation/store_screen.dart';
 import 'package:rhythmo/features/store/presentation/store_carousel.dart';
 import 'package:rhythmo/features/store/data/store_catalog.dart';
 import 'package:rhythmo/features/bots/application/bot_link_controller.dart';
+import 'package:rhythmo/features/settings/application/storage_request_controller.dart';
 import 'package:rhythmo/features/bots/data/messenger_bot.dart';
 import 'package:rhythmo/features/identify/application/identify_controller.dart';
 import 'package:rhythmo/features/identify/presentation/identify_screen.dart';
@@ -76,6 +77,7 @@ class LibraryScreen extends StatefulWidget {
     required this.sync,
     required this.cache,
     this.botLinks,
+    this.storageRequests,
     this.linkImports,
     this.identify,
     this.store,
@@ -111,6 +113,9 @@ class LibraryScreen extends StatefulWidget {
   final LibrarySyncController sync;
   final CacheController cache;
   final BotLinkController? botLinks;
+
+  /// Asking for more cloud storage; null hides it.
+  final StorageRequestController? storageRequests;
 
   /// Adds music from song pages and audio links; null hides the action.
   final LinkImportController? linkImports;
@@ -809,6 +814,7 @@ class _LibraryScreenState extends State<LibraryScreen>
             onSignOutEverywhere: widget.onSignOutEverywhere,
             cache: widget.cache,
             botLinks: widget.botLinks,
+            storageRequests: widget.storageRequests,
             library: widget.library,
             player: widget.player,
             onManagePlaylists:
