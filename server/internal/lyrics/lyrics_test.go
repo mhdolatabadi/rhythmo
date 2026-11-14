@@ -22,10 +22,12 @@ type fakeLRCLIB struct {
 	requests atomic.Int32
 	// status, when set, is answered to every request instead.
 	status atomic.Int32
-	delay  time.Duration
-	mu     sync.Mutex
-	agents []string
-	paths  []string
+	// exactStatus, when set, is answered to exact lookups (/api/get) only.
+	exactStatus atomic.Int32
+	delay       time.Duration
+	mu          sync.Mutex
+	agents      []string
+	paths       []string
 }
 
 func (f *fakeLRCLIB) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +44,10 @@ func (f *fakeLRCLIB) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if status := f.status.Load(); status != 0 {
+		w.WriteHeader(int(status))
+		return
+	}
+	if status := f.exactStatus.Load(); status != 0 && r.URL.Path == "/api/get" {
 		w.WriteHeader(int(status))
 		return
 	}
@@ -350,5 +356,27 @@ func TestNewClientRejectsBadURL(t *testing.T) {
 		if _, err := NewClient(ClientConfig{BaseURL: raw}); err == nil {
 			t.Fatalf("%q accepted", raw)
 		}
+	}
+}
+
+// A failing exact lookup used to fail the whole request with «متن آهنگ
+// دریافت نشد» (#233), although the search alone finds the song.
+func TestFailedExactLookupFallsBackToSearch(t *testing.T) {
+	fake := &fakeLRCLIB{records: catalogue}
+	fake.exactStatus.Store(http.StatusBadGateway)
+	service, _, _ := newTestService(t, fake, ClientConfig{})
+	var song Query
+	for _, r := range catalogue {
+		if r.ArtistName != "" && r.Duration > 0 && r.HasLyrics() {
+			song = Query{Title: r.TrackName, Artist: r.ArtistName, Duration: time.Duration(r.Duration) * time.Second}
+			break
+		}
+	}
+	entry, err := service.ForSong(context.Background(), Song{TrackID: "t", Query: song})
+	if err != nil || !entry.Found {
+		t.Fatalf("lookup = %+v, %v; want found through search", entry, err)
+	}
+	if fake.requests.Load() != 2 {
+		t.Fatalf("requests = %d, want exact lookup then search", fake.requests.Load())
 	}
 }
