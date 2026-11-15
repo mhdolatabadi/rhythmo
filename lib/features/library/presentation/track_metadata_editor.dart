@@ -13,6 +13,14 @@ import 'package:rhythmo/features/library/data/track_metadata.dart';
 typedef SaveTrackMetadata = Future<MetadataSaveResult> Function(
     TrackMetadataDraft draft, int version);
 
+/// Sets a cloud track's cover from image bytes, based on a metadata version;
+/// see `LibraryController.setTrackCover`.
+typedef ChangeTrackCover = Future<MetadataSaveResult> Function(
+    Uint8List image, int version);
+
+/// Lets the user pick an image; null when they cancel.
+typedef PickCoverImage = Future<Uint8List?> Function();
+
 /// Opens the editor for an owned cloud [track] and returns the saved track,
 /// or null when nothing was saved.
 Future<Track?> showTrackMetadataEditor(
@@ -20,10 +28,17 @@ Future<Track?> showTrackMetadataEditor(
   required Track track,
   required SaveTrackMetadata onSave,
   MetadataSuggestions suggestions = MetadataSuggestions.empty,
+  ChangeTrackCover? onChangeCover,
+  PickCoverImage? pickCover,
 }) =>
     Navigator.of(context).push(MaterialPageRoute<Track>(
       builder: (_) => TrackMetadataEditor(
-          track: track, onSave: onSave, suggestions: suggestions),
+        track: track,
+        onSave: onSave,
+        suggestions: suggestions,
+        onChangeCover: onChangeCover,
+        pickCover: pickCover,
+      ),
     ));
 
 /// Limits the server enforces; checked here first so mistakes show at once.
@@ -39,10 +54,16 @@ class TrackMetadataEditor extends StatefulWidget {
     required this.track,
     required this.onSave,
     this.suggestions = MetadataSuggestions.empty,
+    this.onChangeCover,
+    this.pickCover,
   });
 
   final Track track;
   final SaveTrackMetadata onSave;
+
+  /// Changes the cover; without it (or [pickCover]) no cover row shows.
+  final ChangeTrackCover? onChangeCover;
+  final PickCoverImage? pickCover;
 
   /// Values used elsewhere in the library, offered as the user types.
   final MetadataSuggestions suggestions;
@@ -71,6 +92,8 @@ class _TrackMetadataEditorState extends State<TrackMetadataEditor> {
   late TrackMetadataDraft _initial;
   late String _extension;
   bool _saving = false;
+  bool _coverBusy = false;
+  String? _coverMessage;
   bool _dirty = false;
   bool _done = false;
   Track? _conflict;
@@ -188,6 +211,36 @@ class _TrackMetadataEditorState extends State<TrackMetadataEditor> {
             ? 'ذخیره در فایل انجام نشد. دسترسی ویرایش یا پشتیبانی قالب فایل را بررسی کن.'
             : 'ذخیره نشد. اتصال اینترنت را بررسی کن و دوباره تلاش کن.');
     }
+  }
+
+  Future<void> _changeCover() async {
+    final pick = widget.pickCover, change = widget.onChangeCover;
+    if (pick == null || change == null || _coverBusy) return;
+    final image = await pick();
+    if (!mounted || image == null) return;
+    setState(() {
+      _coverBusy = true;
+      _coverMessage = null;
+    });
+    final result = await change(image, _base.version);
+    if (!mounted) return;
+    setState(() {
+      _coverBusy = false;
+      switch (result) {
+        case MetadataSaved(:final track):
+          // Fields being typed stay; the next save builds on this version.
+          _base = track;
+          _coverMessage = 'کاور ذخیره شد.';
+        case MetadataConflict(:final latest):
+          _conflict = latest;
+        case MetadataInvalid(:final field):
+          _coverMessage = field == 'cover_too_large'
+              ? 'این تصویر بزرگ‌تر از ۱۰ مگابایت است.'
+              : 'این فایل تصویر قابل استفاده نیست؛ JPEG یا PNG انتخاب کن.';
+        case MetadataSaveFailed():
+          _coverMessage = 'کاور ذخیره نشد. اتصال را بررسی کن و دوباره تلاش کن.';
+      }
+    });
   }
 
   void _useLatest() {
@@ -330,6 +383,21 @@ class _TrackMetadataEditorState extends State<TrackMetadataEditor> {
                       )
                     else
                       _TagStatusNotice(track: _base),
+                    if (widget.onChangeCover != null &&
+                        widget.pickCover != null &&
+                        !_base.id.startsWith('device:'))
+                      _Section(
+                        title: 'کاور',
+                        children: [
+                          _CoverRow(
+                            track: _base,
+                            busy: _coverBusy,
+                            enabled: !_saving && _conflict == null,
+                            message: _coverMessage,
+                            onChange: _changeCover,
+                          ),
+                        ],
+                      ),
                     _Section(
                       title: 'فایل',
                       children: [
@@ -481,6 +549,61 @@ TextDirection directionOf(String text) {
     if (char.toUpperCase() != char.toLowerCase()) return TextDirection.ltr;
   }
   return TextDirection.rtl;
+}
+
+/// The track's cover and a button to choose another image.
+class _CoverRow extends StatelessWidget {
+  const _CoverRow({
+    required this.track,
+    required this.busy,
+    required this.enabled,
+    required this.message,
+    required this.onChange,
+  });
+
+  final Track track;
+  final bool busy;
+  final bool enabled;
+  final String? message;
+  final VoidCallback onChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        SizedBox.square(
+          dimension: 72,
+          child: RhythmoArtworkTile(seed: track.id, size: 72, track: track),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              OutlinedButton.icon(
+                key: const ValueKey('changeCover'),
+                onPressed: enabled && !busy ? onChange : null,
+                icon: busy
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(RhythmoIcons.image),
+                label: const Text('انتخاب تصویر'),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                message ??
+                    'JPEG یا PNG تا ۱۰ مگابایت؛ در فایل دانلودی هم قرار می‌گیرد.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _Section extends StatelessWidget {

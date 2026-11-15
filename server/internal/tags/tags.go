@@ -54,7 +54,9 @@ const maxTagBytes = 16 << 20
 
 type format interface {
 	inspect(r io.Reader) (Info, error)
-	rewrite(dst io.Writer, src io.Reader, m Metadata) (Info, error)
+	// rewrite replaces the tags with m and, when cover is not nil, every
+	// embedded picture with cover as the front cover.
+	rewrite(dst io.Writer, src io.Reader, m Metadata, cover []byte) (Info, error)
 }
 
 var formats = map[string]format{
@@ -130,11 +132,21 @@ func Inspect(r io.Reader, fileName string) (Info, error) {
 // Rewrite streams src to dst with its embedded tags replaced by m and returns
 // what was written. Nothing but the tags changes; the audio is copied as is.
 func Rewrite(dst io.Writer, src io.Reader, fileName string, m Metadata) (Info, error) {
+	return RewriteWithCover(dst, src, fileName, m, nil)
+}
+
+// RewriteWithCover is Rewrite that also replaces every embedded picture with
+// cover, a JPEG, as the front cover. A nil cover keeps the pictures as they
+// are.
+func RewriteWithCover(dst io.Writer, src io.Reader, fileName string, m Metadata, cover []byte) (Info, error) {
 	f, ok := formats[strings.ToLower(path.Ext(fileName))]
 	if !ok {
 		return Info{}, ErrUnsupported
 	}
-	return f.rewrite(dst, src, m)
+	if len(cover) > maxTagBytes/2 {
+		return Info{}, malformed("cover too large")
+	}
+	return f.rewrite(dst, src, m, cover)
 }
 
 // payload hashes and counts the audio bytes copied through it.
