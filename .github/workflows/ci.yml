@@ -268,6 +268,11 @@ jobs:
               assert nginx.count(header) == 1 + nginx.count("add_header Cache-Control"), header
           # CanvasKit is cached for good only under its engine build's path.
           assert "immutable" in nginx.split("location ~ ^/app/canvaskit-", 1)[1].split("}", 1)[0]
+          # The app's full Content-Security-Policy, in every block (#218).
+          blocks = 1 + nginx.count("add_header Cache-Control")
+          assert nginx.count("script-src 'self' 'wasm-unsafe-eval';") == blocks
+          assert nginx.count("object-src 'none'") == blocks and nginx.count("base-uri 'self'") == blocks
+          assert "<script>" not in Path("web/index.html").read_text(), "inline scripts break the CSP"
           assert "rm -f /usr/share/nginx/html/index.html" in docker
           # #209: nginx without root, and no Android backups of the session.
           assert "FROM nginxinc/nginx-unprivileged:" in docker and "\nUSER 101\n" in docker

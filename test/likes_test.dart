@@ -152,6 +152,42 @@ void main() {
       expect(api.calls, contains('unlike:public-track'));
     });
 
+    test('a public playlist shows the hearts the server says are liked',
+        () async {
+      final api = FakeLikesApi();
+      final favorites = FavoriteTracks(api: api, token: () => 'tok');
+      await favorites.load();
+      const liked = Track(
+          id: 'liked-here',
+          title: 'Liked',
+          contentType: 'audio/mpeg',
+          sizeBytes: 1,
+          sharedVia: 'public-share',
+          liked: true,
+          likeCount: 3);
+      const other = Track(
+          id: 'not-liked',
+          title: 'Other',
+          contentType: 'audio/mpeg',
+          sizeBytes: 1,
+          sharedVia: 'public-share',
+          likeCount: 2);
+      favorites.knowLiked(const [liked, other]);
+      expect(favorites.contains('liked-here'), isTrue);
+      expect(favorites.contains('not-liked'), isFalse);
+      expect(favorites.countFor(liked), 3);
+      expect(favorites.countFor(other), 2);
+      expect(await favorites.toggleTrack(liked), TrackLikeResult.done);
+      expect(favorites.contains('liked-here'), isFalse);
+      expect(favorites.countFor(liked), 2);
+      expect(api.calls, contains('unlike:liked-here'));
+
+      // Signed out, the server's word is not taken.
+      final guest = FavoriteTracks(api: api, token: () => null);
+      guest.knowLiked(const [liked]);
+      expect(guest.contains('liked-here'), isFalse);
+    });
+
     test('a visitor must sign in to like a shared song', () async {
       final api = FakeLikesApi();
       final favorites = FavoriteTracks(api: api, token: () => null);

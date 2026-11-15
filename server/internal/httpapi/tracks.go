@@ -166,9 +166,10 @@ type trackResponse struct {
 	// Audio is the stored file's format, or null until it has been read or
 	// when it is not recognised (#383).
 	Audio *audioResponse `json:"audio"`
-	// Published, LikeCount and Liked are only filled in the owner's own
-	// library (#284): whether they published the track to the store, how
-	// many listeners like the song, and whether they do.
+	// Published, LikeCount and Liked are filled in the owner's own library
+	// (#284): whether they published the track to the store, how many
+	// listeners like the song, and whether they do. A public playlist fills
+	// LikeCount and Liked for its viewer too (#357).
 	Published bool `json:"published,omitempty"`
 	// PublishReview is "pending" or "rejected" while publishing waits for
 	// or was turned down by an admin (#322); owner's library only.

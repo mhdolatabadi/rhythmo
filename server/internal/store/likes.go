@@ -209,6 +209,40 @@ func (l *TrackLikes) OwnerStates(ctx context.Context, ownerID string) (map[strin
 	return states, rows.Err()
 }
 
+// TrackStates is the like state of each of trackIDs for viewerID ("" for a
+// visitor, who likes nothing): how many listeners like the song, counting
+// every copy of it, and whether the viewer likes any copy (#357). Tracks
+// nobody likes are left out.
+func (l *TrackLikes) TrackStates(ctx context.Context, viewerID string, trackIDs []string) (map[string]LikeState, error) {
+	states := map[string]LikeState{}
+	if len(trackIDs) == 0 {
+		return states, nil
+	}
+	rows, err := l.pool.Query(ctx, `
+		SELECT t.id::text, counts.count, counts.liked
+		FROM tracks t
+		CROSS JOIN LATERAL (
+			SELECT count(DISTINCT tl.user_id)::int AS count,
+				COALESCE(bool_or(tl.user_id::text = $2), false) AS liked
+			FROM track_likes tl WHERE tl.track_id IN `+copiesOf("t.id")+`
+		) counts
+		WHERE t.id::text = ANY($1) AND counts.count > 0
+	`, trackIDs, viewerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var state LikeState
+		if err := rows.Scan(&id, &state.Count, &state.Liked); err != nil {
+			return nil, err
+		}
+		states[id] = state
+	}
+	return states, rows.Err()
+}
+
 // LikedSong is one of the listener's «پسندیده‌ها»: their own track, or a
 // store song (Entry set).
 type LikedSong struct {
