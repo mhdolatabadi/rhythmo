@@ -93,6 +93,15 @@ func TestLikes(t *testing.T) {
 			t.Fatalf("bob likes the song = %+v, %v; want idempotent", state, err)
 		}
 	}
+	// A public playlist shows each song's state, counting every copy (#357).
+	songs, err := likes.TrackStates(f.ctx, bob.ID, []string{aliceCopy.ID, carolCopy.ID, private.ID})
+	if err != nil || songs[aliceCopy.ID] != (LikeState{Count: 2, Liked: true}) ||
+		songs[carolCopy.ID] != (LikeState{Count: 2, Liked: true}) || len(songs) != 2 {
+		t.Fatalf("song states for bob = %+v, %v", songs, err)
+	}
+	if songs, _ := likes.TrackStates(f.ctx, "", []string{aliceCopy.ID}); songs[aliceCopy.ID] != (LikeState{Count: 2}) {
+		t.Fatalf("song states for a visitor = %+v", songs)
+	}
 	// Alice already likes a copy, so liking the song changes nothing.
 	if state, _ := likes.SetStoreLike(f.ctx, alice.ID, entryID, true); state != (LikeState{Count: 2, Liked: true}) {
 		t.Fatalf("alice likes the song = %+v", state)
