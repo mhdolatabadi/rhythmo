@@ -178,6 +178,21 @@ class FavoriteTracks extends ChangeNotifier with QuietAfterDispose {
     }
   }
 
+  /// Takes in what the server said about [tracks] someone else shared
+  /// (#357): a song the listener liked shows a filled heart even when it
+  /// isn't in «پسندیده‌ها» yet. Likes on their way are left alone.
+  void knowLiked(Iterable<Track> tracks) {
+    if (_api == null || _token() == null) return;
+    final liked = {
+      for (final track in tracks)
+        if (track.liked && !_busy.contains(track.id) && !contains(track.id))
+          track.id
+    };
+    if (liked.isEmpty) return;
+    _remote = {..._remote, ...liked};
+    notifyListeners();
+  }
+
   /// Forgets the account's likes, for example on signing out. Likes kept
   /// on this device stay.
   void clearAccount() {
