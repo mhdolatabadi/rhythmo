@@ -101,6 +101,25 @@ with urllib.request.urlopen(request, timeout=3) as response:
     raise SystemExit(0 if response.status == 200 else 1)
 ' >/dev/null 2>&1; then
       echo "Transcription model: ready"
+      # A model can load yet fail on its very first real inference. Exercise
+      # the complete decoder + model path with synthetic audio before a
+      # successful deployment and automatic Cafe Bazaar release.
+      if ! docker compose "${compose_args[@]}" exec -T transcriber python -c '
+import os
+import urllib.request
+request = urllib.request.Request(
+    "http://127.0.0.1:8090/self-test",
+    data=b"",
+    headers={"Authorization": "Bearer " + os.environ["TRANSCRIPTION_TOKEN"]},
+    method="POST")
+with urllib.request.urlopen(request, timeout=240) as response:
+    raise SystemExit(0 if response.status == 200 else 1)
+' >/dev/null 2>&1; then
+        echo "ERROR: Whisper could not run an inference on synthetic audio." >&2
+        docker compose "${compose_args[@]}" logs --tail=30 transcriber >&2 || true
+        return 1
+      fi
+      echo "Transcription inference smoke test: passed"
       return 0
     fi
     sleep 5
