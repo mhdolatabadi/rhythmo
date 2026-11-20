@@ -57,7 +57,7 @@ const playbackErrorMessage = 'پخش این آهنگ ناموفق بود. اتص
     'بررسی کن و دکمه‌ی وسط را برای تلاش دوباره بزن.';
 
 /// Shown in place of the artist when a song's tags have none.
-const unknownArtist = 'هنرمند ناشناس';
+const unknownArtist = 'خواننده نامشخص';
 
 /// The artist, else the album, else [unknownArtist]. Where the song is
 /// stored is shown by the row's badge, never in the artist's place.
@@ -546,7 +546,7 @@ class _TitleRow extends StatelessWidget {
             children: [
               Text(
                 track.title,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w500,

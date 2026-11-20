@@ -55,13 +55,16 @@ func (oggFormat) inspect(r io.Reader) (Info, error) {
 	return p.info(headers.comment.metadata()), nil
 }
 
-func (oggFormat) rewrite(dst io.Writer, src io.Reader, m Metadata) (Info, error) {
+func (oggFormat) rewrite(dst io.Writer, src io.Reader, m Metadata, cover []byte) (Info, error) {
 	br := bufio.NewReader(src)
 	headers, err := readOggHeaders(br)
 	if err != nil {
 		return Info{}, err
 	}
 	comment := headers.comment.with(m)
+	if cover != nil {
+		comment = comment.withCover(cover)
+	}
 	var packet []byte
 	if headers.opus {
 		packet = append([]byte("OpusTags"), comment.bytes()...)
