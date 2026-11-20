@@ -367,7 +367,8 @@ void main() {
       await open(tester, {
         'song': const TrackLyrics(status: LyricsStatus.notFound),
       });
-      expect(find.textContaining('تبدیل صدا به متن روی سرور فعال یا آماده نیست'),
+      expect(
+          find.textContaining('تبدیل صدا به متن روی سرور فعال یا آماده نیست'),
           findsOneWidget);
       expect(find.text('استخراج متن از صدا'), findsNothing);
       expect(tester.takeException(), isNull);
