@@ -1,6 +1,12 @@
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/notifications/data/notifications.dart';
 
+/// Shown when the server refuses to list a playlist, or to rename a listed
+/// one, because of an unacceptable word (#207).
+const inappropriatePlaylistMessage =
+    'نام، توضیح یا آهنگ‌های این فهرست کلمه‌ی نامناسب دارد و نمی‌تواند عمومی '
+    'شود. آن را اصلاح کن و دوباره امتحان کن.';
+
 class Playlist {
   const Playlist({
     required this.id,
@@ -12,6 +18,7 @@ class Playlist {
     this.shareToken,
     this.isPublic = false,
     this.publicReview,
+    this.publicReviewReason,
     this.isOwner = true,
     this.isAdmin = false,
     this.description = '',
@@ -38,6 +45,7 @@ class Playlist {
       shareToken: json['shareToken'] as String?,
       isPublic: json['public'] == true,
       publicReview: json['publicReview'] as String?,
+      publicReviewReason: json['publicReviewReason'] as String?,
       // Older servers don't say; every playlist was its owner's then.
       isOwner: json['isOwner'] as bool? ?? true,
       isAdmin: json['isAdmin'] == true,
@@ -69,6 +77,9 @@ class Playlist {
   /// Owner only: `pending` while a request to list it publicly waits for an
   /// admin's approval, `rejected` after an admin turned it down (#322).
   final String? publicReview;
+
+  /// Why an admin rejected listing it publicly, if they said (#207).
+  final String? publicReviewReason;
 
   /// Whether listing it publicly waits for an admin.
   bool get publicPending => publicReview == 'pending';
@@ -112,6 +123,7 @@ class Playlist {
         shareToken: shareToken,
         isPublic: isPublic,
         publicReview: publicReview,
+        publicReviewReason: publicReviewReason,
         isOwner: isOwner,
         isAdmin: isAdmin,
         description: description,

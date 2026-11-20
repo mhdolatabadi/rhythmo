@@ -592,7 +592,9 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
         .rename(current.id, details.name, description: details.description)) {
       await _load();
     } else {
-      _message('ذخیره‌ی نام و توضیح ناموفق بود.');
+      _message(widget.controller.lastErrorCode == 'inappropriate_content'
+          ? inappropriatePlaylistMessage
+          : 'ذخیره‌ی نام و توضیح ناموفق بود.');
     }
   }
 
