@@ -320,6 +320,7 @@ class SharedPlaylist {
     required this.owner,
     required this.isOwner,
     required this.tracks,
+    this.ownerHandle,
     this.description = '',
     this.isPublic = false,
     this.likes = const PlaylistLikes(liked: false, likeCount: 0),
@@ -334,6 +335,7 @@ class SharedPlaylist {
         name: json['name'] as String,
         description: json['description'] as String? ?? '',
         owner: json['owner'] as String,
+        ownerHandle: json['ownerHandle'] as String?,
         isOwner: json['isOwner'] == true,
         isPublic: json['public'] == true,
         likes: PlaylistLikes.fromJson(json),
@@ -359,6 +361,9 @@ class SharedPlaylist {
 
   /// The owner's email, masked, for example «m***@gmail.com».
   final String owner;
+
+  /// The owner's @handle when their profile is public (#228).
+  final String? ownerHandle;
   final bool isOwner;
 
   /// Playable through the share link, not the owner's own library.

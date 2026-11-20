@@ -3,6 +3,7 @@ import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
 import 'package:rhythmo/features/admin/presentation/admin_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:rhythmo/features/social/presentation/social_scope.dart';
 import 'package:rhythmo/features/feedback/feedback_screen.dart';
 import 'package:rhythmo/features/identify/application/identify_controller.dart';
 import 'package:rhythmo/features/for_you/application/for_you_controller.dart';
@@ -119,6 +120,22 @@ class _AuthGateState extends State<AuthGate> {
     });
   }
 
+  /// Whether the profile the app was opened with was looked at.
+  bool _profileChecked = false;
+
+  /// Opens the public profile a profile link pointed to, once, signed in
+  /// or not.
+  void _openInitialProfile() {
+    if (_profileChecked) return;
+    _profileChecked = true;
+    final handle = AppConfiguration.takeInitialProfileHandle();
+    final social = SocialScope.maybeOf(context);
+    if (handle == null || social == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) social.openProfile(context, handle);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -142,6 +159,7 @@ class _AuthGateState extends State<AuthGate> {
     setState(() {
       _guestShown = false;
       _storeSongChecked = false;
+      _profileChecked = false;
       _linkGeneration++;
     });
   }
@@ -228,6 +246,7 @@ class _AuthGateState extends State<AuthGate> {
         if (controller.status == AuthStatus.signedIn ||
             controller.status == AuthStatus.signedOut) {
           _openInitialStoreSong();
+          _openInitialProfile();
         }
         return switch (controller.status) {
           AuthStatus.restoring => const AppLoadingScreen(),
