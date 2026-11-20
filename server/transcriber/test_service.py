@@ -103,8 +103,13 @@ class PrivateServiceTest(unittest.TestCase):
                 conn.close()
                 return status, data
             self.assertEqual(call('POST', '/transcribe', body=b'audio')[0], 401)
+            self.assertEqual(call('POST', '/self-test')[0], 401)
             self.assertIsNone(model.path)
             self.assertEqual(call('GET', '/health', 'Bearer ' + 'x' * 32)[0], 200)
+            status, body = call('POST', '/self-test', 'Bearer ' + 'x' * 32)
+            self.assertEqual(status, 200)
+            self.assertIn(b'inference_ok', body)
+            self.assertTrue(model.assert_audio.startswith(b'RIFF'))
             status, body = call('POST', '/transcribe', 'Bearer ' + 'x' * 32, b'audio')
             self.assertEqual(status, 200)
             self.assertIn('یا حسین'.encode(), body)
