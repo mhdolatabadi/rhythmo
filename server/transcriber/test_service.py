@@ -14,8 +14,12 @@ class TranscriptTest(unittest.TestCase):
         self.assertEqual(result['plain'], 'یا حسین سلام')
         self.assertEqual(result['synced'], '[01:01.25]یا حسین سلام')
 
+    def test_long_lecture_text_is_not_rejected_at_64_kib(self):
+        result = transcript([SimpleNamespace(start=0, text='ا' * 40000)])
+        self.assertEqual(result['plain'], 'ا' * 40000)
+
     def test_empty_and_oversized_results(self):
-        for segments in ([], [SimpleNamespace(start=0, text='ا' * 40000)]):
+        for segments in ([], [SimpleNamespace(start=0, text='ا' * 300000)]):
             with self.assertRaises(ValueError):
                 transcript(segments)
 
