@@ -3583,53 +3583,53 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
   Widget build(BuildContext context) {
     final playlists = widget.playlists;
     final searchBody = LayoutBuilder(
-          builder: (context, constraints) {
-            final side = constraints.maxWidth >= 900
-                ? ((constraints.maxWidth - 880) / 2).clamp(40.0, 10000.0)
-                : 16.0;
-            return Column(
-              children: [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(side, 8, side, 8),
-                  // One node for the whole bar, so a screen reader finds a
-                  // labelled 48 px field rather than a bare tap area.
-                  child: MergeSemantics(
-                    child: SearchBar(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      controller: _field,
-                      autoFocus: true,
-                      hintText: 'آهنگ، خواننده، آلبوم یا فهرست پخش',
-                      leading: const Icon(RhythmoIcons.magnifyingGlass),
-                      textInputAction: TextInputAction.search,
-                      trailing: [
-                        if (_query.isNotEmpty)
-                          IconButton(
-                            tooltip: 'پاک کردن جست‌وجو',
-                            onPressed: _clear,
-                            icon: const Icon(RhythmoIcons.x),
-                          ),
-                      ],
-                      onChanged: _setQuery,
-                      onSubmitted: (_) => _remember(),
-                    ),
-                  ),
+      builder: (context, constraints) {
+        final side = constraints.maxWidth >= 900
+            ? ((constraints.maxWidth - 880) / 2).clamp(40.0, 10000.0)
+            : 16.0;
+        return Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(side, 8, side, 8),
+              // One node for the whole bar, so a screen reader finds a
+              // labelled 48 px field rather than a bare tap area.
+              child: MergeSemantics(
+                child: SearchBar(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  controller: _field,
+                  autoFocus: true,
+                  hintText: 'آهنگ، خواننده، آلبوم یا فهرست پخش',
+                  leading: const Icon(RhythmoIcons.magnifyingGlass),
+                  textInputAction: TextInputAction.search,
+                  trailing: [
+                    if (_query.isNotEmpty)
+                      IconButton(
+                        tooltip: 'پاک کردن جست‌وجو',
+                        onPressed: _clear,
+                        icon: const Icon(RhythmoIcons.x),
+                      ),
+                  ],
+                  onChanged: _setQuery,
+                  onSubmitted: (_) => _remember(),
                 ),
-                Expanded(
-                  child: ListenableBuilder(
-                    listenable: Listenable.merge([
-                      widget.changes,
-                      widget.player,
-                      if (playlists != null) playlists,
-                      if (_storeMatches case final matches?) matches,
-                      if (widget.recentSearches case final recent?) recent,
-                    ]),
-                    builder: (context, _) => _results(context, side),
-                  ),
-                ),
-              ],
-            );
-          },
+              ),
+            ),
+            Expanded(
+              child: ListenableBuilder(
+                listenable: Listenable.merge([
+                  widget.changes,
+                  widget.player,
+                  if (playlists != null) playlists,
+                  if (_storeMatches case final matches?) matches,
+                  if (widget.recentSearches case final recent?) recent,
+                ]),
+                builder: (context, _) => _results(context, side),
+              ),
+            ),
+          ],
         );
+      },
+    );
     if (widget.embedded) {
       return SafeArea(
         bottom: false,
