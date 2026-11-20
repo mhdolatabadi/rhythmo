@@ -7,7 +7,7 @@ import 'player_controller_test.dart' show FakeAudioEngine;
 import 'upload_controller_test.dart' show FakeTracksApi;
 
 void main() {
-  testWidgets('signed-in dock swaps Search and My Music on a narrow phone',
+  testWidgets('signed-in dock keeps three primary destinations on a narrow phone',
       (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
@@ -32,7 +32,7 @@ void main() {
     ));
 
     // In RTL reading order, the first item is rightmost.
-    final labels = ['خانه', 'موسیقی من', 'پسندیده‌ها', 'جست‌وجو'];
+    final labels = ['خانه', 'موسیقی من', 'پسندیده‌ها'];
     final positions = [
       for (final label in labels) tester.getCenter(find.byTooltip(label)).dx,
     ];
@@ -40,9 +40,10 @@ void main() {
       expect(positions[i], greaterThan(positions[i + 1]));
     }
 
-    await tester.tap(find.byTooltip('جست‌وجو'));
+    expect(find.byTooltip('جست‌وجو'), findsNothing);
+    await tester.tap(find.byTooltip('پسندیده‌ها'));
     await tester.tap(find.byTooltip('موسیقی من'));
-    expect(destinations, [DockDestination.search, DockDestination.library]);
+    expect(destinations, [DockDestination.liked, DockDestination.library]);
     expect(tester.takeException(), isNull);
   });
 }
