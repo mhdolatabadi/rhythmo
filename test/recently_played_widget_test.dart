@@ -346,6 +346,24 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('Back from dock search returns to music library',
+        (tester) async {
+      _phone(tester);
+      await _pumpApp(tester,
+          tracks: FakeTracksApi([_cloud('a', 'آهنگ اول')]),
+          history: history,
+          playlists: playlists);
+      await tester.tap(find.byTooltip('جست‌وجو'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LibrarySearchScreen), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(LibrarySearchScreen), findsNothing);
+      expect(tester.widget<RhythmoDock>(find.byType(RhythmoDock)).selected,
+          DockDestination.library);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets(
         'groups tracks, own and popular playlists, tolerant of Arabic forms '
         'and ZWNJ, on a 360 px phone', (tester) async {

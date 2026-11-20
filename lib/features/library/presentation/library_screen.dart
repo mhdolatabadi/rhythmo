@@ -1033,7 +1033,18 @@ class _LibraryScreenState extends State<LibraryScreen>
       });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PopScope<Object?>(
+        // Navigating back from a dock destination returns to the library.
+        canPop: _destination == DockDestination.library,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && mounted) {
+            _selectDestination(DockDestination.library);
+          }
+        },
+        child: _buildScaffold(context),
+      );
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       extendBody: true,
       bottomNavigationBar: RhythmoDock(
@@ -2623,12 +2634,14 @@ class _TrackRow extends StatelessWidget {
             : () => ScaffoldMessenger.maybeOf(context)
               ?..hideCurrentSnackBar()
               ..showSnackBar(
-                  const SnackBar(content: Text(offlineUnavailableMessage))));
-    return playable ? row : Opacity(opacity: 0.45, child: row);
+                  const SnackBar(content: Text(offlineUnavailableMessage))),
+        offlineUnavailable: !playable);
+    return playable ? row : Opacity(opacity: 0.8, child: row);
   }
 
   Widget _buildRow(BuildContext context, ThemeData theme, ColorScheme colors,
-      String? artist, TextStyle? secondary, VoidCallback onTap) {
+      String? artist, TextStyle? secondary, VoidCallback onTap,
+      {required bool offlineUnavailable}) {
     final wide = MediaQuery.sizeOf(context).width >= trackTableMinWidth + 200;
     return CallbackShortcuts(
       bindings: {
@@ -2713,7 +2726,9 @@ class _TrackRow extends StatelessWidget {
                 ),
               null => Row(
                   children: [
-                    TrackSyncMark(location: locationOf(track)),
+                    TrackSyncMark(
+                        location: locationOf(track),
+                        offlineUnavailable: offlineUnavailable),
                     Expanded(
                       child: Text(
                         artist == null || artist.isEmpty
@@ -2841,13 +2856,46 @@ class _HoverPlayState extends State<_HoverPlay> {
 /// on this phone says so in a small label. The app knows from the copies a
 /// row stands for: an uploaded copy on the server makes it synced.
 class TrackSyncMark extends StatelessWidget {
-  const TrackSyncMark({super.key, required this.location});
+  const TrackSyncMark({
+    super.key,
+    required this.location,
+    this.offlineUnavailable = false,
+  });
 
   final TrackLocation location;
+  final bool offlineUnavailable;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    if (offlineUnavailable) {
+      return Padding(
+        padding: const EdgeInsetsDirectional.only(end: RhythmoSpace.xs),
+        child: Tooltip(
+          message: offlineUnavailableMessage,
+          child: Semantics(
+            label: 'نیازمند اینترنت',
+            excludeSemantics: true,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.errorContainer,
+                borderRadius: BorderRadius.circular(RhythmoRadii.bar),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  'نیازمند اینترنت',
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelSmall
+                      ?.copyWith(color: colors.onErrorContainer, height: 1.5),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     if (location == TrackLocation.device) {
       return Padding(
         padding: const EdgeInsetsDirectional.only(end: RhythmoSpace.xs + 2),
