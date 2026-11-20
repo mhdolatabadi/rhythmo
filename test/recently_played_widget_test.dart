@@ -25,6 +25,7 @@ import 'playlist_sharing_test.dart' show FakePlaylistsApi;
 import 'recently_played_test.dart' show FakeHistoryApi;
 import 'upload_controller_test.dart' show FakeTracksApi, FakeUploader;
 import 'widget_test.dart' show FakeAuthApi, FakePicker;
+import 'store_test.dart' show FakeStoreApi, song;
 
 const _longPersian =
     'یک عنوان بسیار بسیار طولانی فارسی برای آزمودن کوتاه‌شدن در صفحهٔ باریک';
@@ -62,6 +63,7 @@ Future<void> _pumpApp(
   required FakeTracksApi tracks,
   required FakeHistoryApi history,
   FakePlaylistsApi? playlists,
+  FakeStoreApi? store,
   FakeAudioEngine? engine,
 }) async {
   await tester.pumpWidget(RhythmoApp(
@@ -70,6 +72,7 @@ Future<void> _pumpApp(
     tokenStore: MemoryTokenStore('valid-token'),
     tracksApi: tracks,
     playlistsApi: playlists,
+    storeApi: store,
     historyApi: history,
     audioEngine: engine ?? FakeAudioEngine(),
     audioCache: FakeAudioCache(),
@@ -309,6 +312,41 @@ void main() {
       await tester.tap(find.byTooltip('جست‌وجو'));
       await tester.pumpAndSettle();
     }
+
+    testWidgets('search stays in the dock and discovers گنجینه songs',
+        (tester) async {
+      _phone(tester);
+      final store = FakeStoreApi(songs: [
+        song(0, title: 'گنجینه آزمایشی'),
+        song(1, title: 'مورد دیگر'),
+      ], pageSize: 1);
+      await _pumpApp(tester,
+          tracks: FakeTracksApi([_cloud('mine', 'گنجینه شخصی')]),
+          history: history,
+          playlists: playlists,
+          store: store);
+      await tester.tap(find.byTooltip('جست‌وجو'));
+      await tester.pumpAndSettle();
+      expect(find.byType(RhythmoDock), findsOneWidget);
+      expect(
+          tester.widget<RhythmoDock>(find.byType(RhythmoDock)).selected,
+          DockDestination.search);
+      await tester.enterText(_searchField, 'گنجینه');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(find.text('گنجینه شخصی'), findsOneWidget);
+      expect(find.text('گنجینه آزمایشی'), findsOneWidget);
+      expect(find.text('آهنگ‌های گنجینه'), findsOneWidget);
+      expect(store.calls, contains('tracks:valid-token:گنجینه:null:null:0'));
+
+      await tester.tap(find.byTooltip('موسیقی من'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LibrarySearchScreen), findsNothing);
+      expect(
+          tester.widget<RhythmoDock>(find.byType(RhythmoDock)).selected,
+          DockDestination.library);
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets(
         'groups tracks, own and popular playlists, tolerant of Arabic forms '
