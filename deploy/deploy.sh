@@ -64,13 +64,11 @@ pull_with_retries() {
 }
 
 pull_with_retries api web
-start_services=()
-if [[ $transcription_enabled == true ]] && ! pull_with_retries transcriber; then
-  # Ship the new api and web anyway; the running transcriber keeps working.
-  repo="$(grep -E '^NAFIR_IMAGE_REPO=' .env | tail -n 1 | cut -d= -f2- || true)"
-  echo "WARNING: could not pull the transcriber image; the running transcriber is kept." >&2
-  echo "WARNING: fetch it with: docker pull ${repo:-ghcr.io/mhdolatabadi/rhythmo}/transcriber:${NAFIR_TRANSCRIBER_TAG}" >&2
-  mapfile -t start_services < <(docker compose "${compose_args[@]}" config --services | grep -vx transcriber)
+if [[ $transcription_enabled == true ]]; then
+  # A partial release silently left the audio-to-text feature broken.
+  # Fail before replacing the healthy stack if the required model image
+  # cannot be pulled. The previous containers remain unchanged.
+  pull_with_retries transcriber
 fi
 
 # One-time move from the old project name ("deploy", from this folder) to
@@ -85,7 +83,34 @@ if [[ -n "$old_containers" ]]; then
   docker rm -f $old_containers
 fi
 
-docker compose "${compose_args[@]}" up -d --no-build --remove-orphans "${start_services[@]}"
+docker compose "${compose_args[@]}" up -d --no-build --remove-orphans
+
+# A successful API /health does not prove that the Whisper model loaded.
+# Probe the private service with its own container token and fail the release
+# when the model cannot serve requests. Never print the token.
+check_transcription_ready() {
+  [[ $transcription_enabled == true ]] || return 0
+  for attempt in $(seq 1 30); do
+    if docker compose "${compose_args[@]}" exec -T transcriber python -c '
+import os
+import urllib.request
+request = urllib.request.Request(
+    "http://127.0.0.1:8090/health",
+    headers={"Authorization": "Bearer " + os.environ["TRANSCRIPTION_TOKEN"]})
+with urllib.request.urlopen(request, timeout=3) as response:
+    raise SystemExit(0 if response.status == 200 else 1)
+' >/dev/null 2>&1; then
+      echo "Transcription model: ready"
+      return 0
+    fi
+    sleep 5
+  done
+  echo "ERROR: transcription model was not ready; deployment cannot be marked successful." >&2
+  docker compose "${compose_args[@]}" ps transcriber >&2 || true
+  docker compose "${compose_args[@]}" logs --tail=30 transcriber >&2 || true
+  return 1
+}
+check_transcription_ready
 docker image prune -f
 
 domain="$(grep -E '^NAFIR_DOMAIN=' .env | cut -d= -f2-)"
@@ -106,11 +131,22 @@ check_bots() {
     echo "WARNING: a bot needs attention; see deploy/README.md, Operating the bots." >&2
   fi
 }
+
+check_transcription_ops() {
+  [[ $transcription_enabled == true && -n "$ops_token" ]] || return 0
+  local report
+  report="$(curl -fsS -H "Authorization: Bearer ${ops_token}" "https://${domain}/api/v1/ops/transcription" || true)"
+  echo "Transcription health: ${report:-unavailable}"
+  if [[ "$report" != *'"healthy":true'* ]]; then
+    echo "WARNING: transcription is not healthy; see the transcriber and API logs." >&2
+  fi
+}
 for attempt in $(seq 1 30); do
   if curl -fsS "https://${domain}/api/v1/health"; then
     echo
     echo "Deployed $(git rev-parse --short HEAD) to https://${domain}"
     check_bots
+    check_transcription_ops
     exit 0
   fi
   sleep 5
