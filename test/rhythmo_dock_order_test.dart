@@ -7,7 +7,8 @@ import 'player_controller_test.dart' show FakeAudioEngine;
 import 'upload_controller_test.dart' show FakeTracksApi;
 
 void main() {
-  testWidgets('signed-in dock keeps three primary destinations on a narrow phone',
+  testWidgets(
+      'signed-in dock keeps three primary destinations on a narrow phone',
       (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
