@@ -121,12 +121,17 @@ void main() {
 
       expect(find.text('اخیراً پخش‌شده'), findsNothing);
       expect(tester.takeException(), isNull);
-      // Search lives behind the dock's bubble, not above the list.
+      // Search is a header action, never a bottom navigation destination.
       expect(find.byType(SearchBar), findsNothing);
       _expectTouchTarget(tester, find.byTooltip('جست‌وجو'));
+      expect(
+          find.descendant(
+              of: find.byType(SliverAppBar),
+              matching: find.byTooltip('جست‌وجو')),
+          findsOneWidget);
       final dock = tester.getRect(find.byType(RhythmoDock));
       final search = tester.getRect(find.byTooltip('جست‌وجو'));
-      expect(dock.contains(search.center), isTrue);
+      expect(dock.contains(search.center), isFalse);
       expect(tester.getSize(_row(_longPersian)).height, lessThanOrEqualTo(72));
       _expectTouchTarget(tester, _row(_longPersian));
 
@@ -313,7 +318,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('search stays in the dock and discovers گنجینه songs',
+    testWidgets('header search discovers گنجینه songs',
         (tester) async {
       _phone(tester);
       final store = FakeStoreApi(songs: [
@@ -346,7 +351,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Back from dock search returns to music library',
+    testWidgets('Back from header search returns to music library',
         (tester) async {
       _phone(tester);
       await _pumpApp(tester,
@@ -356,6 +361,7 @@ void main() {
       await tester.tap(find.byTooltip('جست‌وجو'));
       await tester.pumpAndSettle();
       expect(find.byType(LibrarySearchScreen), findsOneWidget);
+      expect(find.byTooltip('بازگشت به موسیقی من'), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(LibrarySearchScreen), findsNothing);
