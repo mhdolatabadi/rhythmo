@@ -213,6 +213,7 @@ class PublicPlaylist {
     required this.isOwner,
     required this.trackCount,
     required this.likes,
+    this.subscriberCount,
   });
 
   factory PublicPlaylist.fromJson(Map<String, dynamic> json) => PublicPlaylist(
@@ -222,10 +223,15 @@ class PublicPlaylist {
         isOwner: json['isOwner'] == true,
         trackCount: json['trackCount'] as int? ?? 0,
         likes: PlaylistLikes.fromJson(json),
+        subscriberCount: json['subscriberCount'] as int?,
       );
 
   final String shareToken;
   final String name;
+
+  /// How many accounts follow it; null where the server doesn't offer
+  /// subscriptions.
+  final int? subscriberCount;
 
   /// The owner's email, masked.
   final String owner;
@@ -240,6 +246,7 @@ class PublicPlaylist {
         isOwner: isOwner,
         trackCount: trackCount,
         likes: likes,
+        subscriberCount: subscriberCount,
       );
 }
 
@@ -255,6 +262,7 @@ class SharedPlaylist {
     this.isPublic = false,
     this.likes = const PlaylistLikes(liked: false, likeCount: 0),
     this.subscription,
+    this.syncedFrom = const [],
   });
 
   factory SharedPlaylist.fromJson(
@@ -270,6 +278,10 @@ class SharedPlaylist {
         subscription: json.containsKey('subscribed')
             ? PlaylistSubscription.fromJson(json)
             : null,
+        syncedFrom: [
+          for (final provider in json['syncedFrom'] as List<dynamic>? ?? [])
+            provider as String,
+        ],
         tracks: [
           for (final track in json['tracks'] as List<dynamic>)
             Track.fromJson(track as Map<String, dynamic>,
@@ -298,6 +310,10 @@ class SharedPlaylist {
   /// subscriptions.
   final PlaylistSubscription? subscription;
 
+  /// The messengers («telegram», «bale») whose channels post into it
+  /// through a bot.
+  final List<String> syncedFrom;
+
   SharedPlaylist withLikes(PlaylistLikes likes) => SharedPlaylist(
         shareToken: shareToken,
         name: name,
@@ -308,6 +324,7 @@ class SharedPlaylist {
         isPublic: isPublic,
         likes: likes,
         subscription: subscription,
+        syncedFrom: syncedFrom,
       );
 
   SharedPlaylist withSubscription(PlaylistSubscription subscription) =>
@@ -321,6 +338,7 @@ class SharedPlaylist {
         isPublic: isPublic,
         likes: likes,
         subscription: subscription,
+        syncedFrom: syncedFrom,
       );
 }
 

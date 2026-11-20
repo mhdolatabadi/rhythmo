@@ -81,29 +81,29 @@ The owner asked for the current rhythmo palette from `lib/core/design/tokens.dar
   - Then «اخیرا شنیدی», a rail of 148 px covers.
   - Leave out: greetings or question headings, mood or genre tiles, «continue listening» with time left (a podcast pattern) and listening-hour stats (an audiobook pattern).
 - **اعلان‌ها:** a back header. One muted line explains that new songs from followed channels show here and as phone notifications, and that each channel is muted from its own page. Then the «تازه» and «قبلی» sections. Rows are a cover, one sentence with the channel name in bold, and a time. Unread rows have a coral dot.
-- **حساب و تنظیمات:**
-  - Account row: avatar, name, sign-in method, and an «ویرایش» pill.
+- **حساب و تنظیمات:** the «همگام‌سازی» group (auto-upload, Wi-Fi only) and the «اعلان‌ها» group (new songs, new followers) were dropped on 14 Nov 2026 (#451). Each channel is still muted from its own page.
+
+  - Account row: avatar, name and sign-in method. There is no «ویرایش» pill, because accounts have no profile to edit (owner's call, 14 Nov 2026, #451).
   - Then grouped cards on `surface`:
     - فضای ابری: usage line and a thin violet-to-coral bar,
     - پخش: quality, gapless, loudness,
-    - همگام‌سازی: auto-upload, Wi-Fi only, space used on the phone,
-    - اعلان‌ها: new songs in channels, new followers,
     - پشتیبانی,
     - a separate card for «خروج از حساب».
   - Admin entries stay for admins.
+- **Real-app screenshots:** `test/screenshots/app_screenshots_test.dart` renders the shipped screens into `store/tools/raw/` and `docs/screenshots/`. The images in `redesign-2026-11/` stay as the design reference.
 - **جستجو:**
   - Title, then a 48 px pill field.
   - «داغ در گنجینه» is a rank rail with big thin numerals on the covers, and «همه» opens گنجینه.
   - «فهرست‌های عمومی» is a rail of 148 px playlist cards with follower counts.
   - No genre tiles («سبک‌ها» was rejected).
 - **گنجینه:**
-  - A back header with one muted line, then chips: «داغ این هفته», «تازه‌ها», «فهرست‌ها».
+  - A back header with one muted line, then the tabs «آهنگ‌ها», «خواننده‌ها» and «آلبوم‌ها». The owner kept the tabs instead of the «داغ این هفته / تازه‌ها / فهرست‌ها» chips, so browsing by artist and album stays (14 Nov 2026, #451).
   - A ranked list: the number, a cover, title and artist, and the play count at the end.
   - Then «فهرست‌های عمومی پرطرفدار».
 - **فهرست عمومی (channel):**
   - A 132 px cover beside «فهرست عمومی», the name, its admins and the counts.
   - Then the «دنبال می‌کنی» pill, the bell button (mute this channel) and the coral play button.
-  - One muted line with the Telegram icon says posts sync from the Telegram channel.
+  - One muted line with the paper-plane icon says posts sync from the Telegram or Bale channel. The server sends the line's data as `syncedFrom`.
   - Then the track rows with their dates.
 - **پسندیده‌ها:** the title with a small count, then plain rows.
 - **در حال پخش:**
