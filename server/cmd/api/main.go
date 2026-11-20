@@ -308,6 +308,8 @@ func run() error {
 		return err
 	}
 
+	var transcriberWorker *transcription.Worker
+	var transcriptionJobs *store.Transcriptions
 	if endpoint := os.Getenv("TRANSCRIPTION_URL"); endpoint != "" {
 		if lyricsHandlers == nil {
 			return errors.New("transcription requires lyrics enabled")
@@ -318,6 +320,7 @@ func run() error {
 			return err
 		}
 		lyricsHandlers.Transcriptions = jobs
+		transcriberWorker, transcriptionJobs = worker, jobs
 		go worker.Run(ctx)
 	}
 
@@ -371,6 +374,20 @@ func run() error {
 			reporter = botMonitor
 		}
 		ops = httpapi.NewOpsHandlers(opsToken, reporter)
+		if transcriberWorker != nil {
+			ops.WithTranscription(func(ctx context.Context) (httpapi.TranscriptionHealth, error) {
+				counts, err := transcriptionJobs.QueueHealth(ctx)
+				if err != nil {
+					return httpapi.TranscriptionHealth{}, err
+				}
+				ready := transcriberWorker.Ready(ctx)
+				return httpapi.TranscriptionHealth{
+					Healthy: ready, ModelReady: ready,
+					Queued: counts.Queued, Processing: counts.Processing,
+					Failed: counts.Failed, OldestPendingSeconds: counts.OldestPendingSeconds,
+				}, nil
+			})
+		}
 	}
 	publicPages := httpapi.NewPublicPages(playlists, webMedia,
 		httpapi.AnonymousLimits{View: publicViewRate, Stream: publicStreamRate}).
