@@ -5,6 +5,7 @@ import math
 import os
 import tempfile
 import sys
+import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Lock
 
@@ -68,11 +69,37 @@ def make_handler(model, token):
 
         def do_POST(self):
             self.connection.settimeout(60)
-            if self.path != '/transcribe':
+            if self.path not in ('/transcribe', '/self-test'):
                 self.reply(404, {'error': 'not_found'})
                 return
             if not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer ' + token):
                 self.reply(401, {'error': 'unauthorized'})
+                return
+            if self.path == '/self-test':
+                # Runs actual inference on a tiny synthetic WAV. Unlike the
+                # readiness endpoint, this detects broken model decoding,
+                # low-memory conditions and inference initialization errors.
+                try:
+                    with tempfile.NamedTemporaryFile() as audio:
+                        with wave.open(audio, 'wb') as wav:
+                            wav.setnchannels(1)
+                            wav.setsampwidth(2)
+                            wav.setframerate(16000)
+                            wav.writeframes(bytes(16000))
+                        audio.flush()
+                        with inference_lock:
+                            segments, _ = model.transcribe(
+                                audio.name, language='fa', beam_size=1,
+                                condition_on_previous_text=False, vad_filter=False,
+                            )
+                            # Decoding/model calls can be lazy: consume them.
+                            for _ in segments:
+                                pass
+                    self.reply(200, {'status': 'inference_ok'})
+                except Exception as error:
+                    print(f'transcription self-test failed: {type(error).__name__}',
+                          file=sys.stderr, flush=True)
+                    self.reply(503, {'error': 'inference_unavailable'})
                 return
             try:
                 size = int(self.headers.get('Content-Length', '0'))
