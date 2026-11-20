@@ -133,6 +133,25 @@ class FakeStoreApi implements StoreApi {
 
 void main() {
   group('StoreController', () {
+    test('independent search results do not change the گنجینه filter',
+        () async {
+      final api = FakeStoreApi(
+          songs: [for (var i = 0; i < 3; i++) song(i)], pageSize: 1);
+      final store = StoreController(api: api, token: () => 'tok');
+      await store.songs.ensureLoaded();
+      final results = store.queryTracks('Song');
+      await results.ensureLoaded();
+      expect(results.items.map((item) => item.id), ['entry-0']);
+      expect(results.hasMore, isTrue);
+      await results.loadMore();
+      expect(results.items.map((item) => item.id), ['entry-0', 'entry-1']);
+      expect(store.query, isEmpty);
+      expect(store.songs.items.single.id, 'entry-0');
+      expect(api.calls, contains('tracks:tok:Song:null:null:0'));
+      results.dispose();
+      store.dispose();
+    });
+
     test('pages songs and drops a response a reload overtook', () async {
       final api = FakeStoreApi(
           songs: [for (var i = 0; i < 5; i++) song(i)], pageSize: 2);

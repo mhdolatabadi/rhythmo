@@ -29,8 +29,12 @@ type sharingStore struct {
 func (s *sharingStore) ListForUser(context.Context, string) ([]store.Playlist, error) {
 	return nil, nil
 }
-func (s *sharingStore) ForUser(context.Context, string, string) (store.Playlist, error) {
-	return store.Playlist{}, store.ErrNotFound
+func (s *sharingStore) ForUser(_ context.Context, userID, playlistID string) (store.Playlist, error) {
+	if userID != "alice" || playlistID != "p1" {
+		return store.Playlist{}, store.ErrNotFound
+	}
+	return store.Playlist{ID: "p1", OwnerID: "alice", Name: s.displayName(), Tracks: s.tracks,
+		IsPublic: s.public, ShareToken: s.token, PublicReview: s.review}, nil
 }
 func (s *sharingStore) SetCollabToken(context.Context, string, string, *string) (store.Playlist, error) {
 	return store.Playlist{}, errors.New("unused")

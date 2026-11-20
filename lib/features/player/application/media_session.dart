@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/player/application/audio_interruptions.dart';
 import 'package:rhythmo/features/player/application/player_controller.dart';
+import 'package:rhythmo/features/player/android/media_tree.dart';
 import 'package:rhythmo/features/player/data/notification_artwork.dart';
 
 /// Shown when a track has neither a title nor a filename.
@@ -33,6 +34,43 @@ class RhythmoAudioHandler extends BaseAudioHandler with SeekHandler {
     player.addListener(_sync);
     interruptions?.attach(player);
     _sync();
+  }
+
+  /// What Android Auto browses (#227); empty until the app sets it.
+  MediaLibrary Function() library = () => const MediaLibrary();
+
+  @override
+  Future<List<MediaItem>> getChildren(String parentMediaId,
+          [Map<String, dynamic>? options]) async =>
+      MediaTree(library()).children(parentMediaId);
+
+  @override
+  Future<MediaItem?> getMediaItem(String mediaId) async {
+    final tree = MediaTree(library());
+    final queue = tree.queueFor(mediaId);
+    if (queue == null) return null;
+    final bar = mediaId.lastIndexOf('|');
+    return bar < 0
+        ? const MediaItem(
+            id: MediaTree.shuffle,
+            title: 'پخش تصادفی موسیقی من',
+            playable: true)
+        : MediaTree.itemFor(
+            mediaId.substring(0, bar), queue.tracks[queue.index]);
+  }
+
+  /// Plays what the driver picked, in the list they picked it from.
+  @override
+  Future<void> playFromMediaId(String mediaId,
+      [Map<String, dynamic>? extras]) async {
+    final player = _player;
+    final queue = MediaTree(library()).queueFor(mediaId);
+    if (player == null || queue == null) return;
+    if (queue.shuffle) {
+      await player.playShuffled(queue.tracks);
+    } else {
+      await player.playFrom(queue.tracks, queue.index);
+    }
   }
 
   @override

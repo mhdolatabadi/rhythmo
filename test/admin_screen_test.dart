@@ -56,12 +56,14 @@ class FakeAdminApi implements AdminApi, AdminQuotaApi {
   Future<void> reviewPublication(
     String token,
     PendingPublication publication,
-    bool approved,
-  ) async {
+    bool approved, {
+    String reason = '',
+  }) async {
     if (reviewStatus case final status?) {
       throw ApiException('failed', statusCode: status);
     }
-    reviews.add('${approved ? 'approve' : 'reject'}:${publication.id}');
+    reviews.add('${approved ? 'approve' : 'reject'}:${publication.id}'
+        '${reason.isEmpty ? '' : ':$reason'}');
   }
 
   @override
@@ -257,6 +259,26 @@ void main() {
       await tester.pumpAndSettle();
       expect(api.reviews, ['approve:p1', 'reject:t1']);
       expect(find.text('درخواستی در انتظار نیست.'), findsOneWidget);
+    });
+
+    testWidgets('rejecting a playlist asks for a reason for its owner',
+        (tester) async {
+      final api = FakeAdminApi()
+        ..pending = [item('p1', PublicationKind.playlist, 'میکس')];
+      await pumpReview(tester, api);
+
+      await tester.tap(find.text('رد'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('انصراف'));
+      await tester.pumpAndSettle();
+      expect(api.reviews, isEmpty);
+
+      await tester.tap(find.text('رد'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'نام نامناسب است');
+      await tester.tap(find.widgetWithText(FilledButton, 'رد'));
+      await tester.pumpAndSettle();
+      expect(api.reviews, ['reject:p1:نام نامناسب است']);
     });
 
     testWidgets('a request decided elsewhere leaves the queue', (tester) async {

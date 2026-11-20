@@ -64,6 +64,26 @@ void main() {
       expect((title.left - (size.width - title.right)).abs(), lessThan(2));
     });
 
+    testWidgets('long now-playing titles wrap without overflow at $label',
+        (tester) async {
+      setSize(tester, size);
+      const title =
+          'عنوان طولانی یک سخنرانی که باید در دو خط نمایش داده شود و نه فقط یک خط';
+      await player.playFrom(const [
+        Track(
+          id: 'long-title',
+          title: title,
+          contentType: 'audio/mpeg',
+          sizeBytes: 1,
+        ),
+      ], 0);
+      await tester.pumpWidget(app(NowPlayingScreen(player: player)));
+      await tester.pumpAndSettle();
+      final heading = tester.widget<Text>(find.text(title).first);
+      expect(heading.maxLines, 2);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('the queue sheet uses shared rows and states at $label',
         (tester) async {
       setSize(tester, size);
