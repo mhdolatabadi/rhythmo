@@ -70,20 +70,33 @@ func (w *Worker) ready(ctx context.Context) bool {
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
+// Ready probes the authenticated inference service with a short deadline.
+// A running container is not necessarily a usable transcription model.
+func (w *Worker) Ready(ctx context.Context) bool { return w.ready(ctx) }
+
 func (w *Worker) Run(ctx context.Context) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
+	wasReady := false
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		if !w.ready(ctx) {
+			if wasReady {
+				slog.Warn("transcription service became unavailable")
+			}
+			wasReady = false
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
 			}
 			continue
+		}
+		if !wasReady {
+			slog.Info("transcription service ready")
+			wasReady = true
 		}
 		j, ok, err := w.Store.Claim(ctx, leaseDuration)
 		if err != nil {
@@ -107,7 +120,9 @@ func (w *Worker) process(ctx context.Context, j Job) {
 	} // Leave the lease for recovery after restart.
 	if err != nil {
 		r = Result{State: "failed"}
-		slog.Warn("transcription failed", "track", j.ID)
+		// Preserve the cause for operators without logging any audio or
+		// generated transcript. Previously every failure looked identical.
+		slog.Warn("transcription failed", "track", j.ID, "error", err)
 	}
 	finishCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
