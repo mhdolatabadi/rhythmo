@@ -25,7 +25,8 @@ func storeSite(t *testing.T, limits AnonymousLimits) (http.Handler, *fakeCatalog
 			Comment: str("my note"), ContentType: "audio/flac", SizeBytes: 31_876_000, DurationMS: &duration},
 	}}
 	token := strings.Repeat("A", 22)
-	pages := NewPublicPages(&sharingStore{token: &token, public: true, name: "mix"}, fixedPresigner{}, limits).WithStore(catalog)
+	pages := NewPublicPages(&sharingStore{token: &token, public: true, name: "mix"}, fixedPresigner{}, limits).WithStore(catalog).
+		WithProfiles(fakePublicProfiles{})
 	return NewHandler(Config{Public: pages}), catalog
 }
 

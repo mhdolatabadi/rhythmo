@@ -500,6 +500,8 @@ type SharedPlaylist struct {
 	// OwnerName is the owner's public display name, "" if they have none.
 	// The owner's email is never loaded for a shared view (#378).
 	OwnerName string
+	// OwnerHandle is the owner's @handle when their profile is public (#228).
+	OwnerHandle string
 	// SyncedFrom names the messengers ("bale", "telegram") whose channels
 	// post into this playlist through a bot (#430, #451).
 	SyncedFrom []string
@@ -511,12 +513,13 @@ func (p *Playlists) ForShareToken(ctx context.Context, token string) (SharedPlay
 	var shared SharedPlaylist
 	err := p.pool.QueryRow(ctx, `
 		SELECT `+qualifiedPlaylistColumns+`, COALESCE(users.display_name, ''),
+			CASE WHEN `+visibleProfile("users")+` THEN users.handle ELSE '' END,
 			ARRAY(SELECT DISTINCT provider FROM bot_channels WHERE playlist_id = playlists.id ORDER BY provider)
 		FROM playlists JOIN users ON users.id = playlists.owner_id
 		WHERE playlists.share_token = $1
 	`, token).Scan(&shared.ID, &shared.OwnerID, &shared.Name, &shared.Description, &shared.ShareToken,
 		&shared.IsPublic, &shared.PublicReview, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.OwnerName,
-		&shared.SyncedFrom)
+		&shared.OwnerHandle, &shared.SyncedFrom)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SharedPlaylist{}, ErrNotFound
 	}

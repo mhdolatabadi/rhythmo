@@ -25,6 +25,7 @@ func TestPublicDesignPreview(t *testing.T) {
 		"song":    "/store/t/" + storeEntryID,
 		"artist":  "/store/artists/AC%2FDC",
 		"privacy": "/privacy", "delete": "/delete-account",
+		"profile": "/u/sara",
 	} {
 		response := get(site, path)
 		if response.Code == 301 {
