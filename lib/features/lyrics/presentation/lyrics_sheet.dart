@@ -248,7 +248,8 @@ class _LyricsViewState extends State<LyricsView> {
         if (_extractionState != null &&
             _extractionState != 'done' &&
             _extractionState != 'queued' &&
-            _extractionState != 'processing')
+            _extractionState != 'processing' &&
+            _extractionState != 'disabled')
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
             child: FilledButton.tonalIcon(
@@ -260,6 +261,16 @@ class _LyricsViewState extends State<LyricsView> {
                   : _extractionState == 'failed'
                       ? 'تلاش دوباره برای استخراج از صدا'
                       : 'استخراج متن از صدا'),
+            ),
+          ),
+        if (_extractionState == 'disabled' &&
+            (result == null || result.status == LyricsStatus.notFound))
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Text(
+              'تبدیل صدا به متن روی سرور فعال یا آماده نیست. '
+              'این مشکل با جستجوی متن در LRCLIB حل نمی‌شود؛ '
+              'وضعیت سرویس باید بررسی شود.',
             ),
           ),
         if (_extractionError != null)
