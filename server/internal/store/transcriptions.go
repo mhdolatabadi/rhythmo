@@ -11,6 +11,29 @@ import (
 )
 
 type Transcriptions struct{ pool *pgxpool.Pool }
+// TranscriptionQueueHealth exposes only aggregate operational counts.
+// No user, track identifier or transcript appears in the diagnostic output.
+type TranscriptionQueueHealth struct {
+	Queued               int64
+	Processing           int64
+	Failed               int64
+	OldestPendingSeconds int64
+}
+
+func (s *Transcriptions) QueueHealth(ctx context.Context) (TranscriptionQueueHealth, error) {
+	var q TranscriptionQueueHealth
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			count(*) FILTER (WHERE state = 'queued'),
+			count(*) FILTER (WHERE state = 'processing'),
+			count(*) FILTER (WHERE state = 'failed'),
+			COALESCE(EXTRACT(EPOCH FROM
+				(now() - MIN(updated_at) FILTER (WHERE state IN ('queued','processing')))), 0)::bigint
+		FROM track_transcriptions
+	`).Scan(&q.Queued, &q.Processing, &q.Failed, &q.OldestPendingSeconds)
+	return q, err
+}
+
 
 func NewTranscriptions(pool *pgxpool.Pool) *Transcriptions { return &Transcriptions{pool} }
 func (s *Transcriptions) Status(ctx context.Context, id string) (transcription.Result, error) {
