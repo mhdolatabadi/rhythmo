@@ -22,11 +22,16 @@ class PlaybackSettings {
     this.externalPlayback = true,
     this.volume = 1,
     this.muted = false,
+    this.radio = false,
   });
 
   /// The listener's own volume from 0 to 1, below the device's.
   final double volume;
   final bool muted;
+
+  /// «ادامه با پخش مشابه»: when the queue runs out, similar tracks from the
+  /// listener's own library keep playing (#226). Off unless turned on.
+  final bool radio;
 
   /// Applies to tapping a row; explicit play-all actions keep the whole list.
   final bool playOnlySelected;
@@ -58,6 +63,7 @@ class PlaybackSettings {
       externalPlayback: json['externalPlayback'] is bool
           ? json['externalPlayback'] as bool
           : true,
+      radio: json['radio'] == true,
       speed: speed is num && playbackSpeeds.contains(speed.toDouble())
           ? speed.toDouble()
           : 1,
@@ -87,6 +93,7 @@ class PlaybackSettings {
         'externalPlayback': externalPlayback,
         'volume': volume,
         'muted': muted,
+        'radio': radio,
       };
 
   PlaybackSettings copyWith(
@@ -99,6 +106,7 @@ class PlaybackSettings {
           bool? externalPlayback,
           double? volume,
           bool? muted,
+          bool? radio,
           LoudnessMode? loudness}) =>
       PlaybackSettings(
         playOnlySelected: playOnlySelected ?? this.playOnlySelected,
@@ -106,6 +114,7 @@ class PlaybackSettings {
         skipSilence: skipSilence ?? this.skipSilence,
         systemControls: systemControls ?? this.systemControls,
         externalPlayback: externalPlayback ?? this.externalPlayback,
+        radio: radio ?? this.radio,
         speed: speed ?? this.speed,
         crossfade: crossfade ?? this.crossfade,
         loudness: loudness ?? this.loudness,

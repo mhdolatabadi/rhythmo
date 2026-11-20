@@ -1,4 +1,5 @@
 import 'package:rhythmo/features/bale_archive/bale_archive.dart';
+import 'package:rhythmo/features/for_you/data/for_you.dart';
 import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:rhythmo/features/settings/data/storage_request.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
@@ -429,7 +430,8 @@ class ApiClient
         AdminQuotaApi,
         StorageRequestApi,
         BaleArchiveApi,
-        BaleTopicCatalogApi {
+        BaleTopicCatalogApi,
+        ForYouApi {
   ApiClient(this.baseUri,
       {http.Client? httpClient, this.offlineCache, this.network})
       : _httpClient = httpClient ?? http.Client();
@@ -1223,6 +1225,23 @@ class ApiClient
             : '/api/v1/tracks/$id/like',
         token: token);
     return LikeState.fromJson(body);
+  }
+
+  @override
+  Future<ForYou> forYou(String token) async =>
+      ForYou.fromJson(await _send('GET', '/api/v1/for-you', token: token));
+
+  @override
+  Future<List<Track>> radio(
+      String token, List<String> seedIds, List<String> excludeIds) async {
+    final body = await _send('POST', '/api/v1/radio', token: token, body: {
+      'seeds': seedIds.take(20).toList(),
+      'exclude': excludeIds.take(500).toList(),
+    });
+    return [
+      for (final json in body['tracks'] as List<dynamic>? ?? const [])
+        Track.fromJson(json as Map<String, dynamic>),
+    ];
   }
 
   @override
