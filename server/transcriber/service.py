@@ -5,7 +5,8 @@ import math
 import os
 import tempfile
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Lock
 
 MAX_BYTES = 200 * 1024 * 1024
 MAX_SECONDS = 2 * 60 * 60
@@ -40,6 +41,10 @@ def transcript(segments):
 
 
 def make_handler(model, token):
+    # One inference at a time fits the server's CPU and memory budget.
+    # Other threads can still answer /health while Whisper works for minutes.
+    inference_lock = Lock()
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
             pass  # Never log headers or audio contents.
@@ -87,14 +92,15 @@ def make_handler(model, token):
                         remaining -= len(chunk)
                     audio.flush()
                     language = os.getenv('TRANSCRIPTION_LANGUAGE', 'fa')
-                    segments, info = model.transcribe(
-                        audio.name, language=None if language == 'auto' else language,
-                        beam_size=5, condition_on_previous_text=False, vad_filter=False,
-                    )
-                    if info.duration > MAX_SECONDS:
-                        self.reply(413, {'error': 'audio_too_long'})
-                        return
-                    result = transcript(segments)
+                    with inference_lock:
+                        segments, info = model.transcribe(
+                            audio.name, language=None if language == 'auto' else language,
+                            beam_size=5, condition_on_previous_text=False, vad_filter=False,
+                        )
+                        if info.duration > MAX_SECONDS:
+                            self.reply(413, {'error': 'audio_too_long'})
+                            return
+                        result = transcript(segments)
                 self.reply(200, result)
             except (BrokenPipeError, ConnectionResetError):
                 pass
@@ -122,4 +128,4 @@ if __name__ == '__main__':
                          device='cpu', compute_type='int8',
                          cpu_threads=int(os.getenv('TRANSCRIPTION_THREADS', '2')),
                          download_root='/models')
-    HTTPServer(('0.0.0.0', 8090), make_handler(model, secret)).serve_forever()
+    ThreadingHTTPServer(('0.0.0.0', 8090), make_handler(model, secret)).serve_forever()
