@@ -12,14 +12,13 @@ class DockItem {
   final IconData selectedIcon;
 }
 
-/// Where the signed-in dock takes the listener, in reading order. Each
-/// place in the app has this one way in; the account opens from the avatar
-/// in the header.
+/// Destinations in the signed-in app. Search is a header action, not a
+/// bottom-navigation tab; the account opens from the header avatar.
 enum DockDestination {
   home('خانه', RhythmoIcons.house, RhythmoIcons.houseFill),
-  search('جست‌وجو', RhythmoIcons.magnifyingGlass, RhythmoIcons.magnifyingGlass),
+  library('موسیقی من', RhythmoIcons.books, RhythmoIcons.booksFill),
   liked('پسندیده‌ها', RhythmoIcons.heart, RhythmoIcons.heartFill),
-  library('موسیقی من', RhythmoIcons.books, RhythmoIcons.booksFill);
+  search('جست‌وجو', RhythmoIcons.magnifyingGlass, RhythmoIcons.magnifyingGlass);
 
   const DockDestination(this.label, this.icon, this.selectedIcon);
   final String label;
@@ -36,7 +35,14 @@ const dockNavWidth = 520.0;
 /// The height of the dock's navigation row, above the system inset.
 const dockNavHeight = 58.0;
 
-/// The signed-in app's dock: the [DockDestination]s.
+/// Only primary signed-in destinations appear in the bottom dock.
+const primaryDockDestinations = <DockDestination>[
+  DockDestination.home,
+  DockDestination.library,
+  DockDestination.liked,
+];
+
+/// The signed-in app's dock: three primary destinations.
 class RhythmoDock extends StatelessWidget {
   const RhythmoDock({
     super.key,
@@ -52,9 +58,10 @@ class RhythmoDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) => RhythmoDockBar(
         player: player,
-        items: [for (final d in DockDestination.values) d.item],
-        selected: selected.index,
-        onSelect: (index) => onSelect(DockDestination.values[index]),
+        items: [for (final d in primaryDockDestinations) d.item],
+        // No tab is selected while the header's search is open.
+        selected: primaryDockDestinations.indexOf(selected),
+        onSelect: (index) => onSelect(primaryDockDestinations[index]),
       );
 }
 

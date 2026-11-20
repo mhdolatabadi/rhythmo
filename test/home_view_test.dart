@@ -183,7 +183,7 @@ void main() {
   });
 
   testWidgets(
-      'the dock is four named icons across a 360 px phone, with no account '
+      'the dock is three named icons across a 360 px phone, with no account '
       '(#444)', (tester) async {
     tester.view.physicalSize = const Size(360, 740);
     tester.view.devicePixelRatio = 1;
@@ -207,7 +207,7 @@ void main() {
     ));
 
     // Icons only: the names are for tooltips and screen readers.
-    for (final label in ['خانه', 'جست‌وجو', 'پسندیده‌ها', 'موسیقی من']) {
+    for (final label in ['خانه', 'موسیقی من', 'پسندیده‌ها']) {
       expect(find.text(label), findsNothing);
       final size = tester.getSize(find.byTooltip(label));
       expect(size.width, greaterThanOrEqualTo(48), reason: label);
@@ -217,8 +217,8 @@ void main() {
     expect(find.byTooltip('حساب'), findsNothing);
     await tester.tap(find.byTooltip('پسندیده‌ها'));
     expect(picked, DockDestination.liked);
-    await tester.tap(find.byTooltip('جست‌وجو'));
-    expect(picked, DockDestination.search);
+    // Search belongs to the app header, never the bottom dock.
+    expect(find.byTooltip('جست‌وجو'), findsNothing);
     expect(
         tester.getSemantics(find.byTooltip('خانه')),
         matchesSemantics(
@@ -229,7 +229,7 @@ void main() {
             hasTapAction: true));
     // Spread across the whole width, in reading order.
     expect(tester.getCenter(find.byTooltip('خانه')).dx, greaterThan(270));
-    expect(tester.getCenter(find.byTooltip('موسیقی من')).dx, lessThan(90));
+    expect(tester.getCenter(find.byTooltip('پسندیده‌ها')).dx, lessThan(90));
     expect(tester.takeException(), isNull);
   });
 
@@ -256,7 +256,7 @@ void main() {
     ));
 
     final first = tester.getRect(find.byTooltip('خانه'));
-    final last = tester.getRect(find.byTooltip('موسیقی من'));
+    final last = tester.getRect(find.byTooltip('پسندیده‌ها'));
     final middle = (first.center.dx + last.center.dx) / 2;
     expect((middle - 700).abs(), lessThan(1));
     // Capped at the 520 px row, not spread to the window's edges.

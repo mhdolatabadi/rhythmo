@@ -922,9 +922,13 @@ class _LibraryScreenState extends State<LibraryScreen>
           entry.track,
       ];
 
-  /// The header keeps only the notifications bell: every other place has
-  /// its one way in, from the dock or from «خانه».
+  /// Search is a global header action; the dock keeps only primary places.
   List<Widget> _headerActions(BuildContext context) => [
+        IconButton(
+          onPressed: () => _selectDestination(DockDestination.search),
+          tooltip: 'جست‌وجو',
+          icon: const Icon(RhythmoIcons.magnifyingGlass),
+        ),
         if (widget.notifications != null && widget.playlists != null)
           NotificationsButton(
               controller: widget.notifications!, onOpen: _openNotifications),
@@ -1227,6 +1231,7 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   Widget _searchDestination() => LibrarySearchScreen(
         embedded: true,
+        onBack: () => _selectDestination(DockDestination.library),
         changes: _libraryChanges,
         tracks: _unifiedTracks,
         libraryTracks: _unifiedTracks,
@@ -3526,6 +3531,7 @@ class LibrarySearchScreen extends StatefulWidget {
   const LibrarySearchScreen({
     super.key,
     this.embedded = false,
+    this.onBack,
     required this.changes,
     required this.tracks,
     required this.libraryTracks,
@@ -3537,8 +3543,11 @@ class LibrarySearchScreen extends StatefulWidget {
     this.onOpenStore,
   });
 
-  /// Embedded in the primary dock, without a second player or app bar.
+  /// Embedded in the app shell, without a second player or app bar.
   final bool embedded;
+
+  /// Returns from header-launched search to the primary library.
+  final VoidCallback? onBack;
 
   /// گنجینه, for «داغ در گنجینه» and matching public songs.
   final StoreController? store;
@@ -3715,11 +3724,20 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(24, 16, 24, 4),
-              child: Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: Text('جست‌وجو',
-                    style: Theme.of(context).textTheme.headlineMedium),
+              padding: const EdgeInsetsDirectional.fromSTEB(16, 16, 24, 4),
+              child: Row(
+                children: [
+                  if (widget.onBack != null)
+                    IconButton(
+                      tooltip: 'بازگشت به موسیقی من',
+                      onPressed: widget.onBack,
+                      icon: const BackButtonIcon(),
+                    ),
+                  Expanded(
+                    child: Text('جست‌وجو',
+                        style: Theme.of(context).textTheme.headlineMedium),
+                  ),
+                ],
               ),
             ),
             Expanded(child: searchBody),
