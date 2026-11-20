@@ -17,9 +17,9 @@ class DockItem {
 /// in the header.
 enum DockDestination {
   home('خانه', RhythmoIcons.house, RhythmoIcons.houseFill),
-  search('جست‌وجو', RhythmoIcons.magnifyingGlass, RhythmoIcons.magnifyingGlass),
+  library('موسیقی من', RhythmoIcons.books, RhythmoIcons.booksFill),
   liked('پسندیده‌ها', RhythmoIcons.heart, RhythmoIcons.heartFill),
-  library('موسیقی من', RhythmoIcons.books, RhythmoIcons.booksFill);
+  search('جست‌وجو', RhythmoIcons.magnifyingGlass, RhythmoIcons.magnifyingGlass);
 
   const DockDestination(this.label, this.icon, this.selectedIcon);
   final String label;
