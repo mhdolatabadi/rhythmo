@@ -2,8 +2,8 @@ import unittest
 from types import SimpleNamespace
 from service import transcript, make_handler, model_source, DEFAULT_MODEL
 from http.client import HTTPConnection
-from http.server import HTTPServer
-from threading import Thread
+from http.server import HTTPServer, ThreadingHTTPServer
+from threading import Event, Thread
 import os
 import tempfile
 
@@ -36,6 +36,51 @@ class ModelSourceTest(unittest.TestCase):
             self.assertIn(f'TRANSCRIPTION_MODEL:-{DEFAULT_MODEL}}}', compose.read())
 
 class PrivateServiceTest(unittest.TestCase):
+    def test_health_responds_while_model_is_busy(self):
+        started, release = Event(), Event()
+
+        class SlowModel:
+            def transcribe(self, _path, **_):
+                started.set()
+                if not release.wait(timeout=5):
+                    raise TimeoutError('test model never released')
+                return [SimpleNamespace(start=0, text='سلام')], SimpleNamespace(duration=1)
+
+        server = ThreadingHTTPServer(('127.0.0.1', 0),
+                                     make_handler(SlowModel(), 's' * 32))
+        serve = Thread(target=server.serve_forever, daemon=True)
+        serve.start()
+        response = []
+
+        def post():
+            connection = HTTPConnection(*server.server_address, timeout=5)
+            connection.request('POST', '/transcribe', b'audio', headers={
+                'Authorization': 'Bearer ' + 's' * 32})
+            message = connection.getresponse()
+            response.append(message.status)
+            message.read()
+            connection.close()
+
+        job = Thread(target=post, daemon=True)
+        try:
+            job.start()
+            self.assertTrue(started.wait(timeout=2))
+            health = HTTPConnection(*server.server_address, timeout=1)
+            health.request('GET', '/health', headers={
+                'Authorization': 'Bearer ' + 's' * 32})
+            result = health.getresponse()
+            self.assertEqual(result.status, 200)
+            result.read()
+            health.close()
+        finally:
+            release.set()
+            job.join(timeout=6)
+            server.shutdown()
+            server.server_close()
+            serve.join(timeout=3)
+        self.assertEqual(response, [200])
+
+
     def test_authentication_temporary_audio_and_health(self):
         class Model:
             path = None
