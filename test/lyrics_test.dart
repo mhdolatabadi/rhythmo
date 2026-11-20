@@ -362,6 +362,18 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('unavailable speech service is explained, not hidden',
+        (tester) async {
+      await open(tester, {
+        'song': const TrackLyrics(status: LyricsStatus.notFound),
+      });
+      expect(
+          find.textContaining('تبدیل صدا به متن روی سرور فعال یا آماده نیست'),
+          findsOneWidget);
+      expect(find.text('استخراج متن از صدا'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('not found says so, and the owner can search and pick',
         (tester) async {
       await open(tester, {

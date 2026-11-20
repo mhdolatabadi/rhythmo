@@ -491,6 +491,24 @@ much more accurate in Persian than `small`, is built into the image, so the serv
 needs no access to Hugging Face. Another `TRANSCRIPTION_MODEL` is downloaded on
 first start and reused from `transcription-models`. Recordings are never sent to a third party.
 
+A successful /api/v1/health or a running Docker container does **not** prove
+that Whisper can transcribe audio. The deployment now requires both an
+authenticated transcriber /health check and a private /self-test that decodes
+a generated tiny WAV and runs real model inference. The release fails if the
+model image cannot be pulled or these checks fail; automatic app publication
+does not proceed after an unsuccessful deploy. This synthetic smoke check
+verifies the runtime, **not** Persian speech recognition accuracy.
+
+With OPS_TOKEN configured, a private
+`GET /api/v1/ops/transcription` endpoint returns model readiness and only
+aggregate queued, processing and failed job counts plus age of the oldest
+pending job, without audio or user data. The deployment logs this status.
+For deeper diagnosis use `docker compose --profile transcription logs --tail=100
+api transcriber`; failed inference now records a safe error type in the
+transcriber log and the worker records the underlying error rather than
+silently losing its cause. No transcription token should be pasted into logs
+or chat.
+
 One job runs at a time, with at most two active jobs per owner. Limits are 200 MiB
 and 2 hours of decoded audio. Status persists through app closure. Temporary audio
 is deleted after each inference; transcripts are deleted with their track/account.

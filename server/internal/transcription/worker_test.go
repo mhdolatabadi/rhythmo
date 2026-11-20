@@ -22,6 +22,7 @@ func TestExtract(t *testing.T) {
 		ok         bool
 	}{
 		{"Persian timed text", `{"plain":"یا حسین","synced":"[00:01.00]یا حسین"}`, 200, true},
+		{"long Persian lecture text", `{"plain":"` + strings.Repeat("ا", 40000) + `"}`, 200, true},
 		{"empty", `{"plain":""}`, 200, false},
 		{"invalid JSON", `oops`, 200, false},
 		{"service error", `{}`, 503, false},

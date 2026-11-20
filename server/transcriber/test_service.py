@@ -2,8 +2,8 @@ import unittest
 from types import SimpleNamespace
 from service import transcript, make_handler, model_source, DEFAULT_MODEL
 from http.client import HTTPConnection
-from http.server import HTTPServer
-from threading import Thread
+from http.server import HTTPServer, ThreadingHTTPServer
+from threading import Event, Thread
 import os
 import tempfile
 
@@ -14,8 +14,12 @@ class TranscriptTest(unittest.TestCase):
         self.assertEqual(result['plain'], 'یا حسین سلام')
         self.assertEqual(result['synced'], '[01:01.25]یا حسین سلام')
 
+    def test_long_lecture_text_is_not_rejected_at_64_kib(self):
+        result = transcript([SimpleNamespace(start=0, text='ا' * 40000)])
+        self.assertEqual(result['plain'], 'ا' * 40000)
+
     def test_empty_and_oversized_results(self):
-        for segments in ([], [SimpleNamespace(start=0, text='ا' * 40000)]):
+        for segments in ([], [SimpleNamespace(start=0, text='ا' * 300000)]):
             with self.assertRaises(ValueError):
                 transcript(segments)
 
@@ -36,6 +40,51 @@ class ModelSourceTest(unittest.TestCase):
             self.assertIn(f'TRANSCRIPTION_MODEL:-{DEFAULT_MODEL}}}', compose.read())
 
 class PrivateServiceTest(unittest.TestCase):
+    def test_health_responds_while_model_is_busy(self):
+        started, release = Event(), Event()
+
+        class SlowModel:
+            def transcribe(self, _path, **_):
+                started.set()
+                if not release.wait(timeout=5):
+                    raise TimeoutError('test model never released')
+                return [SimpleNamespace(start=0, text='سلام')], SimpleNamespace(duration=1)
+
+        server = ThreadingHTTPServer(('127.0.0.1', 0),
+                                     make_handler(SlowModel(), 's' * 32))
+        serve = Thread(target=server.serve_forever, daemon=True)
+        serve.start()
+        response = []
+
+        def post():
+            connection = HTTPConnection(*server.server_address, timeout=5)
+            connection.request('POST', '/transcribe', b'audio', headers={
+                'Authorization': 'Bearer ' + 's' * 32})
+            message = connection.getresponse()
+            response.append(message.status)
+            message.read()
+            connection.close()
+
+        job = Thread(target=post, daemon=True)
+        try:
+            job.start()
+            self.assertTrue(started.wait(timeout=2))
+            health = HTTPConnection(*server.server_address, timeout=1)
+            health.request('GET', '/health', headers={
+                'Authorization': 'Bearer ' + 's' * 32})
+            result = health.getresponse()
+            self.assertEqual(result.status, 200)
+            result.read()
+            health.close()
+        finally:
+            release.set()
+            job.join(timeout=6)
+            server.shutdown()
+            server.server_close()
+            serve.join(timeout=3)
+        self.assertEqual(response, [200])
+
+
     def test_authentication_temporary_audio_and_health(self):
         class Model:
             path = None
@@ -58,8 +107,13 @@ class PrivateServiceTest(unittest.TestCase):
                 conn.close()
                 return status, data
             self.assertEqual(call('POST', '/transcribe', body=b'audio')[0], 401)
+            self.assertEqual(call('POST', '/self-test')[0], 401)
             self.assertIsNone(model.path)
             self.assertEqual(call('GET', '/health', 'Bearer ' + 'x' * 32)[0], 200)
+            status, body = call('POST', '/self-test', 'Bearer ' + 'x' * 32)
+            self.assertEqual(status, 200)
+            self.assertIn(b'inference_ok', body)
+            self.assertTrue(model.assert_audio.startswith(b'RIFF'))
             status, body = call('POST', '/transcribe', 'Bearer ' + 'x' * 32, b'audio')
             self.assertEqual(status, 200)
             self.assertIn('یا حسین'.encode(), body)

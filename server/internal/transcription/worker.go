@@ -17,6 +17,14 @@ import (
 var ErrBusy = errors.New("transcription queue full")
 
 const MaxFileBytes int64 = 200 << 20
+
+// The server accepts recordings up to two hours: the result must not be
+// rejected just because a long Persian lecture exceeds 64 KiB.
+const MaxPlainTextBytes = 512 << 10
+const MaxTimedTextBytes = 1024 << 10
+
+// JSON escapes line breaks and may be larger than the combined plain/timed text.
+const maxTranscriptResponseBytes = 2 << 20
 const leaseDuration = 2 * time.Hour
 
 type Result struct {
@@ -70,20 +78,34 @@ func (w *Worker) ready(ctx context.Context) bool {
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
+
+// Ready probes the authenticated inference service with a short deadline.
+// A running container is not necessarily a usable transcription model.
+func (w *Worker) Ready(ctx context.Context) bool { return w.ready(ctx) }
+
 func (w *Worker) Run(ctx context.Context) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
+	wasReady := false
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		if !w.ready(ctx) {
+			if wasReady {
+				slog.Warn("transcription service became unavailable")
+			}
+			wasReady = false
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
 			}
 			continue
+		}
+		if !wasReady {
+			slog.Info("transcription service ready")
+			wasReady = true
 		}
 		j, ok, err := w.Store.Claim(ctx, leaseDuration)
 		if err != nil {
@@ -107,7 +129,9 @@ func (w *Worker) process(ctx context.Context, j Job) {
 	} // Leave the lease for recovery after restart.
 	if err != nil {
 		r = Result{State: "failed"}
-		slog.Warn("transcription failed", "track", j.ID)
+		// Preserve the cause for operators without logging any audio or
+		// generated transcript. Previously every failure looked identical.
+		slog.Warn("transcription failed", "track", j.ID, "error", err)
 	}
 	finishCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -141,18 +165,18 @@ func (w *Worker) extract(ctx context.Context, j Job) (Result, error) {
 	if resp.StatusCode != http.StatusOK {
 		return Result{}, fmt.Errorf("transcription HTTP %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, (256<<10)+1))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTranscriptResponseBytes+1))
 	if err != nil {
 		return Result{}, err
 	}
-	if len(body) > 256<<10 {
+	if len(body) > maxTranscriptResponseBytes {
 		return Result{}, errors.New("transcript too large")
 	}
 	var r Result
 	if err = json.Unmarshal(body, &r); err != nil {
 		return Result{}, err
 	}
-	if strings.TrimSpace(r.Plain) == "" || len(r.Plain) > 64<<10 || len(r.Synced) > 128<<10 {
+	if strings.TrimSpace(r.Plain) == "" || len(r.Plain) > MaxPlainTextBytes || len(r.Synced) > MaxTimedTextBytes {
 		return Result{}, errors.New("invalid transcript")
 	}
 	r.State = "done"

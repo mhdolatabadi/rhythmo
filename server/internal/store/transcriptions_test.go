@@ -37,12 +37,21 @@ func TestTranscriptionQueue(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	health, err := jobs.QueueHealth(ctx)
+	if err != nil || health.Queued != 2 || health.Processing != 0 || health.Failed != 0 {
+		t.Fatalf("queued health = %+v err %v", health, err)
+	}
 	if err := jobs.Queue(ctx, alice.ID, third.ID); !errors.Is(err, transcription.ErrBusy) {
 		t.Fatalf("limit: %v", err)
 	}
 	j, ok, err := jobs.Claim(ctx, time.Hour)
 	if err != nil || !ok {
 		t.Fatalf("claim: %v", err)
+	}
+	health, err = jobs.QueueHealth(ctx)
+	if err != nil || health.Queued != 1 || health.Processing != 1 ||
+		health.OldestPendingSeconds < 0 {
+		t.Fatalf("processing health = %+v err %v", health, err)
 	}
 	late := j
 	late.Lease = late.Lease.Add(-time.Second)

@@ -69,7 +69,9 @@ class LyricsController extends ChangeNotifier with QuietAfterDispose {
       return await (_api as TranscriptionApi)
           .transcription(_token()!, track.id, start: start);
     } on ApiException catch (error) {
-      if (!start && error.code == 'transcription_disabled') return null;
+      if (!start && error.code == 'transcription_disabled') {
+        return {'state': 'disabled'};
+      }
       rethrow;
     }
   }
