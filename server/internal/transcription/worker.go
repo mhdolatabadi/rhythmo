@@ -17,6 +17,7 @@ import (
 var ErrBusy = errors.New("transcription queue full")
 
 const MaxFileBytes int64 = 200 << 20
+
 // The server accepts recordings up to two hours: the result must not be
 // rejected just because a long Persian lecture exceeds 64 KiB.
 const MaxPlainTextBytes = 512 << 10
@@ -75,6 +76,7 @@ func (w *Worker) ready(ctx context.Context) bool {
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
+
 // Ready probes the authenticated inference service with a short deadline.
 // A running container is not necessarily a usable transcription model.
 func (w *Worker) Ready(ctx context.Context) bool { return w.ready(ctx) }
