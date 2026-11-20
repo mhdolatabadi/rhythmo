@@ -134,6 +134,8 @@ func (p *Playlists) ListForUser(ctx context.Context, userID string) ([]Playlist,
 			   AND tracks.status = 'ready'
 			   AND `+trackBelongs("tracks", "playlists")+`),
 			`+isAdmin("playlists", "$1")+`,
+			COALESCE((SELECT po.occasion FROM playlist_occasions po
+				WHERE po.playlist_id = playlists.id AND po.user_id::text = $1), ''),
 			CASE WHEN playlists.public_review = 'rejected' THEN playlists.public_review_reason END
 		FROM playlists
 		WHERE `+canEdit("playlists", "$1")+`
@@ -515,7 +517,7 @@ func (p *Playlists) ForShareToken(ctx context.Context, token string) (SharedPlay
 		FROM playlists JOIN users ON users.id = playlists.owner_id
 		WHERE playlists.share_token = $1
 	`, token).Scan(&shared.ID, &shared.OwnerID, &shared.Name, &shared.Description, &shared.ShareToken,
-		&shared.IsPublic, &shared.PublicReview, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.OwnerName,
+		&shared.IsPublic, &shared.PublicReview, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.GoalTracks, &shared.OwnerName,
 		&shared.SyncedFrom)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SharedPlaylist{}, ErrNotFound
