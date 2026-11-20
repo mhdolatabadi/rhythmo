@@ -162,6 +162,14 @@ class StoreController extends ChangeNotifier with QuietAfterDispose {
     ]);
   }
 
+  /// A search-owned public-song listing, independent of the گنجینه screen's
+  /// filters. Disposing it cancels UI notifications when the query changes.
+  StoreListing<Track> queryTracks(String query) {
+    final term = query.trim();
+    return StoreListing<Track>(
+        (offset) => _api.storeTracks(_token(), query: term, offset: offset));
+  }
+
   /// [search] once typing rests for [searchDelay].
   void searchSoon(String query) {
     _searchTimer?.cancel();

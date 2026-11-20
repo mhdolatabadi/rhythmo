@@ -971,19 +971,11 @@ class _LibraryScreenState extends State<LibraryScreen>
           );
   }
 
-  void _selectDestination(DockDestination destination) {
-    switch (destination) {
-      // Search opens as its own page.
-      case DockDestination.search:
-        _openSearch();
-      case DockDestination.home ||
-            DockDestination.liked ||
-            DockDestination.library:
-        setState(() => _destination = destination);
-    }
-  }
+  void _selectDestination(DockDestination destination) =>
+      setState(() => _destination = destination);
 
   Widget _destinationBody(BuildContext context) => switch (_destination) {
+        DockDestination.search => _searchDestination(),
         DockDestination.home => HomeView(
             header: _appBar(context),
             player: widget.player,
@@ -1191,9 +1183,8 @@ class _LibraryScreenState extends State<LibraryScreen>
         if (widget.botLinks != null) widget.botLinks,
       ]);
 
-  void _openSearch() {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => LibrarySearchScreen(
+  Widget _searchDestination() => LibrarySearchScreen(
+        embedded: true,
         changes: _libraryChanges,
         tracks: _unifiedTracks,
         libraryTracks: _unifiedTracks,
@@ -1203,9 +1194,7 @@ class _LibraryScreenState extends State<LibraryScreen>
         recentSearches: _recentSearches,
         store: widget.store,
         onOpenStore: widget.store == null ? null : _openStore,
-      ),
-    ));
-  }
+      );
 
   Widget _unifiedLibrary() => ListenableBuilder(
         listenable: _libraryChanges,
@@ -3457,6 +3446,7 @@ class RecentlyPlayedScreen extends StatelessWidget {
 class LibrarySearchScreen extends StatefulWidget {
   const LibrarySearchScreen({
     super.key,
+    this.embedded = false,
     required this.changes,
     required this.tracks,
     required this.libraryTracks,
@@ -3468,7 +3458,10 @@ class LibrarySearchScreen extends StatefulWidget {
     this.onOpenStore,
   });
 
-  /// گنجینه, for «داغ در گنجینه» while the field is empty; null hides it.
+  /// Embedded in the primary dock, without a second player or app bar.
+  final bool embedded;
+
+  /// گنجینه, for «داغ در گنجینه» and matching public songs.
   final StoreController? store;
 
   /// Opens گنجینه, from «همه».
@@ -3498,6 +3491,28 @@ class LibrarySearchScreen extends StatefulWidget {
 class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
   final TextEditingController _field = TextEditingController();
   String _query = '';
+  Timer? _storeTimer;
+  StoreListing<Track>? _storeMatches;
+
+  void _scheduleStoreSearch(String query) {
+    _storeTimer?.cancel();
+    _storeMatches?.dispose();
+    _storeMatches = null;
+    final term = query.trim();
+    if (term.isEmpty || widget.store == null) return;
+    final listing = widget.store!.queryTracks(term);
+    _storeMatches = listing;
+    _storeTimer = Timer(StoreController.searchDelay, () {
+      if (mounted && identical(_storeMatches, listing)) {
+        unawaited(listing.ensureLoaded());
+      }
+    });
+  }
+
+  void _setQuery(String query) {
+    _scheduleStoreSearch(query);
+    setState(() => _query = query);
+  }
 
   @override
   void initState() {
@@ -3517,13 +3532,15 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
 
   @override
   void dispose() {
+    _storeTimer?.cancel();
+    _storeMatches?.dispose();
     _field.dispose();
     super.dispose();
   }
 
   void _clear() {
     _field.clear();
-    setState(() => _query = '');
+    _setQuery('');
   }
 
   /// Remembers the current search once it led somewhere.
@@ -3532,7 +3549,7 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
   void _runRecent(String query) {
     _field.text = query;
     _field.selection = TextSelection.collapsed(offset: query.length);
-    setState(() => _query = query);
+    _setQuery(query);
     _remember();
   }
 
@@ -3565,58 +3582,76 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
   @override
   Widget build(BuildContext context) {
     final playlists = widget.playlists;
+    final searchBody = LayoutBuilder(
+      builder: (context, constraints) {
+        final side = constraints.maxWidth >= 900
+            ? ((constraints.maxWidth - 880) / 2).clamp(40.0, 10000.0)
+            : 16.0;
+        return Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(side, 8, side, 8),
+              // One node for the whole bar, so a screen reader finds a
+              // labelled 48 px field rather than a bare tap area.
+              child: MergeSemantics(
+                child: SearchBar(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  controller: _field,
+                  autoFocus: true,
+                  hintText: 'آهنگ، خواننده، آلبوم یا فهرست پخش',
+                  leading: const Icon(RhythmoIcons.magnifyingGlass),
+                  textInputAction: TextInputAction.search,
+                  trailing: [
+                    if (_query.isNotEmpty)
+                      IconButton(
+                        tooltip: 'پاک کردن جست‌وجو',
+                        onPressed: _clear,
+                        icon: const Icon(RhythmoIcons.x),
+                      ),
+                  ],
+                  onChanged: _setQuery,
+                  onSubmitted: (_) => _remember(),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListenableBuilder(
+                listenable: Listenable.merge([
+                  widget.changes,
+                  widget.player,
+                  if (playlists != null) playlists,
+                  if (_storeMatches case final matches?) matches,
+                  if (widget.recentSearches case final recent?) recent,
+                ]),
+                builder: (context, _) => _results(context, side),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    if (widget.embedded) {
+      return SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(24, 16, 24, 4),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text('جست‌وجو',
+                    style: Theme.of(context).textTheme.headlineMedium),
+              ),
+            ),
+            Expanded(child: searchBody),
+          ],
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('جست‌وجو')),
       bottomNavigationBar: MiniPlayer(player: widget.player),
-      body: RhythmoBackdrop(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final side = constraints.maxWidth >= 900
-                ? ((constraints.maxWidth - 880) / 2).clamp(40.0, 10000.0)
-                : 16.0;
-            return Column(
-              children: [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(side, 8, side, 8),
-                  // One node for the whole bar, so a screen reader finds a
-                  // labelled 48 px field rather than a bare tap area.
-                  child: MergeSemantics(
-                    child: SearchBar(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      controller: _field,
-                      autoFocus: true,
-                      hintText: 'آهنگ، خواننده، آلبوم یا فهرست پخش',
-                      leading: const Icon(RhythmoIcons.magnifyingGlass),
-                      textInputAction: TextInputAction.search,
-                      trailing: [
-                        if (_query.isNotEmpty)
-                          IconButton(
-                            tooltip: 'پاک کردن جست‌وجو',
-                            onPressed: _clear,
-                            icon: const Icon(RhythmoIcons.x),
-                          ),
-                      ],
-                      onChanged: (value) => setState(() => _query = value),
-                      onSubmitted: (_) => _remember(),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: ListenableBuilder(
-                    listenable: Listenable.merge([
-                      widget.changes,
-                      widget.player,
-                      if (playlists != null) playlists,
-                      if (widget.recentSearches case final recent?) recent,
-                    ]),
-                    builder: (context, _) => _results(context, side),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+      body: RhythmoBackdrop(child: searchBody),
     );
   }
 
@@ -3699,10 +3734,18 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
         : (playlists.popular.isEmpty
             ? playlists.popularStatus
             : PlaylistsStatus.loaded);
+    final catalog = _storeMatches;
+    final storeSongs = catalog?.items ?? const <Track>[];
+    final storeWaiting = catalog != null &&
+        (catalog.status == StoreStatus.idle ||
+            catalog.status == StoreStatus.loading);
 
     if (tracks.isEmpty &&
         mine.isEmpty &&
         popular.isEmpty &&
+        storeSongs.isEmpty &&
+        !storeWaiting &&
+        catalog?.status != StoreStatus.error &&
         mineState == PlaylistsStatus.loaded &&
         popularState == PlaylistsStatus.loaded) {
       return centered(_LibraryState(
@@ -3748,6 +3791,69 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
                   );
                 },
               ),
+            ],
+            if (catalog != null) ...[
+              if (storeSongs.isNotEmpty || catalog.status != StoreStatus.loaded)
+                _ResultsHeader(
+                    title: 'آهنگ‌های گنجینه', count: storeSongs.length),
+              if (storeWaiting)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ),
+              if (catalog.status == StoreStatus.error)
+                SliverToBoxAdapter(
+                  child: Row(
+                    children: [
+                      const Expanded(
+                          child: Text('جست‌وجوی گنجینه در دسترس نیست.')),
+                      TextButton(
+                        onPressed: catalog.refresh,
+                        child: const Text('تلاش دوباره'),
+                      ),
+                    ],
+                  ),
+                ),
+              SliverList.separated(
+                itemCount: storeSongs.length,
+                separatorBuilder: (_, __) => const _RowHairline(),
+                itemBuilder: (context, index) {
+                  final track = storeSongs[index];
+                  return _TrackRow(
+                    track: track,
+                    current: widget.player.track?.id == track.id,
+                    onTap: () {
+                      _remember();
+                      widget.player.playTapped(storeSongs, index);
+                    },
+                    actions: null,
+                  );
+                },
+              ),
+              if (catalog.status == StoreStatus.loaded && catalog.hasMore)
+                SliverToBoxAdapter(
+                  child: Center(
+                    child: TextButton(
+                      onPressed: () => unawaited(catalog.loadMore()),
+                      child: const Text('آهنگ‌های بیشتر از گنجینه'),
+                    ),
+                  ),
+                ),
+              if (storeSongs.isNotEmpty && widget.onOpenStore != null)
+                SliverToBoxAdapter(
+                  child: Center(
+                    child: TextButton(
+                      onPressed: () {
+                        _remember();
+                        unawaited(widget.store!.search(_query));
+                        widget.onOpenStore?.call();
+                      },
+                      child: const Text('دیدن همه در گنجینه'),
+                    ),
+                  ),
+                ),
             ],
             if (playlists != null) ...[
               if (mine.isNotEmpty || mineState != PlaylistsStatus.loaded)
