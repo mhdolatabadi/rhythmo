@@ -328,8 +328,7 @@ void main() {
       await tester.tap(find.byTooltip('جست‌وجو'));
       await tester.pumpAndSettle();
       expect(find.byType(RhythmoDock), findsOneWidget);
-      expect(
-          tester.widget<RhythmoDock>(find.byType(RhythmoDock)).selected,
+      expect(tester.widget<RhythmoDock>(find.byType(RhythmoDock)).selected,
           DockDestination.search);
       await tester.enterText(_searchField, 'گنجینه');
       await tester.pump(const Duration(milliseconds: 500));
@@ -342,8 +341,7 @@ void main() {
       await tester.tap(find.byTooltip('موسیقی من'));
       await tester.pumpAndSettle();
       expect(find.byType(LibrarySearchScreen), findsNothing);
-      expect(
-          tester.widget<RhythmoDock>(find.byType(RhythmoDock)).selected,
+      expect(tester.widget<RhythmoDock>(find.byType(RhythmoDock)).selected,
           DockDestination.library);
       expect(tester.takeException(), isNull);
     });
