@@ -3631,18 +3631,21 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
           },
         );
     if (widget.embedded) {
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(24, 16, 24, 4),
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text('جست‌وجو',
-                  style: Theme.of(context).textTheme.headlineMedium),
+      return SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(24, 16, 24, 4),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text('جست‌وجو',
+                    style: Theme.of(context).textTheme.headlineMedium),
+              ),
             ),
-          ),
-          Expanded(child: searchBody),
-        ],
+            Expanded(child: searchBody),
+          ],
+        ),
       );
     }
     return Scaffold(
