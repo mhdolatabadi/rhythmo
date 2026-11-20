@@ -2,4 +2,12 @@
 <resources>
     <!-- Matches the app's dark surface and the web loading screen. -->
     <color name="rhythmo_background">#121318</color>
+    <!-- The home-screen widget (#227): the night surface, light text and
+         the one coral control. -->
+    <color name="widget_surface">#F0121522</color>
+    <color name="widget_text">#F5F1F7</color>
+    <color name="widget_muted">#D0C8D4</color>
+    <color name="widget_primary">#FF626A</color>
+    <color name="widget_on_primary">#250005</color>
+    <color name="widget_cover">#2A2454</color>
 </resources>

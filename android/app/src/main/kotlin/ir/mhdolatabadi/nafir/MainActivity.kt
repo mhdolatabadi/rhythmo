@@ -56,6 +56,19 @@ class MainActivity : AudioServiceActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // The home-screen widget shows what the player plays (#227).
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "ir.mhdolatabadi.nafir/widget",
+        ).setMethodCallHandler { call, result ->
+            if (call.method == "update") {
+                @Suppress("UNCHECKED_CAST")
+                RhythmoWidget.save(applicationContext, call.arguments as? Map<String, Any?> ?: emptyMap())
+                result.success(null)
+            } else {
+                result.notImplemented()
+            }
+        }
         initialLink = linkOf(intent)
         linksChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

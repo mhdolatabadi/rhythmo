@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android Auto (#227): rhythmo is a media app; the car browses it through
+     audio_service's MediaBrowserService. -->
+<automotiveApp>
+    <uses name="media"/>
+</automotiveApp>
