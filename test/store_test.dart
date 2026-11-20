@@ -133,7 +133,8 @@ class FakeStoreApi implements StoreApi {
 
 void main() {
   group('StoreController', () {
-    test('independent search results do not change the گنجینه filter', () async {
+    test('independent search results do not change the گنجینه filter',
+        () async {
       final api = FakeStoreApi(
           songs: [for (var i = 0; i < 3; i++) song(i)], pageSize: 1);
       final store = StoreController(api: api, token: () => 'tok');
