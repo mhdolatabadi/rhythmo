@@ -17,6 +17,11 @@ import (
 var ErrBusy = errors.New("transcription queue full")
 
 const MaxFileBytes int64 = 200 << 20
+// The server accepts recordings up to two hours: the result must not be
+// rejected just because a long Persian lecture exceeds 64 KiB.
+const MaxPlainTextBytes = 512 << 10
+const MaxTimedTextBytes = 1024 << 10
+const maxTranscriptResponseBytes = MaxPlainTextBytes + MaxTimedTextBytes + 2048
 const leaseDuration = 2 * time.Hour
 
 type Result struct {
@@ -156,18 +161,18 @@ func (w *Worker) extract(ctx context.Context, j Job) (Result, error) {
 	if resp.StatusCode != http.StatusOK {
 		return Result{}, fmt.Errorf("transcription HTTP %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, (256<<10)+1))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTranscriptResponseBytes+1))
 	if err != nil {
 		return Result{}, err
 	}
-	if len(body) > 256<<10 {
+	if len(body) > maxTranscriptResponseBytes {
 		return Result{}, errors.New("transcript too large")
 	}
 	var r Result
 	if err = json.Unmarshal(body, &r); err != nil {
 		return Result{}, err
 	}
-	if strings.TrimSpace(r.Plain) == "" || len(r.Plain) > 64<<10 || len(r.Synced) > 128<<10 {
+	if strings.TrimSpace(r.Plain) == "" || len(r.Plain) > MaxPlainTextBytes || len(r.Synced) > MaxTimedTextBytes {
 		return Result{}, errors.New("invalid transcript")
 	}
 	r.State = "done"
