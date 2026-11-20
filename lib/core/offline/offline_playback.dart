@@ -77,4 +77,4 @@ class OfflinePlaybackScope extends InheritedNotifier<OfflinePlayback> {
 
 /// What a listener is told on tapping a song that can't play offline.
 const offlineUnavailableMessage =
-    'این آهنگ روی دستگاه نیست؛ با وصل‌شدن اینترنت پخش می‌شود.';
+    'این آهنگ روی دستگاه نیست؛ اینترنت را وصل کن یا وقتی آنلاین شدی برای آفلاین ذخیره‌اش کن.';
