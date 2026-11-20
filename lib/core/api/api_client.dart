@@ -445,7 +445,9 @@ class ApiClient
         StorageRequestApi,
         BaleArchiveApi,
         BaleTopicCatalogApi,
-        ForYouApi {
+        ForYouApi,
+        SocialApi,
+        AdminProfileReportsApi {
   ApiClient(this.baseUri,
       {http.Client? httpClient, this.offlineCache, this.network})
       : _httpClient = httpClient ?? http.Client();
