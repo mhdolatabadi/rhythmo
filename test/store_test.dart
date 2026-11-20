@@ -143,7 +143,7 @@ void main() {
       expect(results.items.map((item) => item.id), ['entry-0']);
       expect(results.hasMore, isTrue);
       await results.loadMore();
-      expect(results.items.map((item) => item.id, ['entry-0', 'entry-1']);
+      expect(results.items.map((item) => item.id), ['entry-0', 'entry-1']);
       expect(store.query, isEmpty);
       expect(store.songs.items.single.id, 'entry-0');
       expect(api.calls, contains('tracks:tok:Song:null:null:0'));
