@@ -22,7 +22,8 @@ const MaxFileBytes int64 = 200 << 20
 // rejected just because a long Persian lecture exceeds 64 KiB.
 const MaxPlainTextBytes = 512 << 10
 const MaxTimedTextBytes = 1024 << 10
-const maxTranscriptResponseBytes = MaxPlainTextBytes + MaxTimedTextBytes + 2048
+// JSON escapes line breaks and may be larger than the combined plain/timed text.
+const maxTranscriptResponseBytes = 2 << 20
 const leaseDuration = 2 * time.Hour
 
 type Result struct {
