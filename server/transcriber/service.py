@@ -4,6 +4,7 @@ import json
 import math
 import os
 import tempfile
+import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 MAX_BYTES = 200 * 1024 * 1024
@@ -97,7 +98,12 @@ def make_handler(model, token):
                 self.reply(200, result)
             except (BrokenPipeError, ConnectionResetError):
                 pass
-            except Exception:
+            except Exception as error:
+                # No raw audio, recognized text or authorization header in
+                # logs. The exception type is enough to separate decode,
+                # allocation and inference errors during an outage.
+                print(f'transcription inference failed: {type(error).__name__}',
+                      file=sys.stderr, flush=True)
                 self.reply(422, {'error': 'transcription_failed'})
 
     return Handler
@@ -108,7 +114,11 @@ if __name__ == '__main__':
     secret = os.environ['TRANSCRIPTION_TOKEN']
     if len(secret) < 32:
         raise ValueError('TRANSCRIPTION_TOKEN must contain at least 32 characters')
-    model = WhisperModel(model_source(os.getenv('TRANSCRIPTION_MODEL', DEFAULT_MODEL)),
+    configured_model = os.getenv('TRANSCRIPTION_MODEL', DEFAULT_MODEL)
+    model_location = model_source(configured_model)
+    if configured_model == DEFAULT_MODEL and model_location == configured_model:
+        raise RuntimeError('Bundled transcription model is missing from image')
+    model = WhisperModel(model_location,
                          device='cpu', compute_type='int8',
                          cpu_threads=int(os.getenv('TRANSCRIPTION_THREADS', '2')),
                          download_root='/models')
