@@ -207,7 +207,7 @@ void main() {
     ));
 
     // Icons only: the names are for tooltips and screen readers.
-    for (final label in ['خانه', 'جست‌وجو', 'پسندیده‌ها', 'موسیقی من']) {
+    for (final label in ['خانه', 'موسیقی من', 'پسندیده‌ها', 'جست‌وجو']) {
       expect(find.text(label), findsNothing);
       final size = tester.getSize(find.byTooltip(label));
       expect(size.width, greaterThanOrEqualTo(48), reason: label);
@@ -229,7 +229,7 @@ void main() {
             hasTapAction: true));
     // Spread across the whole width, in reading order.
     expect(tester.getCenter(find.byTooltip('خانه')).dx, greaterThan(270));
-    expect(tester.getCenter(find.byTooltip('موسیقی من')).dx, lessThan(90));
+    expect(tester.getCenter(find.byTooltip('جست‌وجو')).dx, lessThan(90));
     expect(tester.takeException(), isNull);
   });
 
@@ -256,7 +256,7 @@ void main() {
     ));
 
     final first = tester.getRect(find.byTooltip('خانه'));
-    final last = tester.getRect(find.byTooltip('موسیقی من'));
+    final last = tester.getRect(find.byTooltip('جست‌وجو'));
     final middle = (first.center.dx + last.center.dx) / 2;
     expect((middle - 700).abs(), lessThan(1));
     // Capped at the 520 px row, not spread to the window's edges.
