@@ -444,12 +444,18 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
   Future<PlaylistShare?> share(String id, {bool? public}) async {
     final token = _token();
     if (token == null) return null;
+    lastErrorCode = null;
     try {
       return await _api.sharePlaylist(token, id, public: public);
-    } catch (_) {
+    } catch (error) {
+      if (error is ApiException) lastErrorCode = error.code;
       return null;
     }
   }
+
+  /// The server's error code from the last failed [share] or [rename], such
+  /// as `inappropriate_content` (#207); null when it gave none.
+  String? lastErrorCode;
 
   /// Stops sharing; the old link stops working. Returns whether it worked.
   Future<bool> unshare(String id) async {
@@ -763,11 +769,13 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
     }
     final token = _token();
     if (token == null) return false;
+    lastErrorCode = null;
     try {
       await _api.renamePlaylist(token, id, name, description: description);
       await load();
       return true;
     } catch (error) {
+      if (error is ApiException) lastErrorCode = error.code;
       final outbox = _outbox;
       if (outbox == null || !isUnreachable(error)) return false;
       // Offline: the new name shows now and is sent once back online.
@@ -785,6 +793,58 @@ class PlaylistsController extends ChangeNotifier with QuietAfterDispose {
       ];
       notifyListeners();
       return true;
+    }
+  }
+
+  /// Whether the server keeps shared goals and occasion collections.
+  bool get supportsGoals => _api is PlaylistGoalsApi;
+
+  /// The listener's occasion collections, by name, as they filed them.
+  List<String> get occasions {
+    final names = <String>{
+      for (final p in playlists)
+        if (p.occasion.isNotEmpty) p.occasion
+    };
+    return names.toList()..sort();
+  }
+
+  void _replace(String id, Playlist Function(Playlist) change) {
+    playlists = [
+      for (final p in playlists) p.id == id ? change(p) : p,
+    ];
+    notifyListeners();
+  }
+
+  /// Sets or clears ([goal] null) the shared goal (#276). It shows at once
+  /// and goes back to what it was when the server says no.
+  Future<bool> setGoal(String id, int? goal) async {
+    final token = _token(), api = _api;
+    if (token == null || api is! PlaylistGoalsApi) return false;
+    final before = playlists.where((p) => p.id == id).firstOrNull;
+    _replace(id, (p) => p.withGoal(goal: goal, clearGoal: goal == null));
+    try {
+      await (api as PlaylistGoalsApi).setPlaylistGoal(token, id, goal);
+      return true;
+    } catch (_) {
+      if (before != null) _replace(id, (_) => before);
+      return false;
+    }
+  }
+
+  /// Files the playlist under [occasion], or "" takes it out; just for
+  /// this listener. Undone when the server says no.
+  Future<bool> setOccasion(String id, String occasion) async {
+    final token = _token(), api = _api;
+    if (token == null || api is! PlaylistGoalsApi) return false;
+    final name = occasion.trim().split(RegExp(r'\s+')).join(' ');
+    final before = playlists.where((p) => p.id == id).firstOrNull;
+    _replace(id, (p) => p.withGoal(occasion: name));
+    try {
+      await (api as PlaylistGoalsApi).setPlaylistOccasion(token, id, name);
+      return true;
+    } catch (_) {
+      if (before != null) _replace(id, (_) => before);
+      return false;
     }
   }
 

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:rhythmo/features/social/presentation/social_scope.dart';
 import 'package:rhythmo/features/feedback/feedback_screen.dart';
 import 'package:rhythmo/features/identify/application/identify_controller.dart';
+import 'package:rhythmo/features/for_you/application/for_you_controller.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
 import 'package:rhythmo/core/widgets/rhythmo_icons.dart';
 import 'package:rhythmo/app/app_configuration.dart';
@@ -40,6 +41,7 @@ class AuthGate extends StatefulWidget {
     required this.library,
     this.playlists,
     this.recent,
+    this.forYou,
     this.adminApi,
     required this.localAudio,
     required this.uploads,
@@ -63,6 +65,7 @@ class AuthGate extends StatefulWidget {
 
   /// The account's recently played tracks; null hides them.
   final RecentlyPlayedController? recent;
+  final ForYouController? forYou;
   final LocalAudioController localAudio;
   final UploadController uploads;
   final LibrarySyncController sync;
@@ -197,6 +200,7 @@ class _AuthGateState extends State<AuthGate> {
     widget.library.clear();
     widget.playlists?.clear();
     widget.recent?.clear();
+    widget.forYou?.clear();
     widget.botLinks?.clear();
     widget.storageRequests?.clear();
     widget.linkImports?.clear();
@@ -291,6 +295,7 @@ class _AuthGateState extends State<AuthGate> {
                 widget.library.clear();
                 widget.playlists?.clear();
                 widget.recent?.clear();
+                widget.forYou?.clear();
                 widget.botLinks?.clear();
                 widget.storageRequests?.clear();
                 widget.sync.clear();
@@ -303,6 +308,7 @@ class _AuthGateState extends State<AuthGate> {
               library: widget.library,
               playlists: widget.playlists,
               recent: widget.recent,
+              forYou: widget.forYou,
               localAudio: widget.localAudio,
               player: widget.player,
               uploads: widget.uploads,

@@ -428,6 +428,63 @@ void main() {
       expect(loaded(), ['c']);
     });
 
+    test('radio queues similar tracks while the last one plays (#226)',
+        () async {
+      const d =
+          Track(id: 'd', title: 'D', contentType: 'audio/mpeg', sizeBytes: 1);
+      final asked = <(List<String>, List<String>)>[];
+      player.radioSource = (seeds, exclude) async {
+        asked.add(
+            ([for (final t in seeds) t.id], [for (final t in exclude) t.id]));
+        return [d];
+      };
+      // Off by default: the queue simply ends.
+      await player.playFrom(_abc, 2);
+      await pumpEventQueue();
+      expect(asked, isEmpty);
+      await player.stop();
+
+      await player.setRadio(true);
+      await player.playFrom(_abc, 1);
+      await pumpEventQueue();
+      expect(asked, isEmpty, reason: 'c is still to come');
+      await finishTrack();
+      await pumpEventQueue();
+      expect(player.track?.id, 'c');
+      expect(asked.single.$1, ['a', 'b', 'c']);
+      expect(asked.single.$2, ['a', 'b', 'c']);
+      expect(player.upcoming.map((t) => t.id), ['d']);
+      await finishTrack();
+      expect(player.track?.id, 'd');
+    });
+
+    test('radio picks up after a queue that already ended', () async {
+      const d =
+          Track(id: 'd', title: 'D', contentType: 'audio/mpeg', sizeBytes: 1);
+      final gate = Completer<List<Track>>();
+      player.radioSource = (seeds, exclude) => gate.future;
+      await player.setRadio(true);
+      await player.playFrom(_abc, 2);
+      await finishTrack();
+      expect(player.status, PlayerStatus.completed);
+      gate.complete([d]);
+      await pumpEventQueue();
+      expect(player.track?.id, 'd');
+    });
+
+    test('radio leaves repeat and device music alone', () async {
+      var asked = 0;
+      player.radioSource = (seeds, exclude) async {
+        asked++;
+        return const [];
+      };
+      await player.setRadio(true);
+      player.cycleRepeat();
+      await player.playFrom(_abc, 2);
+      await pumpEventQueue();
+      expect(asked, 0);
+    });
+
     test('repeat all wraps to the first track', () async {
       player.cycleRepeat();
       expect(player.repeat, QueueRepeat.all);

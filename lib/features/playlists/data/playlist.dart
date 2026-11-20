@@ -1,6 +1,12 @@
 import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/notifications/data/notifications.dart';
 
+/// Shown when the server refuses to list a playlist, or to rename a listed
+/// one, because of an unacceptable word (#207).
+const inappropriatePlaylistMessage =
+    'نام، توضیح یا آهنگ‌های این فهرست کلمه‌ی نامناسب دارد و نمی‌تواند عمومی '
+    'شود. آن را اصلاح کن و دوباره امتحان کن.';
+
 class Playlist {
   const Playlist({
     required this.id,
@@ -12,12 +18,17 @@ class Playlist {
     this.shareToken,
     this.isPublic = false,
     this.publicReview,
+    this.publicReviewReason,
     this.isOwner = true,
     this.isAdmin = false,
     this.description = '',
     this.collabToken,
     this.owner,
     this.members = const [],
+    this.goal,
+    this.occasion = '',
+    this.contributors,
+    this.viewerContribution,
   });
 
   factory Playlist.fromJson(Map<String, dynamic> json) {
@@ -38,6 +49,7 @@ class Playlist {
       shareToken: json['shareToken'] as String?,
       isPublic: json['public'] == true,
       publicReview: json['publicReview'] as String?,
+      publicReviewReason: json['publicReviewReason'] as String?,
       // Older servers don't say; every playlist was its owner's then.
       isOwner: json['isOwner'] as bool? ?? true,
       isAdmin: json['isAdmin'] == true,
@@ -49,8 +61,50 @@ class Playlist {
                   PlaylistMember.fromJson(value as Map<String, dynamic>))
               .toList() ??
           const [],
+      goal: (json['goal'] as num?)?.toInt(),
+      occasion: json['occasion'] as String? ?? '',
+      contributors: (json['contributors'] as num?)?.toInt(),
+      viewerContribution: (json['viewerContribution'] as num?)?.toInt(),
     );
   }
+
+  /// How many songs its members aim to fill it up to together (#276);
+  /// null for none. Progress is [displayTrackCount].
+  final int? goal;
+
+  /// The listener's own collection they filed it under, such as «سفر»;
+  /// empty for none. Other members never see it.
+  final String occasion;
+
+  /// How many people's songs it holds, and how many are the viewer's;
+  /// loaded with the tracks. There is no ranking of members.
+  final int? contributors;
+  final int? viewerContribution;
+
+  /// The same playlist with another goal ([clearGoal] for none) or
+  /// occasion.
+  Playlist withGoal({int? goal, bool clearGoal = false, String? occasion}) =>
+      Playlist(
+        id: id,
+        name: name,
+        trackCount: trackCount,
+        tracks: tracks,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        shareToken: shareToken,
+        isPublic: isPublic,
+        publicReview: publicReview,
+        isOwner: isOwner,
+        isAdmin: isAdmin,
+        description: description,
+        collabToken: collabToken,
+        owner: owner,
+        members: members,
+        goal: clearGoal ? null : (goal ?? this.goal),
+        occasion: occasion ?? this.occasion,
+        contributors: contributors,
+        viewerContribution: viewerContribution,
+      );
 
   final String id;
   final String name;
@@ -69,6 +123,9 @@ class Playlist {
   /// Owner only: `pending` while a request to list it publicly waits for an
   /// admin's approval, `rejected` after an admin turned it down (#322).
   final String? publicReview;
+
+  /// Why an admin rejected listing it publicly, if they said (#207).
+  final String? publicReviewReason;
 
   /// Whether listing it publicly waits for an admin.
   bool get publicPending => publicReview == 'pending';
@@ -112,12 +169,17 @@ class Playlist {
         shareToken: shareToken,
         isPublic: isPublic,
         publicReview: publicReview,
+        publicReviewReason: publicReviewReason,
         isOwner: isOwner,
         isAdmin: isAdmin,
         description: description,
         collabToken: collabToken,
         owner: owner,
         members: members,
+        goal: goal,
+        occasion: occasion,
+        contributors: contributors,
+        viewerContribution: viewerContribution,
       );
 
   /// The same playlist under [name], with [description] unless null.
@@ -213,6 +275,7 @@ class PublicPlaylist {
     required this.isOwner,
     required this.trackCount,
     required this.likes,
+    this.subscriberCount,
   });
 
   factory PublicPlaylist.fromJson(Map<String, dynamic> json) => PublicPlaylist(
@@ -222,10 +285,15 @@ class PublicPlaylist {
         isOwner: json['isOwner'] == true,
         trackCount: json['trackCount'] as int? ?? 0,
         likes: PlaylistLikes.fromJson(json),
+        subscriberCount: json['subscriberCount'] as int?,
       );
 
   final String shareToken;
   final String name;
+
+  /// How many accounts follow it; null where the server doesn't offer
+  /// subscriptions.
+  final int? subscriberCount;
 
   /// The owner's email, masked.
   final String owner;
@@ -240,6 +308,7 @@ class PublicPlaylist {
         isOwner: isOwner,
         trackCount: trackCount,
         likes: likes,
+        subscriberCount: subscriberCount,
       );
 }
 
@@ -256,6 +325,7 @@ class SharedPlaylist {
     this.isPublic = false,
     this.likes = const PlaylistLikes(liked: false, likeCount: 0),
     this.subscription,
+    this.syncedFrom = const [],
   });
 
   factory SharedPlaylist.fromJson(
@@ -272,6 +342,10 @@ class SharedPlaylist {
         subscription: json.containsKey('subscribed')
             ? PlaylistSubscription.fromJson(json)
             : null,
+        syncedFrom: [
+          for (final provider in json['syncedFrom'] as List<dynamic>? ?? [])
+            provider as String,
+        ],
         tracks: [
           for (final track in json['tracks'] as List<dynamic>)
             Track.fromJson(track as Map<String, dynamic>,
@@ -303,6 +377,10 @@ class SharedPlaylist {
   /// subscriptions.
   final PlaylistSubscription? subscription;
 
+  /// The messengers («telegram», «bale») whose channels post into it
+  /// through a bot.
+  final List<String> syncedFrom;
+
   SharedPlaylist withLikes(PlaylistLikes likes) => SharedPlaylist(
         shareToken: shareToken,
         name: name,
@@ -313,6 +391,7 @@ class SharedPlaylist {
         isPublic: isPublic,
         likes: likes,
         subscription: subscription,
+        syncedFrom: syncedFrom,
       );
 
   SharedPlaylist withSubscription(PlaylistSubscription subscription) =>
@@ -326,6 +405,7 @@ class SharedPlaylist {
         isPublic: isPublic,
         likes: likes,
         subscription: subscription,
+        syncedFrom: syncedFrom,
       );
 }
 

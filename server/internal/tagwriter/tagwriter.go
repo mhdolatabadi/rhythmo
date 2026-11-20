@@ -7,6 +7,7 @@ package tagwriter
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -29,6 +30,13 @@ type Store interface {
 	CompleteTagRewrite(ctx context.Context, track store.Track, newKey string, newSize int64, maxOwnerBytes int64, grace time.Duration) error
 	FailTagRewrite(ctx context.Context, track store.Track, failure store.TagFailure) error
 	CollectGarbage(ctx context.Context, limit int, remove func(context.Context, string) error) (int, error)
+}
+
+// CoverStore gives the cover the owner chose for a track, nil when none;
+// *store.Tracks implements it. A Store that also implements it gets that
+// cover embedded, so downloads carry it.
+type CoverStore interface {
+	TrackCover(ctx context.Context, trackID string) ([]byte, error)
 }
 
 // Objects is the object storage; *storage.Storage implements it.
@@ -236,6 +244,13 @@ func (w *Writer) process(ctx context.Context, track store.Track) *jobFailure {
 		return &jobFailure{TagFailure: store.TagFailure{Code: "unsupported_format", Unsupported: true}}
 	}
 	desired := Metadata(track)
+	var cover []byte
+	if covers, ok := w.store.(CoverStore); ok {
+		var err error
+		if cover, err = covers.TrackCover(ctx, track.ID); err != nil {
+			return retry("cover_failed", err, "")
+		}
+	}
 
 	source, err := w.download(ctx, track)
 	if err != nil {
@@ -262,7 +277,7 @@ func (w *Writer) process(ctx context.Context, track store.Track) *jobFailure {
 		return retry("read_failed", err, "")
 	}
 	buffered := bufio.NewWriter(rewritten)
-	if _, err := tags.Rewrite(buffered, bufio.NewReader(source), track.FileName, desired); err != nil {
+	if _, err := tags.RewriteWithCover(buffered, bufio.NewReader(source), track.FileName, desired, cover); err != nil {
 		if errors.Is(err, tags.ErrUnsupported) {
 			return &jobFailure{TagFailure: store.TagFailure{Code: "unsupported_layout", Unsupported: true}, err: err}
 		}
@@ -271,7 +286,7 @@ func (w *Writer) process(ctx context.Context, track store.Track) *jobFailure {
 	if err := buffered.Flush(); err != nil {
 		return retry("rewrite_failed", err, "")
 	}
-	size, err := w.verify(rewritten, track, before, desired)
+	size, err := w.verify(rewritten, track, before, desired, cover)
 	if err != nil {
 		return final("verification_failed", err)
 	}
@@ -333,7 +348,7 @@ func (w *Writer) download(ctx context.Context, track store.Track) (*os.File, err
 
 // verify re-reads the rewritten file from disk: it must still look like its
 // format, carry exactly the desired tags, and hold byte-identical audio.
-func (w *Writer) verify(file *os.File, track store.Track, before tags.Info, desired tags.Metadata) (int64, error) {
+func (w *Writer) verify(file *os.File, track store.Track, before tags.Info, desired tags.Metadata, cover []byte) (int64, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return 0, err
@@ -354,6 +369,12 @@ func (w *Writer) verify(file *os.File, track store.Track, before tags.Info, desi
 	}
 	if after.PayloadSHA256 != before.PayloadSHA256 || after.PayloadBytes != before.PayloadBytes {
 		return 0, errors.New("rewriting changed the audio")
+	}
+	if cover != nil {
+		embedded, err := tags.Cover(file, info.Size())
+		if err != nil || !bytes.Equal(embedded, cover) {
+			return 0, fmt.Errorf("rewritten file does not carry the chosen cover: %v", err)
+		}
 	}
 	return info.Size(), nil
 }

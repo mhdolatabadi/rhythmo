@@ -11,6 +11,7 @@ import 'package:rhythmo/features/link_import/data/link_import.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rhythmo/app/app_configuration.dart';
+import 'package:rhythmo/core/accessibility/web_semantics.dart';
 import 'package:rhythmo/app/app_theme.dart';
 import 'package:rhythmo/app/backend_gate.dart';
 import 'package:rhythmo/core/api/api_client.dart';
@@ -27,6 +28,11 @@ import 'package:rhythmo/features/settings/application/storage_request_controller
 import 'package:rhythmo/features/settings/data/storage_request.dart';
 import 'package:rhythmo/features/identify/application/identify_controller.dart';
 import 'package:rhythmo/features/identify/data/snippet_recorder.dart';
+import 'package:rhythmo/features/for_you/application/for_you_controller.dart';
+import 'package:rhythmo/features/for_you/data/for_you.dart';
+import 'package:rhythmo/features/player/android/home_widget.dart';
+import 'package:rhythmo/features/player/android/media_tree.dart';
+import 'package:rhythmo/features/library/data/track.dart';
 import 'package:rhythmo/features/history/application/recently_played_controller.dart';
 import 'package:rhythmo/features/library/application/library_controller.dart';
 import 'package:rhythmo/features/library/application/library_sync_controller.dart';
@@ -62,6 +68,7 @@ import 'package:rhythmo/features/notifications/application/notifications_control
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) await BrowserContextMenu.disableContextMenu();
+  keepWebSemanticsOn();
   final mediaSession = await startMediaSession();
   await AppConfiguration.loadLaunchLink();
   runApp(ProviderScope(child: RhythmoApp(mediaSession: mediaSession)));
@@ -240,6 +247,15 @@ class _RhythmoAppState extends State<RhythmoApp> {
       ? null
       : RecentlyPlayedController(api: _historyApi, token: () => _auth?.token);
 
+  late final ForYouApi? _forYouApi = _apiClient;
+  late final ForYouController? _forYou = _forYouApi == null
+      ? null
+      : ForYouController(
+          api: _forYouApi,
+          token: () => _auth?.token,
+          library: () => _library?.tracks ?? const [],
+        );
+
   late final LyricsApi? _lyricsApi = widget.lyricsApi ??
       _apiClient ??
       (_tracksApi is LyricsApi ? _tracksApi as LyricsApi : null);
@@ -335,7 +351,10 @@ class _RhythmoAppState extends State<RhythmoApp> {
           journey: _journey,
           onListened: (track) => _recent?.record(track),
           lyrics: _lyrics,
-        )..loadSettings());
+        )
+        // Radio carries on from the listener's own library (#226).
+        ..radioSource = _forYou?.radio
+        ..loadSettings());
 
   late final LocalAudioController _localAudio = LocalAudioController(
     widget.localAudioLibrary ?? createLocalAudioLibrary(),
@@ -388,17 +407,29 @@ class _RhythmoAppState extends State<RhythmoApp> {
     final player = _player;
     if (player != null) {
       player.restoreLastPlayback();
-      widget.mediaSession?.attach(
-        player,
-        artworkFor: (track) async {
-          final bytes = await _artwork.load(track);
-          return bytes == null ? null : trackNotificationArtwork(bytes);
-        },
-      );
+      Future<Uri?> artworkFor(Track track) async {
+        final bytes = await _artwork.load(track);
+        return bytes == null ? null : trackNotificationArtwork(bytes);
+      }
+
+      widget.mediaSession
+        ?..attach(player, artworkFor: artworkFor)
+        // Android Auto browses the account's music (#227).
+        ..library = () => MediaLibrary(
+              tracks: _library?.tracks ?? const [],
+              recent: _recent?.tracks ?? const [],
+              playlists: _playlists?.playlists ?? const [],
+            );
+      // The home-screen widget follows the player (#227).
+      if (HomeScreenWidget.supported) {
+        _homeWidget = HomeScreenWidget(coverFor: artworkFor)..attach(player);
+      }
     }
   }
 
   AuthStatus? _authStatus;
+
+  HomeScreenWidget? _homeWidget;
 
   /// Nothing of an account stays on the device after it signs out.
   void _onAuthChanged() {
@@ -445,6 +476,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
 
   @override
   void dispose() {
+    _homeWidget?.detach();
     _auth?.removeListener(_selectJourneyAccount);
     _auth?.removeListener(_onAuthChanged);
     _network.removeListener(_onNetworkChanged);
@@ -537,6 +569,7 @@ class _RhythmoAppState extends State<RhythmoApp> {
                       library: _library,
                       playlists: _playlists,
                       recent: _recent,
+                      forYou: _forYou,
                       localAudio: _localAudio,
                       uploads: _uploads,
                       sync: _sync,

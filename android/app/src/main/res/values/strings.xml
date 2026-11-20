@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_description">آهنگی که پخش می‌شود، با دکمه‌های پخش</string>
+    <string name="widget_idle_title">ریتمو</string>
+    <string name="widget_idle_subtitle">برای پخش، ضربه بزن</string>
+    <string name="widget_play">پخش</string>
+    <string name="widget_pause">توقف</string>
+    <string name="widget_next">آهنگ بعدی</string>
+    <string name="widget_previous">آهنگ قبلی</string>
+    <string name="widget_cover">کاور آهنگ</string>
+    <string name="shortcut_shuffle_short">پخش تصادفی</string>
+    <string name="shortcut_shuffle_long">پخش تصادفی کتابخانه</string>
+    <string name="shortcut_resume_short">ادامه‌ی پخش</string>
+    <string name="shortcut_resume_long">ادامه‌ی پخش</string>
+    <string name="shortcut_search_short">جست‌وجو</string>
+    <string name="shortcut_search_long">جست‌وجو در موسیقی من</string>
+</resources>

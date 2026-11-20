@@ -61,10 +61,10 @@ func TestUnverifiedPublishingWaitsForAnAdmin(t *testing.T) {
 	}
 
 	// Approving lists them and is audited; a second decision is refused.
-	if err := publications.ReviewPlaylist(f.ctx, playlist.ID, admin.ID, true); err != nil {
+	if err := publications.ReviewPlaylist(f.ctx, playlist.ID, admin.ID, true, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := publications.ReviewPlaylist(f.ctx, playlist.ID, admin.ID, false); !errors.Is(err, ErrNotPending) {
+	if err := publications.ReviewPlaylist(f.ctx, playlist.ID, admin.ID, false, ""); !errors.Is(err, ErrNotPending) {
 		t.Fatalf("second decision = %v", err)
 	}
 	if err := publications.ReviewTrack(f.ctx, solo.ID, admin.ID, true); err != nil {
@@ -121,11 +121,56 @@ func TestUnverifiedPublishingWaitsForAnAdmin(t *testing.T) {
 	if err := f.playlists.Unshare(f.ctx, alice.ID, playlist.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := publications.ReviewPlaylist(f.ctx, playlist.ID, admin.ID, true); !errors.Is(err, ErrNotPending) {
+	if err := publications.ReviewPlaylist(f.ctx, playlist.ID, admin.ID, true, ""); !errors.Is(err, ErrNotPending) {
 		t.Fatalf("approving a withdrawn request = %v", err)
 	}
 	listed, _ := f.playlists.ListForUser(f.ctx, alice.ID)
 	if len(listed) != 1 || listed[0].IsPublic || listed[0].PublicReview != nil {
 		t.Fatalf("after unsharing = %+v", listed)
+	}
+}
+
+// A rejection can carry a reason for the owner; a new request clears it,
+// and a renamed public playlist can be sent back to review (#207).
+func TestRejectionReasonAndReviewAgain(t *testing.T) {
+	f := newCatalogFixture(t)
+	publications := NewPublications(f.catalog.pool)
+	admin, alice := f.user("admin@example.com"), f.user("alice@example.com")
+	playlist, err := f.playlists.Create(f.ctx, alice.ID, "mix")
+	if err != nil {
+		t.Fatal(err)
+	}
+	yes := true
+	reason := func() *string {
+		listed, err := f.playlists.ListForUser(f.ctx, alice.ID)
+		if err != nil || len(listed) != 1 {
+			t.Fatalf("list = %+v, %v", listed, err)
+		}
+		return listed[0].PublicReviewReason
+	}
+	if _, err := f.playlists.Share(f.ctx, alice.ID, playlist.ID, "reason-token", &yes, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := publications.ReviewPlaylist(f.ctx, playlist.ID, admin.ID, false, "نام نامناسب است"); err != nil {
+		t.Fatal(err)
+	}
+	if got := reason(); got == nil || *got != "نام نامناسب است" {
+		t.Fatalf("reason = %v", got)
+	}
+	if _, err := f.playlists.Share(f.ctx, alice.ID, playlist.ID, "unused", &yes, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := reason(); got != nil {
+		t.Fatalf("a new request kept the old reason %q", *got)
+	}
+	if err := publications.ReviewPlaylist(f.ctx, playlist.ID, admin.ID, true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.playlists.RequestPublicReviewAgain(f.ctx, playlist.ID); err != nil {
+		t.Fatal(err)
+	}
+	again, err := f.playlists.ForUser(f.ctx, alice.ID, playlist.ID)
+	if err != nil || again.IsPublic || again.PublicReview == nil || *again.PublicReview != ReviewPending || again.ShareToken == nil {
+		t.Fatalf("after review again = %+v, %v", again, err)
 	}
 }
