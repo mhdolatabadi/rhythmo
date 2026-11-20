@@ -318,8 +318,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('header search discovers گنجینه songs',
-        (tester) async {
+    testWidgets('header search discovers گنجینه songs', (tester) async {
       _phone(tester);
       final store = FakeStoreApi(songs: [
         song(0, title: 'گنجینه آزمایشی'),
