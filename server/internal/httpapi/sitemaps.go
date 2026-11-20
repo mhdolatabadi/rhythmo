@@ -44,7 +44,7 @@ type sitemapIndex struct {
 // sitemapKinds are the store's paged sitemaps, in index order.
 var sitemapKinds = []string{"songs", "artists", "albums"}
 
-var sitemapFile = regexp.MustCompile(`^(?:(pages|playlists)|(songs|artists|albums)-([1-9][0-9]?))\.xml$`)
+var sitemapFile = regexp.MustCompile(`^(?:(pages|playlists|people)|(songs|artists|albums)-([1-9][0-9]?))\.xml$`)
 
 // sitemapPage lists one sitemap file's URLs: pages and playlists are one
 // file each; songs, artists and albums are paged. more says whether the
@@ -67,6 +67,9 @@ func (p *PublicPages) sitemapPage(ctx context.Context, site, kind string, page i
 			urls = append(urls, sitemapURL{Loc: site + "/p/" + pl.ShareToken, LastMod: lastMod(pl.UpdatedAt)})
 		}
 		return urls, false, nil
+	case "people":
+		urls, err := p.profileSitemap(ctx, site)
+		return urls, false, err
 	}
 	if p.catalog == nil {
 		return nil, false, nil
@@ -139,6 +142,9 @@ func (p *PublicPages) sitemapPageCount(ctx context.Context, kind string) (int, e
 // sitemapFiles are the names of every sitemap file sitemap.xml lists.
 func (p *PublicPages) sitemapFiles(ctx context.Context) ([]string, error) {
 	files := []string{"pages.xml", "playlists.xml"}
+	if p.profiles != nil {
+		files = append(files, "people.xml")
+	}
 	if p.catalog == nil {
 		return files, nil
 	}

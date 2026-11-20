@@ -48,6 +48,7 @@ type AdminHandlers struct {
 	playlists    AdminPlaylistStore
 	publications AdminPublicationStore
 	streams      StreamPresigner
+	profiles     AdminProfileStore
 }
 
 func NewAdminHandlers(auth *AuthHandlers, users AdminStore) *AdminHandlers {
@@ -85,6 +86,9 @@ func (h *AdminHandlers) register(mux *http.ServeMux) {
 		mux.HandleFunc("PATCH /api/v1/admin/publications/playlists/{id}", h.reviewPublication(store.PublicationPlaylist))
 		mux.HandleFunc("PATCH /api/v1/admin/publications/tracks/{id}", h.reviewPublication(store.PublicationTrack))
 		mux.HandleFunc("GET /api/v1/admin/publications/tracks/{id}/stream", h.streamPendingTrack)
+	}
+	if h.profiles != nil {
+		h.registerProfiles(mux)
 	}
 }
 
@@ -265,6 +269,10 @@ type pendingPublicationResponse struct {
 	OwnerID     string    `json:"ownerId"`
 	OwnerEmail  string    `json:"ownerEmail"`
 	RequestedAt time.Time `json:"requestedAt"`
+	// Handle, Bio and HasAvatar describe a profile (#228).
+	Handle    string `json:"handle,omitempty"`
+	Bio       string `json:"bio,omitempty"`
+	HasAvatar bool   `json:"hasAvatar,omitempty"`
 }
 
 // listPublications is the review queue (#322): playlists and tracks whose
@@ -283,7 +291,7 @@ func (h *AdminHandlers) listPublications(w http.ResponseWriter, r *http.Request)
 		items = append(items, pendingPublicationResponse{
 			Kind: p.Kind, ID: p.ID, Title: p.Title, Artist: p.Artist, ShareToken: p.ShareToken,
 			TrackCount: p.TrackCount, OwnerID: p.OwnerID, OwnerEmail: p.OwnerEmail,
-			RequestedAt: p.RequestedAt.UTC(),
+			RequestedAt: p.RequestedAt.UTC(), Handle: p.Handle, Bio: p.Bio, HasAvatar: p.HasAvatar,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"publications": items})
@@ -322,9 +330,17 @@ func (h *AdminHandlers) reviewPublication(kind string) http.HandlerFunc {
 			return
 		}
 		var err error
-		if kind == store.PublicationPlaylist {
+		switch kind {
+		case store.PublicationPlaylist:
 			err = h.publications.ReviewPlaylist(r.Context(), r.PathValue("id"), actor, *input.Approved, reason)
-		} else {
+		case store.PublicationProfile:
+			reviewer, ok := h.publications.(ProfileReviewer)
+			if !ok {
+				writeError(w, http.StatusNotFound, "not_found")
+				return
+			}
+			err = reviewer.ReviewProfile(r.Context(), r.PathValue("id"), actor, *input.Approved)
+		default:
 			err = h.publications.ReviewTrack(r.Context(), r.PathValue("id"), actor, *input.Approved)
 		}
 		if errors.Is(err, store.ErrNotPending) {

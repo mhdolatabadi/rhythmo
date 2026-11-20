@@ -32,6 +32,8 @@ type Config struct {
 	Store *CatalogHandlers
 	// Likes publishes single tracks and keeps likes (#284).
 	Likes *LikeHandlers
+	// Social serves public profiles, following and the feed (#228).
+	Social *SocialHandlers
 	// Public serves the public HTML pages at /, /p/{token}, sitemap.xml and
 	// robots.txt.
 	Public *PublicPages
@@ -82,6 +84,9 @@ func NewHandler(config Config) http.Handler {
 	}
 	if config.Likes != nil {
 		config.Likes.register(mux)
+	}
+	if config.Social != nil {
+		config.Social.register(mux)
 	}
 	if config.Public != nil {
 		config.Public.register(mux)

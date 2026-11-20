@@ -25,6 +25,10 @@ class Playlist {
     this.collabToken,
     this.owner,
     this.members = const [],
+    this.goal,
+    this.occasion = '',
+    this.contributors,
+    this.viewerContribution,
   });
 
   factory Playlist.fromJson(Map<String, dynamic> json) {
@@ -57,8 +61,50 @@ class Playlist {
                   PlaylistMember.fromJson(value as Map<String, dynamic>))
               .toList() ??
           const [],
+      goal: (json['goal'] as num?)?.toInt(),
+      occasion: json['occasion'] as String? ?? '',
+      contributors: (json['contributors'] as num?)?.toInt(),
+      viewerContribution: (json['viewerContribution'] as num?)?.toInt(),
     );
   }
+
+  /// How many songs its members aim to fill it up to together (#276);
+  /// null for none. Progress is [displayTrackCount].
+  final int? goal;
+
+  /// The listener's own collection they filed it under, such as «سفر»;
+  /// empty for none. Other members never see it.
+  final String occasion;
+
+  /// How many people's songs it holds, and how many are the viewer's;
+  /// loaded with the tracks. There is no ranking of members.
+  final int? contributors;
+  final int? viewerContribution;
+
+  /// The same playlist with another goal ([clearGoal] for none) or
+  /// occasion.
+  Playlist withGoal({int? goal, bool clearGoal = false, String? occasion}) =>
+      Playlist(
+        id: id,
+        name: name,
+        trackCount: trackCount,
+        tracks: tracks,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        shareToken: shareToken,
+        isPublic: isPublic,
+        publicReview: publicReview,
+        isOwner: isOwner,
+        isAdmin: isAdmin,
+        description: description,
+        collabToken: collabToken,
+        owner: owner,
+        members: members,
+        goal: clearGoal ? null : (goal ?? this.goal),
+        occasion: occasion ?? this.occasion,
+        contributors: contributors,
+        viewerContribution: viewerContribution,
+      );
 
   final String id;
   final String name;
@@ -130,6 +176,10 @@ class Playlist {
         collabToken: collabToken,
         owner: owner,
         members: members,
+        goal: goal,
+        occasion: occasion,
+        contributors: contributors,
+        viewerContribution: viewerContribution,
       );
 
   /// The same playlist under [name], with [description] unless null.
@@ -270,6 +320,7 @@ class SharedPlaylist {
     required this.owner,
     required this.isOwner,
     required this.tracks,
+    this.ownerHandle,
     this.description = '',
     this.isPublic = false,
     this.likes = const PlaylistLikes(liked: false, likeCount: 0),
@@ -284,6 +335,7 @@ class SharedPlaylist {
         name: json['name'] as String,
         description: json['description'] as String? ?? '',
         owner: json['owner'] as String,
+        ownerHandle: json['ownerHandle'] as String?,
         isOwner: json['isOwner'] == true,
         isPublic: json['public'] == true,
         likes: PlaylistLikes.fromJson(json),
@@ -309,6 +361,9 @@ class SharedPlaylist {
 
   /// The owner's email, masked, for example «m***@gmail.com».
   final String owner;
+
+  /// The owner's @handle when their profile is public (#228).
+  final String? ownerHandle;
   final bool isOwner;
 
   /// Playable through the share link, not the owner's own library.

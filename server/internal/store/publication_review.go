@@ -41,6 +41,11 @@ type PendingPublication struct {
 	OwnerID     string
 	OwnerEmail  string
 	RequestedAt time.Time
+	// Handle, Bio and HasAvatar are set only for a profile (#228), whose
+	// Title is its display name.
+	Handle    string
+	Bio       string
+	HasAvatar bool
 }
 
 // Publications keeps admin review of what unverified owners publish.
@@ -60,14 +65,19 @@ func (p *Publications) Pending(ctx context.Context, limit int) ([]PendingPublica
 			(SELECT count(*)::int FROM playlist_tracks pt JOIN tracks ON tracks.id = pt.track_id
 			 WHERE pt.playlist_id = playlists.id AND `+trackBelongs("tracks", "playlists")+`
 			   AND tracks.status = 'ready'),
-			playlists.owner_id::text, users.email, playlists.public_review_at
+			playlists.owner_id::text, users.email, playlists.public_review_at, '', '', false
 		FROM playlists JOIN users ON users.id = playlists.owner_id
 		WHERE playlists.public_review = 'pending' AND playlists.share_token IS NOT NULL
 		UNION ALL
 		SELECT 'track', tracks.id::text, tracks.title, COALESCE(tracks.artist, ''), NULL, 0,
-			tracks.owner_id::text, users.email, tracks.publish_review_at
+			tracks.owner_id::text, users.email, tracks.publish_review_at, '', '', false
 		FROM tracks JOIN users ON users.id = tracks.owner_id
 		WHERE tracks.publish_review = 'pending' AND tracks.status = 'ready'
+		UNION ALL
+		SELECT 'profile', users.id::text, COALESCE(users.display_name, ''), '', NULL, 0,
+			users.id::text, users.email, users.profile_review_at, COALESCE(users.handle, ''),
+			COALESCE(users.bio, ''), EXISTS (SELECT 1 FROM user_avatars WHERE user_id = users.id)
+		FROM users WHERE users.profile_review = 'pending' AND users.profile_public
 		ORDER BY 9, 2
 		LIMIT $1
 	`, limit)
@@ -79,7 +89,8 @@ func (p *Publications) Pending(ctx context.Context, limit int) ([]PendingPublica
 	for rows.Next() {
 		var item PendingPublication
 		if err := rows.Scan(&item.Kind, &item.ID, &item.Title, &item.Artist, &item.ShareToken,
-			&item.TrackCount, &item.OwnerID, &item.OwnerEmail, &item.RequestedAt); err != nil {
+			&item.TrackCount, &item.OwnerID, &item.OwnerEmail, &item.RequestedAt,
+			&item.Handle, &item.Bio, &item.HasAvatar); err != nil {
 			return nil, err
 		}
 		pending = append(pending, item)
