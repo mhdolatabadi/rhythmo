@@ -2885,8 +2885,10 @@ class TrackSyncMark extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Text(
                   'نیازمند اینترنت',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: colors.onErrorContainer, height: 1.5),
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelSmall
+                      ?.copyWith(color: colors.onErrorContainer, height: 1.5),
                 ),
               ),
             ),
