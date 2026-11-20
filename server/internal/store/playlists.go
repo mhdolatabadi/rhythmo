@@ -27,6 +27,9 @@ type Playlist struct {
 	// list it publicly waits for an admin (#322), ReviewRejected after an
 	// admin turned it down, and nil otherwise.
 	PublicReview *string
+	// PublicReviewReason is the admin's reason for a rejection (#207). It
+	// is only loaded for the owner's list of playlists.
+	PublicReviewReason *string
 	// CollabToken is set while people can join the playlist by its
 	// collaboration link; only the owner ever sees it.
 	CollabToken *string
@@ -131,8 +134,7 @@ func (p *Playlists) ListForUser(ctx context.Context, userID string) ([]Playlist,
 			   AND tracks.status = 'ready'
 			   AND `+trackBelongs("tracks", "playlists")+`),
 			`+isAdmin("playlists", "$1")+`,
-			COALESCE((SELECT o.occasion FROM playlist_occasions o
-			          WHERE o.playlist_id = playlists.id AND o.user_id::text = $1), '')
+			CASE WHEN playlists.public_review = 'rejected' THEN playlists.public_review_reason END
 		FROM playlists
 		WHERE `+canEdit("playlists", "$1")+`
 		ORDER BY updated_at DESC, id
@@ -160,6 +162,7 @@ func (p *Playlists) ListForUser(ctx context.Context, userID string) ([]Playlist,
 			&playlist.TrackCount,
 			&playlist.ViewerAdmin,
 			&playlist.Occasion,
+			&playlist.PublicReviewReason,
 		); err != nil {
 			return nil, err
 		}
@@ -457,6 +460,7 @@ func (p *Playlists) Share(ctx context.Context, ownerID, playlistID, token string
 			is_public = CASE WHEN $4::boolean IS NULL THEN is_public WHEN $4 THEN is_public OR $5 ELSE false END,
 			public_review = CASE WHEN $4::boolean IS NULL THEN public_review
 				WHEN $4 AND NOT $5 AND NOT is_public THEN 'pending' END,
+			public_review_reason = CASE WHEN $4::boolean IS NULL THEN public_review_reason END,
 			public_review_at = CASE WHEN $4::boolean IS NULL THEN public_review_at
 				WHEN $4 AND NOT $5 AND NOT is_public
 				THEN CASE WHEN public_review = 'pending' THEN public_review_at ELSE now() END END
@@ -496,6 +500,9 @@ type SharedPlaylist struct {
 	// OwnerName is the owner's public display name, "" if they have none.
 	// The owner's email is never loaded for a shared view (#378).
 	OwnerName string
+	// SyncedFrom names the messengers ("bale", "telegram") whose channels
+	// post into this playlist through a bot (#430, #451).
+	SyncedFrom []string
 }
 
 // ForShareToken returns the shared playlist and its tracks, or ErrNotFound
@@ -503,11 +510,13 @@ type SharedPlaylist struct {
 func (p *Playlists) ForShareToken(ctx context.Context, token string) (SharedPlaylist, error) {
 	var shared SharedPlaylist
 	err := p.pool.QueryRow(ctx, `
-		SELECT `+qualifiedPlaylistColumns+`, COALESCE(users.display_name, '')
+		SELECT `+qualifiedPlaylistColumns+`, COALESCE(users.display_name, ''),
+			ARRAY(SELECT DISTINCT provider FROM bot_channels WHERE playlist_id = playlists.id ORDER BY provider)
 		FROM playlists JOIN users ON users.id = playlists.owner_id
 		WHERE playlists.share_token = $1
 	`, token).Scan(&shared.ID, &shared.OwnerID, &shared.Name, &shared.Description, &shared.ShareToken,
-		&shared.IsPublic, &shared.PublicReview, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.GoalTracks, &shared.OwnerName)
+		&shared.IsPublic, &shared.PublicReview, &shared.CollabToken, &shared.CreatedAt, &shared.UpdatedAt, &shared.OwnerName,
+		&shared.SyncedFrom)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SharedPlaylist{}, ErrNotFound
 	}
@@ -710,7 +719,9 @@ type PublicPlaylist struct {
 	OwnerName  string
 	TrackCount int
 	Likes      Likes
-	UpdatedAt  time.Time
+	// SubscriberCount is how many accounts follow the channel (#451).
+	SubscriberCount int
+	UpdatedAt       time.Time
 }
 
 // Popular lists up to limit public shared playlists, most liked first;
@@ -722,7 +733,9 @@ func (p *Playlists) Popular(ctx context.Context, userID string, limit int) ([]Pu
 			(SELECT count(*)::int FROM playlist_tracks pt JOIN tracks ON tracks.id = pt.track_id
 			 WHERE pt.playlist_id = playlists.id AND `+trackBelongs("tracks", "playlists")+`
 			   AND tracks.status = 'ready'),
-			likes.count, likes.liked, playlists.updated_at
+			likes.count, likes.liked,
+			(SELECT count(*)::int FROM playlist_subscriptions ps WHERE ps.playlist_id = playlists.id),
+			playlists.updated_at
 		FROM playlists
 		JOIN users ON users.id = playlists.owner_id
 		CROSS JOIN LATERAL (
@@ -742,7 +755,7 @@ func (p *Playlists) Popular(ctx context.Context, userID string, limit int) ([]Pu
 	for rows.Next() {
 		var pp PublicPlaylist
 		if err := rows.Scan(&pp.ShareToken, &pp.Name, &pp.OwnerID, &pp.OwnerName, &pp.TrackCount,
-			&pp.Likes.Count, &pp.Likes.Liked, &pp.UpdatedAt); err != nil {
+			&pp.Likes.Count, &pp.Likes.Liked, &pp.SubscriberCount, &pp.UpdatedAt); err != nil {
 			return nil, err
 		}
 		listed = append(listed, pp)
@@ -1004,4 +1017,17 @@ func (p *Playlists) PlaylistTrack(ctx context.Context, userID, playlistID, track
 		return Track{}, ErrNotFound
 	}
 	return track, err
+}
+
+// RequestPublicReviewAgain takes a public playlist out of the listings and
+// sends it back to admin review, as when an owner who is not verified
+// renames it after approval (#207). Its link keeps working. A playlist that
+// is not public is left alone.
+func (p *Playlists) RequestPublicReviewAgain(ctx context.Context, playlistID string) error {
+	_, err := p.pool.Exec(ctx, `
+		UPDATE playlists SET is_public = false, public_review = 'pending',
+			public_review_at = now(), public_review_reason = NULL
+		WHERE id::text = $1 AND is_public AND share_token IS NOT NULL
+	`, playlistID)
+	return err
 }

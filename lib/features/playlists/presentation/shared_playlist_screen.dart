@@ -291,6 +291,28 @@ class _Contents extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
+            if (channelSyncLine(playlist.syncedFrom) case final line?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Row(
+                  children: [
+                    Icon(RhythmoIcons.paperPlaneTilt,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        line,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Row(
@@ -678,7 +700,9 @@ class _ShareSheetState extends State<_ShareSheet> {
     setState(() {
       _busy = false;
       if (shared == null) {
-        _error = failure;
+        _error = widget.controller.lastErrorCode == 'inappropriate_content'
+            ? inappropriatePlaylistMessage
+            : failure;
       } else {
         _token = shared.shareToken;
         _public = shared.isPublic;
@@ -775,7 +799,12 @@ class _ShareSheetState extends State<_ShareSheet> {
                   : _public
                       ? 'در «فهرست‌های پخش محبوب» به همه‌ی کاربران ریتمو نشان داده می‌شود و می‌توانند آن را بپسندند. کنارش نام عمومی‌ات از تنظیمات (یا «کاربر ریتمو») می‌آید؛ ایمیلت نمایش داده نمی‌شود.'
                       : _rejected
-                          ? 'مدیر درخواست قبلی عمومی شدن را نپذیرفت. می‌توانی دوباره درخواست بدهی.'
+                          ? switch (widget.playlist.publicReviewReason) {
+                              final reason? =>
+                                'مدیر درخواست قبلی عمومی شدن را نپذیرفت: «$reason». می‌توانی اصلاحش کنی و دوباره درخواست بدهی.',
+                              null =>
+                                'مدیر درخواست قبلی عمومی شدن را نپذیرفت. می‌توانی دوباره درخواست بدهی.',
+                            }
                           : 'در هیچ فهرستی نمی‌آید؛ فقط کسی که لینک را دارد پیدایش می‌کند. عمومی شدن حساب‌های تأییدنشده با تأیید مدیر است.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
@@ -829,4 +858,20 @@ class _ShareSheetState extends State<_ShareSheet> {
       ),
     );
   }
+}
+
+/// The muted line under a channel whose posts come from a messenger
+/// channel through the bot, e.g. «پست‌ها از کانال تلگرام همگام می‌شوند»;
+/// null when nothing syncs into it.
+String? channelSyncLine(List<String> providers) {
+  final names = [
+    for (final provider in providers)
+      switch (provider) {
+        'telegram' => 'تلگرام',
+        'bale' => 'بله',
+        _ => null,
+      },
+  ].whereType<String>().toList();
+  if (names.isEmpty) return null;
+  return 'پست‌ها از کانال ${names.join(' و ')} همگام می‌شوند';
 }

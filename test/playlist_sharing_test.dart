@@ -42,6 +42,10 @@ class FakePlaylistsApi implements PlaylistsApi {
   bool needsReview = false;
   bool pending = false;
   bool shareFails = false;
+
+  /// An error code [sharePlaylist] fails with, such as
+  /// `inappropriate_content`.
+  String? shareErrorCode;
   final shareCalls = <bool?>[];
   final shared = <String, SharedPlaylist>{};
 
@@ -67,6 +71,9 @@ class FakePlaylistsApi implements PlaylistsApi {
       {bool? public}) async {
     shareCalls.add(public);
     if (shareFails) throw const ApiException('500', statusCode: 500);
+    if (shareErrorCode case final code?) {
+      throw ApiException(code, statusCode: 422, code: code);
+    }
     if (public == true && needsReview && !isPublic) {
       pending = true;
     } else if (public != null) {
@@ -688,6 +695,48 @@ void main() {
       expect(api.shareCalls, [true, false]);
       expect(api.pending, isFalse);
       expect(find.textContaining('در انتظار تأیید مدیر'), findsNothing);
+    });
+
+    testWidgets('a rejected request shows the reason; bad words are explained',
+        (tester) async {
+      final api = FakePlaylistsApi()
+        ..shareToken = token
+        ..shareErrorCode = 'inappropriate_content';
+      final controller = PlaylistsController(api: api, token: () => 'tok');
+      final rejected = Playlist.fromJson({
+        'id': 'p1',
+        'name': 'میکس',
+        'trackCount': 0,
+        'isOwner': true,
+        'shareToken': token,
+        'public': false,
+        'publicReview': 'rejected',
+        'publicReviewReason': 'نام نامناسب است',
+        'createdAt': '2026-01-01T00:00:00Z',
+        'updatedAt': '2026-01-01T00:00:00Z',
+      });
+      tester.view.physicalSize = const Size(360, 740);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showShareSheet(context,
+                  playlist: rejected, controller: controller),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('«نام نامناسب است»'), findsOneWidget);
+
+      await tester.tap(find.text('عمومی'));
+      await tester.pumpAndSettle();
+      expect(find.text(inappropriatePlaylistMessage), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     test('ApiClient reads a pending public request', () async {

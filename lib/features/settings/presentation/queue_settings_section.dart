@@ -66,6 +66,15 @@ class QueueSettingsSection extends StatelessWidget {
                           onChanged: (value) => player.setQueuePreferences(
                               preventDuplicates: value),
                         ),
+                        if (player.radioSource != null)
+                          SwitchListTile(
+                            key: const ValueKey('radio-setting'),
+                            title: const Text('ادامه با پخش مشابه'),
+                            subtitle: const Text(
+                                'وقتی صف تمام شد، آهنگ‌های شبیه از موسیقی خودت پخش شوند.'),
+                            value: player.radio,
+                            onChanged: player.setRadio,
+                          ),
                       ],
                     ),
                   ),

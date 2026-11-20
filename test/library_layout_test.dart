@@ -32,6 +32,43 @@ Future<void> _pump(WidgetTester tester, Size size, List<Track> tracks) async {
 }
 
 void main() {
+  testWidgets('wide rows read as a table with the menu beside the format',
+      (tester) async {
+    await _pump(tester, const Size(1440, 900), const [
+      Track(
+        id: 't1',
+        title: 'Night Drive',
+        artist: 'Lumen',
+        album: 'Neon Roads',
+        contentType: 'audio/flac',
+        sizeBytes: 1024,
+        fileName: 'night-drive.flac',
+      ),
+    ]);
+    expect(find.text('Neon Roads'), findsOneWidget);
+    expect(find.text('FLAC'), findsOneWidget);
+    final format = tester.getRect(find.text('FLAC'));
+    final menu = tester.getRect(find.byTooltip('اقدامات آهنگ').first);
+    // The ⋮ sits right after the last column, not across the window.
+    expect((format.left - menu.right).abs(), lessThan(48));
+  });
+
+  testWidgets('phone rows keep the artist as the only secondary detail',
+      (tester) async {
+    await _pump(tester, const Size(360, 740), const [
+      Track(
+        id: 't1',
+        title: 'Night Drive',
+        artist: 'Lumen',
+        album: 'Neon Roads',
+        contentType: 'audio/flac',
+        sizeBytes: 1024,
+      ),
+    ]);
+    expect(find.text('Neon Roads'), findsNothing);
+    expect(find.text('FLAC'), findsNothing);
+  });
+
   for (final size in const [Size(360, 740), Size(1280, 900)]) {
     final label = '${size.width.toInt()} px';
 

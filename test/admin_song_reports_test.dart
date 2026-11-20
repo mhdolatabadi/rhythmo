@@ -39,11 +39,11 @@ void main() {
             child: SongReportsScreen(api: api, token: () => 'admin'))));
     await tester.pumpAndSettle();
     expect(find.text('خواننده نادرست است'), findsOneWidget);
-    await tester.tap(find.text('حذف از استور و فهرست‌ها'));
+    await tester.tap(find.text('حذف از گنجینه و فهرست‌ها'));
     await tester.pumpAndSettle();
     expect(api.decisions, isEmpty);
     await tester
-        .tap(find.widgetWithText(FilledButton, 'حذف از استور و فهرست‌ها'));
+        .tap(find.widgetWithText(FilledButton, 'حذف از گنجینه و فهرست‌ها'));
     await tester.pumpAndSettle();
     expect(api.decisions, [true]);
     expect(find.text('گزارش بازی وجود ندارد.'), findsOneWidget);

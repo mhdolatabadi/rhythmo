@@ -1,4 +1,5 @@
 import 'package:rhythmo/features/bale_archive/bale_archive.dart';
+import 'package:rhythmo/features/for_you/data/for_you.dart';
 import 'package:rhythmo/features/feedback/feedback_api.dart';
 import 'package:rhythmo/features/settings/data/storage_request.dart';
 import 'package:rhythmo/features/admin/data/admin_account.dart';
@@ -142,6 +143,14 @@ class TrackLibrary {
 
   /// Bot imports not in [tracks] yet.
   final int importsInProgress;
+}
+
+/// Covers owners choose for their cloud tracks (#225).
+abstract interface class TrackCoversApi {
+  /// Sets or replaces the cover of [trackId] from a JPEG, PNG or GIF. Like a
+  /// metadata edit it is based on [version] and returns the updated track.
+  Future<Track> setTrackCover(
+      String token, String trackId, int version, Uint8List image);
 }
 
 abstract interface class TracksApi {
@@ -415,6 +424,7 @@ class ApiClient
     implements
         AuthApi,
         TracksApi,
+        TrackCoversApi,
         HistoryApi,
         PlaylistsApi,
         BotsApi,
@@ -432,7 +442,8 @@ class ApiClient
         AdminQuotaApi,
         StorageRequestApi,
         BaleArchiveApi,
-        BaleTopicCatalogApi {
+        BaleTopicCatalogApi,
+        ForYouApi {
   ApiClient(this.baseUri,
       {http.Client? httpClient, this.offlineCache, this.network})
       : _httpClient = httpClient ?? http.Client();
@@ -636,12 +647,17 @@ class ApiClient
 
   @override
   Future<void> reviewPublication(
-      String token, PendingPublication publication, bool approved) async {
+      String token, PendingPublication publication, bool approved,
+      {String reason = ''}) async {
     final kind =
         publication.kind == PublicationKind.playlist ? 'playlists' : 'tracks';
     await _send('PATCH',
         '/api/v1/admin/publications/$kind/${Uri.encodeComponent(publication.id)}',
-        token: token, body: {'approved': approved});
+        token: token,
+        body: {
+          'approved': approved,
+          if (reason.isNotEmpty) 'reason': reason,
+        });
   }
 
   @override
@@ -686,7 +702,10 @@ class ApiClient
     final http.Response response;
     try {
       response = await _httpClient.get(
-        baseUri.resolve(path),
+        // The version keeps a browser from showing a replaced cover.
+        baseUri
+            .resolve(path)
+            .replace(queryParameters: {'v': '${track.version}'}),
         headers: {if (token != null) 'Authorization': 'Bearer $token'},
       ).timeout(_timeout);
     } catch (_) {
@@ -893,6 +912,32 @@ class ApiClient
       'comment': comment,
     });
     return Track.fromJson(body);
+  }
+
+  @override
+  Future<Track> setTrackCover(
+      String token, String trackId, int version, Uint8List image) async {
+    final request = http.Request('PUT',
+        baseUri.resolve('/api/v1/tracks/${Uri.encodeComponent(trackId)}/cover'))
+      ..headers['Authorization'] = 'Bearer $token'
+      ..headers['If-Match'] = '"$version"'
+      ..headers['Content-Type'] = 'application/octet-stream'
+      ..bodyBytes = image;
+    final response = await _httpClient
+        .send(request)
+        .then(http.Response.fromStream)
+        .timeout(const Duration(seconds: 60));
+    final decoded = _decode(response.body);
+    if (response.statusCode != 200 || decoded == null) {
+      final code = decoded?['error'];
+      throw ApiException(
+        'Server returned HTTP ${response.statusCode}.',
+        statusCode: response.statusCode,
+        code: code is String ? code : null,
+        details: decoded ?? const {},
+      );
+    }
+    return Track.fromJson(decoded);
   }
 
   @override
@@ -1192,6 +1237,23 @@ class ApiClient
             : '/api/v1/tracks/$id/like',
         token: token);
     return LikeState.fromJson(body);
+  }
+
+  @override
+  Future<ForYou> forYou(String token) async =>
+      ForYou.fromJson(await _send('GET', '/api/v1/for-you', token: token));
+
+  @override
+  Future<List<Track>> radio(
+      String token, List<String> seedIds, List<String> excludeIds) async {
+    final body = await _send('POST', '/api/v1/radio', token: token, body: {
+      'seeds': seedIds.take(20).toList(),
+      'exclude': excludeIds.take(500).toList(),
+    });
+    return [
+      for (final json in body['tracks'] as List<dynamic>? ?? const [])
+        Track.fromJson(json as Map<String, dynamic>),
+    ];
   }
 
   @override

@@ -1,0 +1,22 @@
+# English words that reject a public playlist name, description or track
+# title outright (#207). See words_fa.txt for how they are matched.
+=dick
+=cock
+=cum
+=slut
+fuck
+motherfucker
+=shit
+=shits
+=shitty
+bullshit
+bitch
+=cunt
+=cunts
+pussy
+whore
+asshole
+nigger
+nigga
+faggot
+porn

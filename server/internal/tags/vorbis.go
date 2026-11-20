@@ -1,6 +1,7 @@
 package tags
 
 import (
+	"encoding/base64"
 	"encoding/binary"
 	"strings"
 )
@@ -91,6 +92,21 @@ func (vc vorbisComment) with(m Metadata) vorbisComment {
 			out.fields = append(out.fields, field)
 		}
 	}
+	return out
+}
+
+// withCover drops every embedded picture and adds cover as the front one.
+func (vc vorbisComment) withCover(cover []byte) vorbisComment {
+	out := vorbisComment{vendor: vc.vendor}
+	for _, field := range vc.fields {
+		switch vorbisKey(field) {
+		case "METADATA_BLOCK_PICTURE", "COVERART", "COVERARTMIME":
+			continue
+		}
+		out.fields = append(out.fields, field)
+	}
+	out.fields = append(out.fields,
+		"METADATA_BLOCK_PICTURE="+base64.StdEncoding.EncodeToString(flacPictureData(cover)))
 	return out
 }
 

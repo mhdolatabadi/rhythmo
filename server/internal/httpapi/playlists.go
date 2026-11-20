@@ -124,6 +124,8 @@ type playlistResponse struct {
 	// PublicReview is "pending" while a request to list it waits for an
 	// admin and "rejected" after one turned it down; only its owner sees it.
 	PublicReview *string `json:"publicReview,omitempty"`
+	// PublicReviewReason is why an admin rejected the request, if they said.
+	PublicReviewReason *string `json:"publicReviewReason,omitempty"`
 	// CollabToken is set while people can join; only its owner sees it.
 	CollabToken *string `json:"collabToken,omitempty"`
 	// Goal is how many songs the members aim to fill it up to together
@@ -175,6 +177,7 @@ func toPlaylistResponse(playlist store.Playlist, viewerID string, includeTracks 
 	if isOwner {
 		response.ShareToken, response.CollabToken = playlist.ShareToken, playlist.CollabToken
 		response.PublicReview = playlist.PublicReview
+		response.PublicReviewReason = playlist.PublicReviewReason
 	}
 	if !includeTracks {
 		return response
@@ -273,6 +276,11 @@ func (h *PlaylistHandlers) handleRename(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
+	// A listed playlist, or one waiting to be, may not take a name the
+	// filter rejects (#207).
+	if !h.allowedInPublic(w, r, userID, r.PathValue("id"), &input.Name, input.Description) {
+		return
+	}
 	playlist, err := h.playlists.Rename(r.Context(), userID, r.PathValue("id"), input.Name, input.Description)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "not_found")
@@ -280,6 +288,9 @@ func (h *PlaylistHandlers) handleRename(w http.ResponseWriter, r *http.Request) 
 	}
 	if err != nil {
 		internalError(w, "rename playlist", err)
+		return
+	}
+	if playlist, ok = h.reviewRenamedPlaylist(w, r, playlist); !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, toPlaylistResponse(playlist, userID, false))
