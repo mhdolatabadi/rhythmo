@@ -11,6 +11,8 @@ from threading import Lock
 
 MAX_BYTES = 200 * 1024 * 1024
 MAX_SECONDS = 2 * 60 * 60
+MAX_PLAIN_BYTES = 512 * 1024
+MAX_SYNCED_BYTES = 1024 * 1024
 BUNDLED_MODELS = '/opt/whisper'
 DEFAULT_MODEL = 'large-v3-turbo'
 
@@ -25,6 +27,7 @@ def model_source(name, bundled=BUNDLED_MODELS):
 
 def transcript(segments):
     plain, synced = [], []
+    plain_bytes, synced_bytes = 0, 0
     for segment in segments:
         text = ' '.join(segment.text.split())
         if not text or not math.isfinite(segment.start) or segment.start < 0:
@@ -32,10 +35,14 @@ def transcript(segments):
         ticks = round(segment.start * 100)
         minutes, remainder = divmod(ticks, 6000)
         seconds, centiseconds = divmod(remainder, 100)
-        plain.append(text)
-        synced.append(f'[{minutes:02d}:{seconds:02d}.{centiseconds:02d}]{text}')
-        if len('\n'.join(plain).encode()) > 65536 or len('\n'.join(synced).encode()) > 131072:
+        timed = f'[{minutes:02d}:{seconds:02d}.{centiseconds:02d}]{text}'
+        # Incremental byte counts avoid quadratic joins for long lectures.
+        plain_bytes += len(text.encode()) + (1 if plain else 0)
+        synced_bytes += len(timed.encode()) + (1 if synced else 0)
+        if plain_bytes > MAX_PLAIN_BYTES or synced_bytes > MAX_SYNCED_BYTES:
             raise ValueError('transcript too large')
+        plain.append(text)
+        synced.append(timed)
     if not plain:
         raise ValueError('no speech')
     return {'plain': '\n'.join(plain), 'synced': '\n'.join(synced)}
