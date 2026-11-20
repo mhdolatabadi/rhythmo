@@ -29,8 +29,28 @@ jobs:
       - run: flutter test
       - run: flutter build web --release --no-web-resources-cdn --base-href /app/ --dart-define=API_BASE_URL=https://music.example.com
       - name: Build Android debug APK
-        # The APK is meant to be installed, so it talks to the real server.
-        run: flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.NAFIR_API_BASE_URL || 'https://rhythmo.ir' }}
+        # Retry only transient Maven/Gradle dependency lookup failures.
+        # Real compilation/test errors must fail without a retry.
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            log="$(mktemp)"
+            if flutter build apk --debug --dart-define=API_BASE_URL=${{ vars.NAFIR_API_BASE_URL || 'https://rhythmo.ir' }} 2>&1 | tee "$log"; then
+              rm -f "$log"
+              exit 0
+            fi
+            if ! grep -Eq 'Could not resolve all artifacts for configuration|Could not find org\.jetbrains\.kotlin:|Could not GET|Could not HEAD|Read timed out|Connection reset' "$log"; then
+              rm -f "$log"
+              exit 1
+            fi
+            rm -f "$log"
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Android dependency resolution failed three times"
+              exit 1
+            fi
+            echo "::warning::Transient Gradle dependency resolution failure; retry $attempt/2"
+            sleep 15
+          done
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
