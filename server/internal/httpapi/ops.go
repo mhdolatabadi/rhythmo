@@ -16,9 +16,26 @@ type BotHealthReporter interface {
 
 // OpsHandlers serve operator-only status, behind a token separate from any
 // user account.
+type TranscriptionHealth struct {
+	Healthy              bool  `json:"healthy"`
+	ModelReady           bool  `json:"modelReady"`
+	Queued               int64 `json:"queued"`
+	Processing           int64 `json:"processing"`
+	Failed               int64 `json:"failed"`
+	OldestPendingSeconds int64 `json:"oldestPendingSeconds"`
+}
+
 type OpsHandlers struct {
-	token string
-	bots  BotHealthReporter
+	token         string
+	bots          BotHealthReporter
+	transcription func(context.Context) (TranscriptionHealth, error)
+}
+
+// WithTranscription makes model readiness and aggregate queue health visible
+// to the operator only; the route is never exposed without OPS_TOKEN.
+func (h *OpsHandlers) WithTranscription(probe func(context.Context) (TranscriptionHealth, error)) *OpsHandlers {
+	h.transcription = probe
+	return h
 }
 
 func NewOpsHandlers(token string, bots BotHealthReporter) *OpsHandlers {
@@ -27,6 +44,9 @@ func NewOpsHandlers(token string, bots BotHealthReporter) *OpsHandlers {
 
 func (h *OpsHandlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/ops/bots", h.handleBots)
+	if h.transcription != nil {
+		mux.HandleFunc("GET /api/v1/ops/transcription", h.handleTranscription)
+	}
 }
 
 func (h *OpsHandlers) authorized(r *http.Request) bool {
@@ -61,4 +81,18 @@ func (h *OpsHandlers) handleBots(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *OpsHandlers) handleTranscription(w http.ResponseWriter, r *http.Request) {
+	if !h.authorized(r) {
+		http.NotFound(w, r)
+		return
+	}
+	status, err := h.transcription(r.Context())
+	if err != nil {
+		internalError(w, "transcription health", err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, status)
 }
