@@ -63,7 +63,10 @@ pull_with_retries() {
   return 1
 }
 
-pull_with_retries api web
+# Pull one image at a time: slow registry links often time out when
+# multiple large downloads compete for the same connection.
+pull_with_retries api
+pull_with_retries web
 start_services=()
 if [[ $transcription_enabled == true ]] && ! pull_with_retries transcriber; then
   # Ship the new api and web anyway; the running transcriber keeps working.
