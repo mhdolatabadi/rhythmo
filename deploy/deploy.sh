@@ -3,6 +3,18 @@
 set -euo pipefail
 
 revision="${1:-main}"
+# CI resolves each digest from the successful, commit-pinned GHCR build.
+# Never use a mirrored mutable tag to identify a production image.
+api_digest="${2:-}"
+web_digest="${3:-}"
+if [[ -n "$api_digest" || -n "$web_digest" ]]; then
+  for digest in "$api_digest" "$web_digest"; do
+    if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+      echo "Both immutable image digests must be valid SHA-256 references." >&2
+      exit 1
+    fi
+  done
+fi
 cd "$(dirname "$0")"
 
 if [[ ! -f .env ]]; then
@@ -63,10 +75,20 @@ pull_with_retries() {
   return 1
 }
 
-# Pull one image at a time: slow registry links often time out when
-# multiple large downloads compete for the same connection.
-pull_with_retries api
-pull_with_retries web
+# The runner resolved verified GHCR digests for the commit. Fetch each
+# image from Runflare by digest and tag it for the existing Compose file.
+# Neither service is restarted until both immutable images are staged.
+if [[ -n "$api_digest" ]]; then
+  image_repo="${NAFIR_IMAGE_REPO:-$(grep -E '^NAFIR_IMAGE_REPO=' .env | tail -n 1 | cut -d= -f2- | tr -d '\r' || true)}"
+  image_repo="${image_repo:-ghcr.io/mhdolatabadi/rhythmo}"
+  bash ./pull-pinned-image.sh "$image_repo" api "$NAFIR_IMAGE_TAG" "$api_digest"
+  bash ./pull-pinned-image.sh "$image_repo" web "$NAFIR_IMAGE_TAG" "$web_digest"
+else
+  # Manual deployments without digests retain the original pull behavior.
+  pull_with_retries api
+  pull_with_retries web
+fi
+
 start_services=()
 if [[ $transcription_enabled == true ]] && ! pull_with_retries transcriber; then
   # Ship the new api and web anyway; the running transcriber keeps working.
@@ -88,7 +110,7 @@ if [[ -n "$old_containers" ]]; then
   docker rm -f $old_containers
 fi
 
-docker compose "${compose_args[@]}" up -d --no-build --remove-orphans "${start_services[@]}"
+docker compose "${compose_args[@]}" up -d --no-build --pull never --remove-orphans "${start_services[@]}"
 docker image prune -f
 
 domain="$(grep -E '^NAFIR_DOMAIN=' .env | cut -d= -f2-)"

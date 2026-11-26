@@ -218,8 +218,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check deployment shell syntax
-        run: bash -n deploy/deploy.sh
+      - name: Check deployment scripts and Runflare mirror fallback
+        run: |
+          bash -n deploy/deploy.sh
+          bash -n deploy/pull-pinned-image.sh
+          bash -n scripts/test-deploy-image-mirror.sh
+          bash scripts/test-deploy-image-mirror.sh
       - name: Validate Caddy configuration
         run: >-
           docker run --rm
