@@ -35,10 +35,35 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate owned registry configuration
+        env:
+          PRODUCTION_IMAGE_REPO: ${{ vars.PRODUCTION_IMAGE_REPO }}
+          REGISTRY_USER: ${{ secrets.PRODUCTION_REGISTRY_USER }}
+          REGISTRY_PASSWORD: ${{ secrets.PRODUCTION_REGISTRY_PASSWORD }}
+        run: |
+          : "${PRODUCTION_IMAGE_REPO:?Set the owned regional registry namespace}"
+          : "${REGISTRY_USER:?Set the production registry push user}"
+          : "${REGISTRY_PASSWORD:?Set the production registry push password}"
+          python3 - "$PRODUCTION_IMAGE_REPO" <<'PYTHON'
+          import re, sys
+          repo = sys.argv[1]
+          assert re.fullmatch(r'[a-z0-9][a-z0-9.-]*(?::[0-9]+)?/[a-z0-9][a-z0-9._/-]*', repo)
+          assert '.' in repo.split('/')[0]
+          assert '..' not in repo and '//' not in repo
+          assert repo.split('/')[0] not in ('ghcr.io', 'mirror-docker.runflare.com')
+          PYTHON
+          echo "PRODUCTION_REGISTRY=${PRODUCTION_IMAGE_REPO%%/*}" >> "$GITHUB_ENV"
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.PRODUCTION_REGISTRY }}
+          username: ${{ secrets.PRODUCTION_REGISTRY_USER }}
+          password: ${{ secrets.PRODUCTION_REGISTRY_PASSWORD }}
       # deploy/.env NAFIR_IMAGE_REPO must name this same path.
       - name: Resolve image name and tags
         id: image
         shell: bash
+        env:
+          PRODUCTION_IMAGE_REPO: ${{ vars.PRODUCTION_IMAGE_REPO }}
         run: |
           name="ghcr.io/mhdolatabadi/rhythmo/${{ matrix.name }}"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
@@ -46,7 +71,8 @@ jobs:
             # The transcriber holds a 1.5 GB model. Tag it by the content of its
             # folder, so the server only pulls it again when that folder changes.
             tag="src-$(git rev-parse "HEAD:${{ matrix.context }}")"
-            if docker buildx imagetools inspect "${name}:${tag}" > /dev/null 2>&1; then
+            if docker buildx imagetools inspect "${name}:${tag}" > /dev/null 2>&1 && \
+               docker buildx imagetools inspect "${PRODUCTION_IMAGE_REPO}/transcriber:${tag}" > /dev/null 2>&1; then
               echo "${name}:${tag} already exists; not rebuilding it."
               echo "skip=true" >> "$GITHUB_OUTPUT"
             fi
@@ -55,13 +81,33 @@ jobs:
           fi
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
+        id: build
         if: steps.image.outputs.skip != 'true'
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
+          platforms: linux/amd64
+          provenance: mode=min
           tags: |
             ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
             ${{ steps.image.outputs.name }}:latest
+            ${{ vars.PRODUCTION_IMAGE_REPO }}/${{ matrix.name }}:${{ steps.image.outputs.tag }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+
+      - name: Verify regional registry manifests and full image pull
+        env:
+          PRODUCTION_IMAGE_REPO: ${{ vars.PRODUCTION_IMAGE_REPO }}
+          EXPECTED_ROOT: ${{ steps.build.outputs.digest }}
+          SERVICE: ${{ matrix.name }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          if [[ -z "$EXPECTED_ROOT" ]]; then
+            EXPECTED_ROOT="$(docker buildx imagetools inspect "ghcr.io/mhdolatabadi/rhythmo/$SERVICE:$IMAGE_TAG" --format '{{.Manifest.Digest}}')"
+          fi
+          args=()
+          if [[ -n "$EXPECTED_ROOT" ]]; then args=(--expected-root "$EXPECTED_ROOT"); fi
+          python3 scripts/resolve-registry-image.py "$PRODUCTION_IMAGE_REPO/$SERVICE" "$IMAGE_TAG" \
+            --prefix "$SERVICE" --output "$GITHUB_OUTPUT" "${args[@]}"
