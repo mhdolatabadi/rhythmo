@@ -111,11 +111,11 @@ docker compose ${compose_args[@]+"${compose_args[@]}"} up -d --no-build --pull n
 if [[ -n "$api_digest" ]]; then
   for service in api web transcriber; do
     if [[ "$service" == transcriber && $transcription_enabled != true ]]; then continue; fi
-    case "$service" in api) expected="$api_config" ;; web) expected="$web_config" ;; transcriber) expected="$transcriber_config" ;; esac
+    case "$service" in api) expected="$api_config"; manifest="$api_digest" ;; web) expected="$web_config"; manifest="$web_digest" ;; transcriber) expected="$transcriber_config"; manifest="$transcriber_digest" ;; esac
     container="$(docker compose ${compose_args[@]+"${compose_args[@]}"} ps -q "$service")"
     [[ -n "$container" ]] || { echo "Missing running $service container." >&2; exit 1; }
     actual="$(docker inspect --format '{{.Image}}' "$container")"
-    [[ "$actual" == "$expected" ]] || { echo "Running $service image differs from deployment contract." >&2; exit 1; }
+    [[ "$actual" == "$expected" || "$actual" == "$manifest" ]] || { echo "Running $service image differs from deployment contract." >&2; exit 1; }
   done
 fi
 

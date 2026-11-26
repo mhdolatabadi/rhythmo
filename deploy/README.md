@@ -114,7 +114,8 @@ cannot repair TLS/routing failures or guarantee recovery from a lost SSH session
 If SSH disconnects during rollout, inspect running image identities before rerun.
 
 The server pulls native **destination** manifest digests and verifies config
-identity and platform before retagging for the existing Compose deployment.
+identity (config ID on classic Docker, native manifest ID on containerd) and
+platform before retagging for the existing Compose deployment.
 All enabled application images are staged before container rollout. There is no
 public-mirror or mutable-tag fallback. After Compose starts, the script compares
 running API/web (and enabled transcriber) image IDs to the verified contract;

@@ -31,13 +31,17 @@ for scenario in pull identity platform; do
   export MOCK_FAIL='' MOCK_IDENTITY="$MOCK_CONFIG linux/amd64" MOCK_PLATFORM=linux/x86_64
   case "$scenario" in
     pull) MOCK_FAIL=pull ;;
-    identity) MOCK_IDENTITY="$digest linux/amd64" ;;
+    identity) MOCK_IDENTITY="sha256:$(printf 'f%.0s' {1..64}) linux/amd64" ;;
     platform) MOCK_PLATFORM=linux/aarch64 ;;
   esac
   if bash deploy/pull-pinned-image.sh "${args[@]}"; then echo "Accepted $scenario failure" >&2; exit 1; fi
   if grep -q 'image tag' "$MOCK_DOCKER_LOG"; then echo 'Retag after failure' >&2; exit 1; fi
 done
 unset MOCK_FAIL MOCK_IDENTITY MOCK_PLATFORM
+# Docker's containerd image store reports the native manifest as .Id.
+: > "$MOCK_DOCKER_LOG"
+MOCK_IDENTITY="$digest linux/amd64" bash deploy/pull-pinned-image.sh "${args[@]}"
+grep -q '^image tag' "$MOCK_DOCKER_LOG"
 for bad in ghcr.io/owner/app mirror-docker.runflare.com/owner/app 'registry.example.com/a;id' 'registry.example.com/a/../b'; do
   : > "$MOCK_DOCKER_LOG"
   args[1]="$bad"

@@ -77,6 +77,11 @@ class ContractTests(unittest.TestCase):
             with patch.object(m, "docker", side_effect=responses[:3] + [identity]), patch.object(m.subprocess, "run"), self.assertRaises(ValueError):
                 m.resolve("registry.example.com/app/api", "abc", "linux/amd64", ROOT)
 
+    def test_containerd_native_manifest_identity_supported(self):
+        import json
+        with patch.object(m, "docker", side_effect=[ROOT, json.dumps(INDEX), json.dumps(MANIFEST), f"{LEAF} linux/amd64"]), patch.object(m.subprocess, "run"):
+            self.assertEqual(m.resolve("registry.example.com/app/api", "abc", "linux/amd64", ROOT), (LEAF, CONFIG))
+
     def test_blob_failure_does_not_return_contract(self):
         import json
         with patch.object(m, "docker", side_effect=[ROOT, json.dumps(MANIFEST)]), patch.object(m.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "docker pull")), self.assertRaises(subprocess.CalledProcessError):

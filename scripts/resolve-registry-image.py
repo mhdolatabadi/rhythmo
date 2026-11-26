@@ -79,8 +79,9 @@ def resolve(repository, tag, platform, expected_root=None):
     # Manifest HEAD alone cannot prove blob reachability. Pull every layer.
     subprocess.run(["docker", "pull", "--platform", platform, pinned], check=True)
     identity = docker("image", "inspect", pinned, "--format", "{{.Id}} {{.Os}}/{{.Architecture}}")
-    if identity != f"{config} {platform}":
-        raise ValueError("Pulled image config or platform differs from published contract")
+    # Classic Docker uses the config ID; containerd uses the target manifest ID.
+    if identity not in {f"{config} {platform}", f"{digest} {platform}"}:
+        raise ValueError(f"Pulled identity {identity!r} differs from expected config/platform {config} {platform}")
     return digest, config
 
 

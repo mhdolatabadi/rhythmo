@@ -32,7 +32,7 @@ source_ref="${source_repo}/${service}@${digest}"
 # No mirror fallback, mutable tag fallback, daemon restart or automatic login.
 docker pull --platform "$platform" "$source_ref"
 identity="$(docker image inspect "$source_ref" --format '{{.Id}} {{.Os}}/{{.Architecture}}')"
-if [[ "$identity" != "$config $platform" ]]; then
+if [[ "$identity" != "$config $platform" && "$identity" != "$digest $platform" ]]; then
   echo 'Pulled image identity differs from the verified build contract.' >&2
   exit 1
 fi
