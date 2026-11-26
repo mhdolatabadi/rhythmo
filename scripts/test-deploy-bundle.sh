@@ -147,7 +147,7 @@ cp deploy/deploy.sh "$tmp/checkout/deploy/"
 cp scripts/deploy_image_bundle.py "$tmp/checkout/scripts/"
 cat > "$tmp/checkout/deploy/.env" <<'ENV'
 NAFIR_DOMAIN=music.example.com
-TRANSCRIPTION_TOKEN=0123456789abcdef0123456789abcdef
+TRANSCRIPTION_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AUTH_TOKEN_SECRET=fixture-only
 POSTGRES_PASSWORD=fixture-only
 MINIO_ROOT_USER=fixture-only
