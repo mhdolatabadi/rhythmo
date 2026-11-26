@@ -12,7 +12,9 @@ printf '%s\n' "$*" >> "$MOCK_DOCKER_LOG"
 if [[ "$1" == pull ]]; then
   case "${MOCK_PULL_FAIL:-}" in
     all) exit 1 ;;
-    mirror) [[ "$2" == mirror-docker.runflare.com/* ]] && exit 1 ;;
+    mirror)
+      if [[ "$2" == mirror-docker.runflare.com/* ]]; then exit 1; fi
+      ;;
   esac
 fi
 MOCK
