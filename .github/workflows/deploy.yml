@@ -14,6 +14,7 @@ on:
 permissions:
   actions: write
   contents: read
+  packages: read
 
 concurrency:
   group: deploy-production
@@ -55,6 +56,29 @@ jobs:
           echo "Timed out waiting for immutable images." >&2
           exit 1
 
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Resolve pinned digests from successful GHCR images
+        id: pinned_images
+        shell: bash
+        env:
+          DEPLOY_SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          for service in api web; do
+            image="ghcr.io/mhdolatabadi/rhythmo/${service}:${DEPLOY_SHA}"
+            digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Could not resolve an immutable SHA-256 digest for ${service}." >&2
+              exit 1
+            fi
+            echo "${service}=${digest}" >> "$GITHUB_OUTPUT"
+          done
+
       - name: Validate deployment secrets
         shell: bash
         env:
@@ -90,6 +114,8 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           DEPLOY_SHA: ${{ steps.revision.outputs.sha }}
+          API_DIGEST: ${{ steps.pinned_images.outputs.api }}
+          WEB_DIGEST: ${{ steps.pinned_images.outputs.web }}
         run: |
           # Registry pulls may be silent for minutes. Send encrypted SSH
           # keepalives so an idle network path does not drop the session.
@@ -99,7 +125,7 @@ jobs:
             -o ServerAliveCountMax=12 \
             -p "${DEPLOY_PORT:-22}" \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "bash '$DEPLOY_PATH/deploy/deploy.sh' '$DEPLOY_SHA'"
+            "bash '$DEPLOY_PATH/deploy/deploy.sh' '$DEPLOY_SHA' '$API_DIGEST' '$WEB_DIGEST'"
 
       - name: Load release automation from the workflow revision
         uses: actions/checkout@v4
