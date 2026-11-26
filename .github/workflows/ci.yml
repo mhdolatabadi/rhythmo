@@ -218,9 +218,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check deployment scripts and Runflare mirror fallback
+      - name: Check verified SSH deployment and legacy mirror helper
         run: |
           bash -n deploy/deploy.sh
+          bash -n deploy/receive-deploy-bundle.sh
+          bash -n scripts/transfer-deploy-bundle.sh
+          python3 -m unittest discover -s scripts -p 'test_deploy_image_bundle.py' -v
+          bash scripts/test-deploy-bundle.sh
           bash -n deploy/pull-pinned-image.sh
           bash -n scripts/test-deploy-image-mirror.sh
           bash scripts/test-deploy-image-mirror.sh
@@ -338,3 +342,18 @@ jobs:
             -v "$PWD/legacy-test.conf:/etc/nginx/conf.d/default.conf:ro" \
             -v "$PWD/deploy/legacy-domain.nginx.conf:/etc/nginx/legacy.conf:ro" \
             nginx:1.27-alpine nginx -t
+
+  image-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        containerd: [false, true]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-docker-action@v5
+        with:
+          daemon-config: '{"features":{"containerd-snapshotter":${{ matrix.containerd }}}}'
+      - uses: docker/setup-buildx-action@v3
+      - name: Exercise real Docker archive export and load
+        run: bash scripts/test-deploy-bundle-integration.sh

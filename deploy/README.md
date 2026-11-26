@@ -43,8 +43,8 @@ The Compose project is named `nafir` (set in `compose.yaml`), so its
 containers and networks don't collide with other projects on the server. Its
 volumes keep the names they got under the old default project name
 (`deploy_postgres-data`, `deploy_minio-data`, `deploy_caddy-data`,
-`deploy_caddy-config`), and `deploy.sh` replaces this checkout's old
-`deploy-*` containers once on the first deploy after the rename.
+`deploy_caddy-config`). Deployment retains existing volumes and does not
+automatically remove legacy containers.
 
 Audio objects under `/nafir-music/*` deliberately bypass Caddy response
 compression and are served with `Cache-Control: private, no-transform`. This
@@ -52,76 +52,87 @@ keeps byte ranges and cached media identical to the object stored in MinIO.
 
 ## Images
 
-The **Images** workflow builds the `api` and `web` images on every push to `main`
-and publishes them to GitHub Container Registry as
-`ghcr.io/mhdolatabadi/rhythmo/{api,web}`, tagged with the commit SHA and `latest`.
-The server only pulls them, so it never needs the multi-gigabyte Flutter SDK.
-`NAFIR_IMAGE_REPO` in `deploy/.env` must name the same path
-(`ghcr.io/mhdolatabadi/rhythmo`); the old `nafir/*` packages no longer get new tags.
+The **Images** workflow publishes `api` and `web` to GitHub Container Registry
+at `ghcr.io/mhdolatabadi/rhythmo/{api,web}`, tagged with the source commit and
+`latest`. The transcriber includes the speech model and uses a content tag,
+`src-<server/transcriber tree hash>`, so unchanged source reuses its image.
+Production releases use immutable digests resolved from these published images;
+`latest` does not identify a release.
 
-The transcriber image carries a 1.5 GB speech model, so it is tagged by the
-content of `server/transcriber` (`src-<tree hash>`) instead of the commit, and is
-only rebuilt and pulled again when that folder changes. Pulls are retried; if the
-transcriber still cannot be pulled, the deployment goes ahead with the new `api`
-and `web` and leaves the running transcriber as it was, with a warning. To fetch it
-by hand over a slow link, run the `docker pull` the warning prints (it keeps
-finished layers between attempts) and deploy again.
+`NAFIR_IMAGE_REPO` in `deploy/.env` must name the same repository
+(`ghcr.io/mhdolatabadi/rhythmo`). The server needs Docker and Compose, but does
+not need the Flutter SDK, a registry login, or direct access to GHCR for the
+automated release path.
 
-If `docker compose pull` returns `unauthorized`, open each package under the
-repository's **Packages** and set its visibility to public, or run
-`docker login ghcr.io` on the server with a token that has `read:packages`.
+### Production image delivery over SSH
 
-### Production image mirror (Runflare)
+The **Deploy** workflow first resolves an exact commit on `main` and requires
+successful **Quality checks** and **Images** workflows for that commit. This
+also applies to a manually requested revision. The runner downloads the
+immutable Linux/AMD64 `api`, `web`, and transcriber images from GHCR, records
+their registry digests and local image identities, and saves a compressed
+Docker archive plus a release manifest.
 
-The default production GitHub Actions **Deploy** workflow retrieves the exact
-`api` and `web` manifest digests from GHCR **on the GitHub runner**, after the
-matching Images workflow succeeds. The server downloads those images from
-`mirror-docker.runflare.com/mhdolatabadi/rhythmo/{api,web}@sha256:...`,
-then tags the verified bytes with the original
-`ghcr.io/mhdolatabadi/rhythmo/{api,web}:<deploy-commit>` names used by Compose.
-This keeps the deployed version pinned to the successful build even when
-Runflare serves a stale tag. Docker checks the requested digest during pull.
-If the mirror fails, it retries the same digest through GHCR as a fallback.
+The server also needs Python 3, gzip, and GNU timeout. It must have room for
+the archive plus twice the reported image sizes and 256 MiB of headroom; no
+space is reclaimed automatically. Temporary transfer files are removed on exit
+when SSH is reachable; after a hard disconnect, inspect the attempt-specific
+`/tmp/rhythmo-deploy-<sha>-<run>-<attempt>` directory before deleting its files.
 
-The server does not need a registry login, Docker daemon configuration change,
-or source rebuild for these commit-pinned pulls. Both images are staged before
-`docker compose up --pull never` changes any running services. Transcriber
-remains optional and retains its previous pull behavior.
+The runner transfers this bundle over SSH using the existing deployment key
+and verified host fingerprint. Connections and retries have explicit time
+limits. No new registry secret, mirror account, or Docker daemon configuration
+is needed. The server checks the archive's SHA-256 checksum and release
+manifest before loading it, then checks the loaded image identities against
+the manifest. A truncated transfer or mismatched image stops deployment.
 
-Runflare is a third-party *read-only mirror*, **not** the canonical push
-registry: the Images workflow continues to push to GHCR. Its free request
-allowance is limited per source IP; verify connectivity and available quota
-before depending on it. See https://docs.runflare.com/mirror/mirror-docker/
-and https://runflare.com/mirrors/.
+Before changing containers, deployment validates the effective Compose
+configuration and available disk space and ensures every required image is
+available locally. The server's `.env`, Compose overrides, persistent volumes,
+and external `proxynet` network are preserved. The transcriber image is staged
+with every bundle; it is started only when transcription is enabled. All
+staging and identity checks must succeed before `docker compose up --pull never`
+runs, so the rollout cannot silently fall back to a registry pull.
 
-**Recovery / rollback:** if deployment fails, production services keep the
-previous running images. Diagnose the exact error in the Deploy workflow log.
-After a transient failure, rerun that failed Deploy job. If the mirror is
-unavailable, the script will fall back to GHCR, **at the same digest**. To
-revert to a previous working release, use the workflow's manual `ref` input
-with the *previous tested commit*; the registry source remains digest-pinned.
-Never use `latest` for production release images.
+After rollout, the script verifies that the running release containers use
+the expected images before accepting the public health check. Android release
+automation runs only after these deployment checks succeed.
 
-Manual on-host deploys without the digest arguments keep the older direct-pull
-procedure; the mirror is used by the automated pipeline, which can verify
-manifest digests before downloading.
+### Failure recovery and rollback
+
+A failure during preflight, transfer, checksum verification, or staging leaves
+the current containers running. Inspect the failed **Deploy** job for the
+specific stage and rerun the workflow after a transient network failure. If
+preflight reports insufficient disk space or a missing infrastructure image,
+resolve that condition explicitly and rerun; the workflow does not delete
+images, volumes, or user content to make room.
+
+A failure after container replacement can require a rollback. Use **Actions
+→ Deploy → Run workflow** with the previous tested `main` commit in `ref`.
+The target must include the SSH bundle scripts; older revisions are rejected
+before transfer and need a separately reviewed compatibility rollback. The same
+CI checks, immutable image delivery, and running-image verification apply. Keep the previous release's images and persistent-volume
+backups until the new release is accepted. Deployment never runs automatic
+image or volume pruning, and it does not roll back database data.
 
 To build locally instead, run `docker compose up -d --build`.
 
 ## Updates
 
-On the server, `deploy/deploy.sh` pulls `main`, pulls the images built for that
-exact commit, restarts the stack and waits for the health check. Run it after
-the **Images** workflow for that commit has finished; otherwise the pull fails
-and nothing is restarted.
+Production updates run through **Actions → Deploy** after successful CI. To
+retry a failed release or roll back, choose **Run workflow** and supply the
+exact tested commit in `ref`. The server's deployment script receives that
+revision and the verified bundle from the workflow; do not bypass the
+workflow's CI and image verification with an on-host pull of a mutable tag.
 
-To deploy from GitHub instead, open **Actions → Deploy → Run workflow**. It needs these secrets in the `production` environment:
+The `production` environment needs these existing secrets:
 
 | Secret | Value |
 | --- | --- |
 | `DEPLOY_HOST` | Server IP or hostname |
 | `DEPLOY_USER` | SSH user that can run `docker` |
-| `DEPLOY_PATH` | Absolute path of the repository clone, for example `/opt/nafir` |
+| `DEPLOY_PATH` | Absolute path of the repository clone, for example `/opt/rhythmo` |
+| `DEPLOY_PORT` | Optional SSH port; defaults to `22` |
 | `DEPLOY_SSH_KEY` | Private key of a dedicated deploy key pair; add the public key to the user's `~/.ssh/authorized_keys` |
 | `DEPLOY_KNOWN_HOSTS` | Output of `ssh-keyscan <host>`, verified against the server's fingerprint |
 
@@ -346,8 +357,8 @@ docker system df -v | grep -E 'deploy_(minio|postgres)-data'
 
 ### Emergency: stop new music coming in
 
-Set `UPLOADS_ENABLED=false` in `deploy/.env` and run `./deploy.sh`. App
-uploads, bot imports and link imports are then refused with
+Set `UPLOADS_ENABLED=false` in `deploy/.env` and rerun the **Deploy** workflow
+for the current tested commit. App uploads, bot imports and link imports are then refused with
 `503 uploads_disabled`, while existing tracks keep playing and nothing is
 deleted. To slow down signups instead, lower `REGISTER_RATE_REQUESTS`.
 Undo by setting it back to `true` and deploying again.
@@ -459,9 +470,9 @@ webhook secret is never printed.
 
 ### Rotating a bot token
 1. In @BotFather, revoke the token and copy the new one.
-2. Replace `BALE_BOT_TOKEN` or `TELEGRAM_BOT_TOKEN` in `deploy/.env` and run
-   `deploy/deploy.sh`. On start, the API registers the webhook again with the
-   new token.
+2. Replace `BALE_BOT_TOKEN` or `TELEGRAM_BOT_TOKEN` in `deploy/.env` and rerun
+   the **Deploy** workflow for the current tested commit. On start, the API
+   registers the webhook again with the new token.
 
 Linked chats, imports and sent-file IDs all survive the rotation.
 
@@ -492,8 +503,9 @@ retries them at the new one.
   curl -s "https://tapi.bale.ai/bot<token>/deleteWebhook"      # Bale
   curl -s "https://api.telegram.org/bot<token>/deleteWebhook"  # Telegram
   ```
-- **Roll back:** run `deploy/deploy.sh <previous-commit>`. Bot tables only gain
-  columns and tables, so an older API keeps working with them.
+- **Roll back:** run the **Deploy** workflow with the previous tested commit
+  in `ref`. Check schema compatibility before reverting across a database
+  migration; deployment preserves the existing data.
 
 ## Security rules
 
@@ -517,9 +529,11 @@ verified against real Persian recitations; these limits are not performance guar
 For mostly Arabic recordings set `TRANSCRIPTION_LANGUAGE=auto` or `ar`. A larger
 model may need increased memory in `compose.yaml`.
 
-It is on by default: every deployment enables the `transcription` Compose profile,
-pulls the immutable transcriber image and starts it. (`TRANSCRIPTION_ENABLED` is no
-longer read.) When `TRANSCRIPTION_TOKEN` is missing or shorter than 32 characters, the
+It is on by default unless `TRANSCRIPTION_DISABLED=true` is set in `.env`.
+Automated deployments stage the immutable transcriber image with the release
+bundle, then enable the `transcription` Compose profile and start it when the
+feature is enabled. (`TRANSCRIPTION_ENABLED` is no longer read.) When
+`TRANSCRIPTION_TOKEN` is missing or shorter than 32 characters, the
 deployment script generates one into `.env` without printing it. No port is published; the API streams original audio directly over the
 internal container network using the token. The default `large-v3-turbo` model,
 much more accurate in Persian than `small`, is built into the image, so the server
