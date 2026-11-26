@@ -218,12 +218,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check deployment scripts and Runflare mirror fallback
+      - name: Check owned registry delivery contracts
         run: |
           bash -n deploy/deploy.sh
           bash -n deploy/pull-pinned-image.sh
+          bash -n deploy/remote-deploy.sh
+          python3 -m unittest discover -s scripts -p 'test_registry_image.py' -v
           bash -n scripts/test-deploy-image-mirror.sh
           bash scripts/test-deploy-image-mirror.sh
+          bash scripts/test-deploy-staging.sh
       - name: Validate Caddy configuration
         run: >-
           docker run --rm
@@ -338,3 +341,29 @@ jobs:
             -v "$PWD/legacy-test.conf:/etc/nginx/conf.d/default.conf:ro" \
             -v "$PWD/deploy/legacy-domain.nginx.conf:/etc/nginx/legacy.conf:ro" \
             nginx:1.27-alpine nginx -t
+
+
+  registry-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start a disposable OCI registry
+        run: docker run -d --name registry-contract -p 5000:5000 registry:2
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+          buildkitd-config-inline: |
+            [registry."localhost:5000"]
+              http = true
+      - name: Exercise actual index, native manifest and layer pulls
+        run: |
+          mkdir -p "$RUNNER_TEMP/registry-fixture"
+          printf 'rhythmo registry contract\n' > "$RUNNER_TEMP/registry-fixture/payload"
+          printf 'FROM scratch\nCOPY payload /payload\n' > "$RUNNER_TEMP/registry-fixture/Dockerfile"
+          docker buildx build --platform linux/amd64 --provenance=mode=min --push \
+            -t localhost:5000/rhythmo/api:contract "$RUNNER_TEMP/registry-fixture"
+          expected="$(docker buildx imagetools inspect localhost:5000/rhythmo/api:contract --format '{{.Manifest.Digest}}')"
+          python3 scripts/resolve-registry-image.py localhost:5000/rhythmo/api contract \
+            --expected-root "$expected" --prefix api --output "$RUNNER_TEMP/registry-contract"
+          cat "$RUNNER_TEMP/registry-contract"

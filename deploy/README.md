@@ -71,40 +71,95 @@ If `docker compose pull` returns `unauthorized`, open each package under the
 repository's **Packages** and set its visibility to public, or run
 `docker login ghcr.io` on the server with a token that has `read:packages`.
 
-### Production image mirror (Runflare)
+### Production delivery through an owned regional registry (#498)
 
-The default production GitHub Actions **Deploy** workflow retrieves the exact
-`api` and `web` manifest digests from GHCR **on the GitHub runner**, after the
-matching Images workflow succeeds. The server downloads those images from
-`mirror-docker.runflare.com/mhdolatabadi/rhythmo/{api,web}@sha256:...`,
-then tags the verified bytes with the original
-`ghcr.io/mhdolatabadi/rhythmo/{api,web}:<deploy-commit>` names used by Compose.
-This keeps the deployed version pinned to the successful build even when
-Runflare serves a stale tag. Docker checks the requested digest during pull.
-If the mirror fails, it retries the same digest through GHCR as a fallback.
+Production must publish to a **project-owned, push-capable registry namespace**
+reachable from both GitHub Actions and the production Docker daemon. A namespace
+may be public or private. Runflare's public pull-through mirror is not such a
+namespace; it remains dependent on upstream availability and cache behavior.
+The same applies to an Arvan mirror. Provision an actual hosted registry before
+activating this pipeline; neither provider's name alone establishes OCI support
+or reachability. No registry account has been provisioned by this change.
 
-The server does not need a registry login, Docker daemon configuration change,
-or source rebuild for these commit-pinned pulls. Both images are staged before
-`docker compose up --pull never` changes any running services. Transcriber
-remains optional and retains its previous pull behavior.
+Configuration prerequisites:
 
-Runflare is a third-party *read-only mirror*, **not** the canonical push
-registry: the Images workflow continues to push to GHCR. Its free request
-allowance is limited per source IP; verify connectivity and available quota
-before depending on it. See https://docs.runflare.com/mirror/mirror-docker/
-and https://runflare.com/mirrors/.
+- Actions variable `PRODUCTION_IMAGE_REPO`: hostname/namespace, without scheme,
+  tag or service suffix (for example `registry.example.com/rhythmo`). Use the
+  actual provider endpoint; the example is not a working service.
+- Actions secrets `PRODUCTION_REGISTRY_USER` and
+  `PRODUCTION_REGISTRY_PASSWORD`: limited push access to that namespace.
+- If private, install a separate read-only registry login for the existing
+  deployment user on the server through the normal secret-management procedure.
+  Do not copy the CI push credential to the server or paste credentials in issues.
+- Permit HTTPS to the registry, its authentication endpoint, and any storage
+  endpoints it redirects blob downloads to, from **both** runner and server.
+  A successful `/v2/` or manifest HEAD does not prove this. Full pulls below do.
 
-**Recovery / rollback:** if deployment fails, production services keep the
-previous running images. Diagnose the exact error in the Deploy workflow log.
-After a transient failure, rerun that failed Deploy job. If the mirror is
-unavailable, the script will fall back to GHCR, **at the same digest**. To
-revert to a previous working release, use the workflow's manual `ref` input
-with the *previous tested commit*; the registry source remains digest-pinned.
-Never use `latest` for production release images.
+`Images` builds once for `linux/amd64`, retains provenance, and pushes the same
+output to GHCR and the owned registry. This is the normal publication path,
+not a one-off image transfer. It resolves and verifies the destination's root
+digest against the build output (or GHCR for a cached transcriber), selects the
+single native manifest from an OCI index/Docker manifest list, and fully pulls
+its layers. Attestation entries are not executable platform images. Zero-size,
+ambiguous, missing-platform and nested-index descriptors fail closed.
 
-Manual on-host deploys without the digest arguments keep the older direct-pull
-procedure; the mirror is used by the automated pipeline, which can verify
-manifest digests before downloading.
+`Deploy` requires successful main CI and Images for the exact commit, checks
+GHCR/destination root digest equality, and repeats the full destination pull.
+The server bootstrap first checks tracked changes, Docker version and native
+platform; network diagnostics log only status and TLS timings. It then checks
+out the exact commit **before launching its deploy script**, avoiding execution
+of an old script loaded before checkout. SSH uses strict host verification,
+batch authentication, connection timeout and encrypted keepalives. Keepalives
+cannot repair TLS/routing failures or guarantee recovery from a lost SSH session.
+If SSH disconnects during rollout, inspect running image identities before rerun.
+
+The server pulls native **destination** manifest digests and verifies config
+identity and platform before retagging for the existing Compose deployment.
+All enabled application images are staged before container rollout. There is no
+public-mirror or mutable-tag fallback. After Compose starts, the script compares
+running API/web (and enabled transcriber) image IDs to the verified contract;
+only then does the public API health check authorize the Android release step.
+It does not certify Whisper inference, all UI behavior, or store approval.
+
+Existing Compose files and any operator override defining the external
+`proxynet` contract are preserved. Expanded Compose config is validated with
+`--quiet` to avoid secret exposure. No daemon restart, volume deletion, old
+project container removal, or image pruning is performed by the new path.
+
+Rollout plan: provision and configure the namespace; run Images; verify full
+pulls from runner and server; deploy through the workflow; verify running image
+IDs and public health; then observe signed Android build, GitHub Release and
+Bazaar submission separately. Keep this PR in draft until registry configuration
+and server-side acceptance can be completed. Offline mocks/local registry tests
+are not evidence of Runflare/Arvan production connectivity.
+
+Rollback: retain the previous images (no automatic pruning), use the Deploy
+workflow's `ref` for a previously tested main commit **that includes this delivery
+contract** and has both registry publications available. Older commits lacking
+these scripts are not compatible with this bootstrap; a rollback to them needs
+an explicitly reviewed compatibility rollout. Never remove database/object
+volumes or rebuild production from source to recover registry access.
+
+### Incident evidence and limits (2026-11-26)
+
+Deploy run [45791182226](https://github.com/mhdolatabadi/rhythmo/actions/runs/45791182226)
+reaches the remote command, then Runflare fails the requested descriptor; GHCR
+resolves the image but times out during TLS to `pkg-containers.githubusercontent.com`.
+The failed API root is an OCI index with one linux/amd64 manifest and one
+unknown/unknown provenance attestation. GHCR reports positive descriptor sizes.
+Read-only external probes found HTTP 500 for both index and native manifest on
+Runflare, while Alpine's OCI index returns HTTP 200 with a positive content size.
+This rules out declaring generic multiarch incompatibility as the proven cause.
+[Runflare documentation](https://docs.runflare.com/mirror/mirror-docker/) explicitly
+advertises GHCR domain replacement, so that path follows its documented usage.
+The provider's internal HTTP 500 cause and the server's exact TLS network cause
+(routing, firewall, MTU, filtering or transient congestion) remain unproven.
+
+The architectural fault is a deployment-time dependency on an unverified public
+cache and a blob endpoint the server cannot reliably reach. Prior mocked tests
+proved command selection only, not registry protocol, blobs or real rollout.
+Release v0.1.139 remains the latest observed GitHub release; Bazaar submission
+was skipped after deployment failure, not shown to have failed at its own API.
 
 To build locally instead, run `docker compose up -d --build`.
 

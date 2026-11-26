@@ -3,17 +3,29 @@
 set -euo pipefail
 
 revision="${1:-main}"
-# CI resolves each digest from the successful, commit-pinned GHCR build.
-# Never use a mirrored mutable tag to identify a production image.
+# The workflow resolves native manifest AND config digests from the owned registry.
 api_digest="${2:-}"
 web_digest="${3:-}"
+source_repo="${4:-}"
+api_config="${5:-}"
+web_config="${6:-}"
+transcriber_digest="${7:-}"
+transcriber_config="${8:-}"
+platform="${9:-linux/amd64}"
 if [[ -n "$api_digest" || -n "$web_digest" ]]; then
-  for digest in "$api_digest" "$web_digest"; do
+  for digest in "$api_digest" "$web_digest" "$api_config" "$web_config" "$transcriber_digest" "$transcriber_config"; do
     if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-      echo "Both immutable image digests must be valid SHA-256 references." >&2
+      echo "All image manifest and config digests are required." >&2
       exit 1
     fi
   done
+  if [[ "${source_repo%%/*}" != *.* ]]; then echo 'Expected an explicit regional registry hostname.' >&2; exit 2; fi
+  if [[ ! "$source_repo" =~ ^[a-z0-9][a-z0-9.-]*(:[0-9]+)?/[a-z0-9][a-z0-9._/-]*$ ]] ||
+     [[ "$source_repo" == ghcr.io/* || "$source_repo" == mirror-docker.runflare.com/* || "$source_repo" == *..* || "$source_repo" == *//* ]] ||
+     [[ "$platform" != linux/amd64 ]]; then
+    echo "Invalid owned registry or production platform." >&2
+    exit 1
+  fi
 fi
 cd "$(dirname "$0")"
 
@@ -66,7 +78,7 @@ fi
 pull_with_retries() {
   local attempt
   for attempt in 1 2 3 4; do
-    if docker compose "${compose_args[@]}" pull "$@"; then
+    if docker compose ${compose_args[@]+"${compose_args[@]}"} pull "$@"; then
       return 0
     fi
     echo "Pulling $* failed (attempt ${attempt}); retrying." >&2
@@ -75,43 +87,37 @@ pull_with_retries() {
   return 1
 }
 
-# The runner resolved verified GHCR digests for the commit. Fetch each
-# image from Runflare by digest and tag it for the existing Compose file.
-# Neither service is restarted until both immutable images are staged.
+# Stage every enabled application service before changing running containers.
 if [[ -n "$api_digest" ]]; then
   image_repo="${NAFIR_IMAGE_REPO:-$(grep -E '^NAFIR_IMAGE_REPO=' .env | tail -n 1 | cut -d= -f2- | tr -d '\r' || true)}"
   image_repo="${image_repo:-ghcr.io/mhdolatabadi/rhythmo}"
-  bash ./pull-pinned-image.sh "$image_repo" api "$NAFIR_IMAGE_TAG" "$api_digest"
-  bash ./pull-pinned-image.sh "$image_repo" web "$NAFIR_IMAGE_TAG" "$web_digest"
+  bash ./pull-pinned-image.sh "$image_repo" "$source_repo" api "$NAFIR_IMAGE_TAG" "$api_digest" "$api_config" "$platform"
+  bash ./pull-pinned-image.sh "$image_repo" "$source_repo" web "$NAFIR_IMAGE_TAG" "$web_digest" "$web_config" "$platform"
+  if [[ $transcription_enabled == true ]]; then
+    bash ./pull-pinned-image.sh "$image_repo" "$source_repo" transcriber "$NAFIR_TRANSCRIBER_TAG" "$transcriber_digest" "$transcriber_config" "$platform"
+  fi
 else
-  # Manual deployments without digests retain the original pull behavior.
+  # Legacy manual operation; automated production always supplies the contract.
   pull_with_retries api
   pull_with_retries web
+  if [[ $transcription_enabled == true ]]; then pull_with_retries transcriber; fi
 fi
+# Validate privately: expanded Compose includes secrets and must not be logged.
+docker compose ${compose_args[@]+"${compose_args[@]}"} config --quiet
 
-start_services=()
-if [[ $transcription_enabled == true ]] && ! pull_with_retries transcriber; then
-  # Ship the new api and web anyway; the running transcriber keeps working.
-  repo="$(grep -E '^NAFIR_IMAGE_REPO=' .env | tail -n 1 | cut -d= -f2- || true)"
-  echo "WARNING: could not pull the transcriber image; the running transcriber is kept." >&2
-  echo "WARNING: fetch it with: docker pull ${repo:-ghcr.io/mhdolatabadi/rhythmo}/transcriber:${NAFIR_TRANSCRIBER_TAG}" >&2
-  mapfile -t start_services < <(docker compose "${compose_args[@]}" config --services | grep -vx transcriber)
+docker compose ${compose_args[@]+"${compose_args[@]}"} up -d --no-build --pull never --remove-orphans
+
+# A health response from an old container is not proof of this rollout.
+if [[ -n "$api_digest" ]]; then
+  for service in api web transcriber; do
+    if [[ "$service" == transcriber && $transcription_enabled != true ]]; then continue; fi
+    case "$service" in api) expected="$api_config" ;; web) expected="$web_config" ;; transcriber) expected="$transcriber_config" ;; esac
+    container="$(docker compose ${compose_args[@]+"${compose_args[@]}"} ps -q "$service")"
+    [[ -n "$container" ]] || { echo "Missing running $service container." >&2; exit 1; }
+    actual="$(docker inspect --format '{{.Image}}' "$container")"
+    [[ "$actual" == "$expected" ]] || { echo "Running $service image differs from deployment contract." >&2; exit 1; }
+  done
 fi
-
-# One-time move from the old project name ("deploy", from this folder) to
-# "nafir": remove this checkout's old containers so the new ones can take
-# their ports. Only containers Compose started from this very folder match;
-# volumes are kept and the new containers reuse them.
-old_containers="$(docker ps -aq \
-  --filter label=com.docker.compose.project=deploy \
-  --filter "label=com.docker.compose.project.working_dir=$(pwd)")"
-if [[ -n "$old_containers" ]]; then
-  echo "Replacing the containers of the old \"deploy\" project."
-  docker rm -f $old_containers
-fi
-
-docker compose "${compose_args[@]}" up -d --no-build --pull never --remove-orphans "${start_services[@]}"
-docker image prune -f
 
 domain="$(grep -E '^NAFIR_DOMAIN=' .env | cut -d= -f2-)"
 ops_token="$(grep -E '^OPS_TOKEN=' .env | cut -d= -f2- || true)"
