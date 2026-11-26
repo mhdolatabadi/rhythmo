@@ -5,3 +5,5 @@
 38803e9e3cef176f90c42315a6f718d576a2c042:server/internal/auth/auth_test.go:jwt:70
 # indexnow_test.go: a sample IndexNow key in a test, since renamed to a plain word.
 e5751272358008e3af1755353403f01d5fe68d92:server/internal/httpapi/indexnow_test.go:generic-api-key:13
+# SSH bundle regression fixture: deterministic test-only token, never deployed.
+2fcc37387212bbc5340775c257c663eb676db8a5:scripts/test-deploy-bundle.sh:generic-api-key:150

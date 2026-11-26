@@ -27,17 +27,30 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     environment: production
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.ref }}
 
       - name: Resolve deploy commit
         id: revision
         shell: bash
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "tree=$(git rev-parse HEAD:server/transcriber)" >> "$GITHUB_OUTPUT"
+
+      - name: Require successful main CI for the exact revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
+          state="$(gh run list --workflow ci.yml --commit "$DEPLOY_SHA" --event push --limit 1 --json conclusion --jq '.[0].conclusion')"
+          [[ "$state" == success ]] || { echo 'This revision has not passed main CI.' >&2; exit 1; }
+          test -f scripts/deploy_image_bundle.py
 
       - name: Wait for immutable images
         shell: bash
@@ -62,22 +75,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-
-      - name: Resolve pinned digests from successful GHCR images
-        id: pinned_images
-        shell: bash
-        env:
-          DEPLOY_SHA: ${{ steps.revision.outputs.sha }}
-        run: |
-          for service in api web; do
-            image="ghcr.io/mhdolatabadi/rhythmo/${service}:${DEPLOY_SHA}"
-            digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')"
-            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-              echo "Could not resolve an immutable SHA-256 digest for ${service}." >&2
-              exit 1
-            fi
-            echo "${service}=${digest}" >> "$GITHUB_OUTPUT"
-          done
 
       - name: Validate deployment secrets
         shell: bash
@@ -106,26 +103,21 @@ jobs:
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Deploy immutable commit over SSH
-        shell: bash
+      - name: Prepare verified images on the GitHub runner
+        env:
+          DEPLOY_SHA: ${{ steps.revision.outputs.sha }}
+          TRANSCRIBER_TREE: ${{ steps.revision.outputs.tree }}
+        run: python3 scripts/deploy_image_bundle.py prepare "$DEPLOY_SHA" "$TRANSCRIBER_TREE" "$RUNNER_TEMP/deploy-bundle"
+
+      - name: Transfer and deploy the verified image bundle over SSH
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           DEPLOY_SHA: ${{ steps.revision.outputs.sha }}
-          API_DIGEST: ${{ steps.pinned_images.outputs.api }}
-          WEB_DIGEST: ${{ steps.pinned_images.outputs.web }}
-        run: |
-          # Registry pulls may be silent for minutes. Send encrypted SSH
-          # keepalives so an idle network path does not drop the session.
-          ssh -i ~/.ssh/id_deploy \
-            -o StrictHostKeyChecking=yes \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=12 \
-            -p "${DEPLOY_PORT:-22}" \
-            "$DEPLOY_USER@$DEPLOY_HOST" \
-            "bash '$DEPLOY_PATH/deploy/deploy.sh' '$DEPLOY_SHA' '$API_DIGEST' '$WEB_DIGEST'"
+          TRANSCRIBER_TREE: ${{ steps.revision.outputs.tree }}
+        run: bash scripts/transfer-deploy-bundle.sh "$RUNNER_TEMP/deploy-bundle" "$DEPLOY_SHA" "$TRANSCRIBER_TREE"
 
       - name: Load release automation from the workflow revision
         uses: actions/checkout@v4
