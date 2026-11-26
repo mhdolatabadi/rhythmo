@@ -506,7 +506,7 @@ retries them at the new one.
 
 LRCLIB finds existing lyrics; it does not transcribe recordings. Owners can separately
 request «استخراج متن از صدا» for their uploaded tracks. This uses a private
-faster-whisper container on the same server, defaults to Persian, and stores timed
+faster-whisper container on the same server, defaults to automatic language detection, and stores timed
 and plain text in PostgreSQL. Machine transcripts may contain mistakes, especially
 with chanting, backing music and crowds. Original audio is never rewritten.
 Generated text is currently available to the owner, not shared playlist visitors.
@@ -514,7 +514,8 @@ Generated text is currently available to the owner, not shared playlist visitors
 The default CPU/int8 `large-v3-turbo` model
 container is limited to 2 CPUs and 4 GiB RAM. Quality and processing time must be
 verified against real Persian recitations; these limits are not performance guarantees.
-For mostly Arabic recordings set `TRANSCRIPTION_LANGUAGE=auto` or `ar`. A larger
+For known Arabic recordings set `TRANSCRIPTION_LANGUAGE=ar`; Persian recordings can use `fa`.
+Existing `.env` overrides take precedence: update explicit `fa` to `auto` when deploying. A larger
 model may need increased memory in `compose.yaml`.
 
 It is on by default: every deployment enables the `transcription` Compose profile,
@@ -522,7 +523,7 @@ pulls the immutable transcriber image and starts it. (`TRANSCRIPTION_ENABLED` is
 longer read.) When `TRANSCRIPTION_TOKEN` is missing or shorter than 32 characters, the
 deployment script generates one into `.env` without printing it. No port is published; the API streams original audio directly over the
 internal container network using the token. The default `large-v3-turbo` model,
-much more accurate in Persian than `small`, is built into the image, so the server
+is built into the image, so the server
 needs no access to Hugging Face. Another `TRANSCRIPTION_MODEL` is downloaded on
 first start and reused from `transcription-models`. Recordings are never sent to a third party.
 
@@ -534,3 +535,28 @@ Failed jobs can be retried. After a worker crash its lease is recovered after
 110 minutes. Disabling the feature leaves stored results in the database, and
 reenabling recovers the queue. To turn it off, set `TRANSCRIPTION_DISABLED=true` and
 run the normal deployment workflow; do not delete the model volume or user data.
+
+### Measuring transcription accuracy
+
+Use a local audio file and a manually checked UTF-8 reference of that exact
+recording, including repeats and spoken introductions. Do not commit private audio
+or reference lyrics. With the transcriber requirements installed, run:
+
+```sh
+python3 server/transcriber/evaluate.py /path/recording.mp3 /path/reference.txt --model large-v3-turbo --language fa
+python3 server/transcriber/evaluate.py /path/recording.mp3 /path/reference.txt --model large-v3-turbo --language ar
+python3 server/transcriber/evaluate.py /path/recording.mp3 /path/reference.txt --model large-v3-turbo --language auto
+python3 server/transcriber/evaluate.py /path/recording.mp3 /path/reference.txt --model large-v3 --language ar
+```
+
+Models may download on first use. JSON reports WER/CER (lower is better; insertion
+errors can produce values above 1) and inference time including segment iteration,
+but excluding model loading. Normalization removes punctuation and diacritics;
+Arabic/Persian letter differences remain errors. Evaluate multiple Persian, Iraqi
+Arabic and spoken recordings before changing the production model. Record model,
+package versions and hardware alongside results. Unit tests do not prove improved
+recognition quality. No benchmark result is claimed by this change.
+
+Roll out through the repository deployment workflow after CI. Roll back language
+behavior by explicitly setting `TRANSCRIPTION_LANGUAGE=fa` and redeploying. Stored
+transcripts are unchanged; this default applies only to new processing jobs.
