@@ -85,7 +85,7 @@ def make_handler(model, token):
                         audio.write(chunk)
                         remaining -= len(chunk)
                     audio.flush()
-                    language = os.getenv('TRANSCRIPTION_LANGUAGE', 'fa')
+                    language = os.getenv('TRANSCRIPTION_LANGUAGE', 'auto')
                     segments, info = model.transcribe(
                         audio.name, language=None if language == 'auto' else language,
                         beam_size=5, condition_on_previous_text=False, vad_filter=False,

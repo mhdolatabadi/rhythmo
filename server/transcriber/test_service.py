@@ -6,6 +6,7 @@ from http.server import HTTPServer
 from threading import Thread
 import os
 import tempfile
+from unittest.mock import patch
 
 class TranscriptTest(unittest.TestCase):
     def test_persian_timing_and_multiline_cleanup(self):
@@ -37,6 +38,14 @@ class ModelSourceTest(unittest.TestCase):
 
 class PrivateServiceTest(unittest.TestCase):
     def test_authentication_temporary_audio_and_health(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.check_service(None)
+
+    def test_explicit_arabic_language(self):
+        with patch.dict(os.environ, {"TRANSCRIPTION_LANGUAGE": "ar"}):
+            self.check_service("ar")
+
+    def check_service(self, expected_language):
         class Model:
             path = None
             def transcribe(self, path, **options):
@@ -64,7 +73,7 @@ class PrivateServiceTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertIn('یا حسین'.encode(), body)
             self.assertEqual(model.assert_audio, b'audio')
-            self.assertEqual(model.language, 'fa')
+            self.assertEqual(model.language, expected_language)
             self.assertFalse(os.path.exists(model.path))
         finally:
             server.shutdown()
