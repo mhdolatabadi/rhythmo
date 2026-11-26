@@ -3,6 +3,18 @@
 set -euo pipefail
 
 revision="${1:-main}"
+# CI resolves each digest from the successful, commit-pinned GHCR build.
+# Never use a mirrored mutable tag to identify a production image.
+api_digest="${2:-}"
+web_digest="${3:-}"
+if [[ -n "$api_digest" || -n "$web_digest" ]]; then
+  for digest in "$api_digest" "$web_digest"; do
+    if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+      echo "Both immutable image digests must be valid SHA-256 references." >&2
+      exit 1
+    fi
+  done
+fi
 cd "$(dirname "$0")"
 
 if [[ ! -f .env ]]; then
@@ -63,10 +75,56 @@ pull_with_retries() {
   return 1
 }
 
-# Pull one image at a time: slow registry links often time out when
-# multiple large downloads compete for the same connection.
-pull_with_retries api
-pull_with_retries web
+# The runner has verified the exact manifest digests from GHCR, while
+# the production host cannot reliably reach GHCR's blob CDN. Runflare proxies
+# the same public GHCR images over its Iranian mirror. Pull *by digest* rather
+# than by tag so the registry cannot substitute another image for this commit.
+# Retag the verified bytes under the original Compose image name: no registry
+# credentials, daemon changes or production builds are required.
+pull_by_digest_with_retries() {
+  local reference="$1"
+  local attempt
+  for attempt in 1 2 3 4; do
+    if docker pull "$reference"; then
+      return 0
+    fi
+    echo "Pulling pinned image failed (attempt ${attempt}); retrying." >&2
+    sleep $((attempt * 10))
+  done
+  return 1
+}
+
+stage_pinned_image() {
+  local service="$1" digest="$2" source_ref
+  local image_repo="${NAFIR_IMAGE_REPO:-$(grep -E '^NAFIR_IMAGE_REPO=' .env | tail -n 1 | cut -d= -f2- | tr -d '\r' || true)}"
+  image_repo="${image_repo:-ghcr.io/mhdolatabadi/rhythmo}"
+  if [[ "$image_repo" != ghcr.io/* ]]; then
+    echo "Only GHCR images can be fetched through the Runflare GHCR mirror." >&2
+    return 1
+  fi
+
+  local image_name="${image_repo}/${service}"
+  local mirror_name="mirror-docker.runflare.com/${image_repo#ghcr.io/}/${service}"
+  source_ref="${mirror_name}@${digest}"
+  if ! pull_by_digest_with_retries "$source_ref"; then
+    # The source registry is a fallback, not a different image version.
+    source_ref="${image_name}@${digest}"
+    echo "Runflare mirror unavailable for ${service}; trying the pinned GHCR source." >&2
+    pull_by_digest_with_retries "$source_ref"
+  fi
+  docker image tag "$source_ref" "${image_name}:${NAFIR_IMAGE_TAG}"
+  docker image inspect "${image_name}:${NAFIR_IMAGE_TAG}" >/dev/null
+}
+
+if [[ -n "$api_digest" ]]; then
+  stage_pinned_image api "$api_digest"
+  stage_pinned_image web "$web_digest"
+else
+  # Manual deployments without digests retain the original pull behavior.
+  pull_with_retries api
+  pull_with_retries web
+fi
+
 start_services=()
 if [[ $transcription_enabled == true ]] && ! pull_with_retries transcriber; then
   # Ship the new api and web anyway; the running transcriber keeps working.
@@ -88,7 +146,7 @@ if [[ -n "$old_containers" ]]; then
   docker rm -f $old_containers
 fi
 
-docker compose "${compose_args[@]}" up -d --no-build --remove-orphans "${start_services[@]}"
+docker compose "${compose_args[@]}" up -d --no-build --pull never --remove-orphans "${start_services[@]}"
 docker image prune -f
 
 domain="$(grep -E '^NAFIR_DOMAIN=' .env | cut -d= -f2-)"
