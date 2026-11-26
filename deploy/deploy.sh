@@ -75,50 +75,14 @@ pull_with_retries() {
   return 1
 }
 
-# The runner has verified the exact manifest digests from GHCR, while
-# the production host cannot reliably reach GHCR's blob CDN. Runflare proxies
-# the same public GHCR images over its Iranian mirror. Pull *by digest* rather
-# than by tag so the registry cannot substitute another image for this commit.
-# Retag the verified bytes under the original Compose image name: no registry
-# credentials, daemon changes or production builds are required.
-pull_by_digest_with_retries() {
-  local reference="$1"
-  local attempt
-  for attempt in 1 2 3 4; do
-    if docker pull "$reference"; then
-      return 0
-    fi
-    echo "Pulling pinned image failed (attempt ${attempt}); retrying." >&2
-    sleep $((attempt * 10))
-  done
-  return 1
-}
-
-stage_pinned_image() {
-  local service="$1" digest="$2" source_ref
-  local image_repo="${NAFIR_IMAGE_REPO:-$(grep -E '^NAFIR_IMAGE_REPO=' .env | tail -n 1 | cut -d= -f2- | tr -d '\r' || true)}"
-  image_repo="${image_repo:-ghcr.io/mhdolatabadi/rhythmo}"
-  if [[ "$image_repo" != ghcr.io/* ]]; then
-    echo "Only GHCR images can be fetched through the Runflare GHCR mirror." >&2
-    return 1
-  fi
-
-  local image_name="${image_repo}/${service}"
-  local mirror_name="mirror-docker.runflare.com/${image_repo#ghcr.io/}/${service}"
-  source_ref="${mirror_name}@${digest}"
-  if ! pull_by_digest_with_retries "$source_ref"; then
-    # The source registry is a fallback, not a different image version.
-    source_ref="${image_name}@${digest}"
-    echo "Runflare mirror unavailable for ${service}; trying the pinned GHCR source." >&2
-    pull_by_digest_with_retries "$source_ref"
-  fi
-  docker image tag "$source_ref" "${image_name}:${NAFIR_IMAGE_TAG}"
-  docker image inspect "${image_name}:${NAFIR_IMAGE_TAG}" >/dev/null
-}
-
+# The runner resolved verified GHCR digests for the commit. Fetch each
+# image from Runflare by digest and tag it for the existing Compose file.
+# Neither service is restarted until both immutable images are staged.
 if [[ -n "$api_digest" ]]; then
-  stage_pinned_image api "$api_digest"
-  stage_pinned_image web "$web_digest"
+  image_repo="${NAFIR_IMAGE_REPO:-$(grep -E '^NAFIR_IMAGE_REPO=' .env | tail -n 1 | cut -d= -f2- | tr -d '\r' || true)}"
+  image_repo="${image_repo:-ghcr.io/mhdolatabadi/rhythmo}"
+  bash ./pull-pinned-image.sh "$image_repo" api "$NAFIR_IMAGE_TAG" "$api_digest"
+  bash ./pull-pinned-image.sh "$image_repo" web "$NAFIR_IMAGE_TAG" "$web_digest"
 else
   # Manual deployments without digests retain the original pull behavior.
   pull_with_retries api
