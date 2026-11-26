@@ -71,6 +71,41 @@ If `docker compose pull` returns `unauthorized`, open each package under the
 repository's **Packages** and set its visibility to public, or run
 `docker login ghcr.io` on the server with a token that has `read:packages`.
 
+### Production image mirror (Runflare)
+
+The default production GitHub Actions **Deploy** workflow retrieves the exact
+`api` and `web` manifest digests from GHCR **on the GitHub runner**, after the
+matching Images workflow succeeds. The server downloads those images from
+`mirror-docker.runflare.com/mhdolatabadi/rhythmo/{api,web}@sha256:...`,
+then tags the verified bytes with the original
+`ghcr.io/mhdolatabadi/rhythmo/{api,web}:<deploy-commit>` names used by Compose.
+This keeps the deployed version pinned to the successful build even when
+Runflare serves a stale tag. Docker checks the requested digest during pull.
+If the mirror fails, it retries the same digest through GHCR as a fallback.
+
+The server does not need a registry login, Docker daemon configuration change,
+or source rebuild for these commit-pinned pulls. Both images are staged before
+`docker compose up --pull never` changes any running services. Transcriber
+remains optional and retains its previous pull behavior.
+
+Runflare is a third-party *read-only mirror*, **not** the canonical push
+registry: the Images workflow continues to push to GHCR. Its free request
+allowance is limited per source IP; verify connectivity and available quota
+before depending on it. See https://docs.runflare.com/mirror/mirror-docker/
+and https://runflare.com/mirrors/.
+
+**Recovery / rollback:** if deployment fails, production services keep the
+previous running images. Diagnose the exact error in the Deploy workflow log.
+After a transient failure, rerun that failed Deploy job. If the mirror is
+unavailable, the script will fall back to GHCR, **at the same digest**. To
+revert to a previous working release, use the workflow's manual `ref` input
+with the *previous tested commit*; the registry source remains digest-pinned.
+Never use `latest` for production release images.
+
+Manual on-host deploys without the digest arguments keep the older direct-pull
+procedure; the mirror is used by the automated pipeline, which can verify
+manifest digests before downloading.
+
 To build locally instead, run `docker compose up -d --build`.
 
 ## Updates
